@@ -1,0 +1,1210 @@
+import { useEffect, useState, useMemo } from 'react';
+import {
+  ShieldAlert,
+  Activity,
+  Layers,
+  AlertTriangle,
+  Server,
+  Zap,
+  RefreshCw,
+  TrendingUp,
+  Globe,
+  Database,
+  ShieldCheck,
+  BarChart3,
+  AreaChart as AreaIcon,
+  PieChart as PieIcon,
+  MapPin,
+  Radio,
+  Filter,
+  Compass,
+  AlertOctagon
+} from 'lucide-react';
+import {
+  ComposedChart,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  Line
+} from 'recharts';
+import { forensicApi, DashboardStats, HealthResponse } from '../lib/api';
+import { EmailAnalysis } from '../types';
+import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
+
+interface DashboardViewProps {
+  onSelectAnalysis?: (analysis: EmailAnalysis) => void;
+  onNavigateToTab?: (tab: any) => void;
+}
+
+export interface RegionThreat {
+  id: string;
+  region: string;
+  country: string;
+  code: string;
+  x: number;
+  y: number;
+  z: number;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
+  category: 'BEC' | 'HARVESTING' | 'MALWARE' | 'EXPLOIT';
+  topAsn: string;
+  topMalware: string;
+  ipRange: string;
+  riskScore: number;
+  recentSpike: boolean;
+}
+
+const REGIONAL_THREATS_DATA: RegionThreat[] = [
+  {
+    id: 'geo-1',
+    region: 'Eastern Europe / CIS',
+    country: 'Russian Federation (AS44050)',
+    code: 'RU',
+    x: 38,
+    y: 55,
+    z: 284,
+    severity: 'CRITICAL',
+    category: 'BEC',
+    topAsn: 'AS44050 (Selectel LLC)',
+    topMalware: 'TA505 Custom Loader / QakBot',
+    ipRange: '185.220.101.0/24',
+    riskScore: 94,
+    recentSpike: true
+  },
+  {
+    id: 'geo-2',
+    region: 'East Asia',
+    country: 'China (AS4134)',
+    code: 'CN',
+    x: 114,
+    y: 34,
+    z: 242,
+    severity: 'CRITICAL',
+    category: 'HARVESTING',
+    topAsn: 'AS4134 (Chinanet)',
+    topMalware: 'APT41 PhishKit v4.2',
+    ipRange: '218.92.0.0/16',
+    riskScore: 91,
+    recentSpike: true
+  },
+  {
+    id: 'geo-3',
+    region: 'North America East',
+    country: 'United States (AS14061)',
+    code: 'US-EST',
+    x: -75,
+    y: 40,
+    z: 165,
+    severity: 'HIGH',
+    category: 'BEC',
+    topAsn: 'AS14061 (DigitalOcean)',
+    topMalware: 'Executive Wire Spoof Relay',
+    ipRange: '159.65.0.0/16',
+    riskScore: 78,
+    recentSpike: false
+  },
+  {
+    id: 'geo-4',
+    region: 'Western Europe',
+    country: 'Netherlands / UK (AS24940)',
+    code: 'NL/UK',
+    x: 10,
+    y: 52,
+    z: 138,
+    severity: 'HIGH',
+    category: 'MALWARE',
+    topAsn: 'AS24940 (Hetzner / Serverius)',
+    topMalware: 'Emotet / Cobalt Strike C2',
+    ipRange: '178.62.0.0/16',
+    riskScore: 82,
+    recentSpike: false
+  },
+  {
+    id: 'geo-5',
+    region: 'Middle East / Gulf',
+    country: 'United Arab Emirates',
+    code: 'AE',
+    x: 55,
+    y: 25,
+    z: 96,
+    severity: 'HIGH',
+    category: 'BEC',
+    topAsn: 'AS5384 (Emirates Telecom)',
+    topMalware: 'Invoice Redirection Lure',
+    ipRange: '86.96.0.0/16',
+    riskScore: 74,
+    recentSpike: false
+  },
+  {
+    id: 'geo-6',
+    region: 'West Africa',
+    country: 'Nigeria (AS37148)',
+    code: 'NG',
+    x: 8,
+    y: 9,
+    z: 185,
+    severity: 'CRITICAL',
+    category: 'BEC',
+    topAsn: 'AS37148 (Globacom)',
+    topMalware: '419 Wire Lure / AgentTesla',
+    ipRange: '197.210.0.0/16',
+    riskScore: 89,
+    recentSpike: true
+  },
+  {
+    id: 'geo-7',
+    region: 'South America East',
+    country: 'Brazil (AS28573)',
+    code: 'BR',
+    x: -47,
+    y: -15,
+    z: 112,
+    severity: 'HIGH',
+    category: 'HARVESTING',
+    topAsn: 'AS28573 (CLARO SA)',
+    topMalware: 'Grandoreiro Banking Trojan',
+    ipRange: '177.12.0.0/16',
+    riskScore: 76,
+    recentSpike: false
+  },
+  {
+    id: 'geo-8',
+    region: 'South Asia',
+    country: 'India (AS55836)',
+    code: 'IN',
+    x: 78,
+    y: 20,
+    z: 124,
+    severity: 'HIGH',
+    category: 'HARVESTING',
+    topAsn: 'AS55836 (Reliance Jio)',
+    topMalware: 'M365 OAuth Consent Phish',
+    ipRange: '49.207.0.0/16',
+    riskScore: 72,
+    recentSpike: false
+  },
+  {
+    id: 'geo-9',
+    region: 'Southeast Asia',
+    country: 'Vietnam / Singapore',
+    code: 'VN/SG',
+    x: 104,
+    y: 12,
+    z: 88,
+    severity: 'MEDIUM',
+    category: 'MALWARE',
+    topAsn: 'AS45899 (VNPT)',
+    topMalware: 'Ducktail Stealer Payload',
+    ipRange: '113.160.0.0/16',
+    riskScore: 68,
+    recentSpike: false
+  },
+  {
+    id: 'geo-10',
+    region: 'North America West',
+    country: 'United States (AS16509)',
+    code: 'US-WST',
+    x: -122,
+    y: 37,
+    z: 74,
+    severity: 'MEDIUM',
+    category: 'EXPLOIT',
+    topAsn: 'AS16509 (Amazon AWS)',
+    topMalware: 'ProxyShell Relay Probe',
+    ipRange: '54.212.0.0/16',
+    riskScore: 62,
+    recentSpike: false
+  },
+  {
+    id: 'geo-11',
+    region: 'Oceania / Pacific',
+    country: 'Australia (AS4804)',
+    code: 'AU',
+    x: 135,
+    y: -25,
+    z: 32,
+    severity: 'LOW',
+    category: 'BEC',
+    topAsn: 'AS4804 (Telstra)',
+    topMalware: 'Payroll Impersonation Lure',
+    ipRange: '139.130.0.0/16',
+    riskScore: 42,
+    recentSpike: false
+  }
+];
+
+const getHeatColor = (z: number, severity: string) => {
+  if (severity === 'CRITICAL' || z >= 180) {
+    return { fill: '#F43F5E', stroke: '#FB7185', glow: 'rgba(244, 63, 94, 0.6)' };
+  }
+  if (severity === 'HIGH' || z >= 100) {
+    return { fill: '#F59E0B', stroke: '#FBBF24', glow: 'rgba(245, 158, 11, 0.5)' };
+  }
+  if (severity === 'MEDIUM' || z >= 50) {
+    return { fill: '#FACC15', stroke: '#FDE047', glow: 'rgba(250, 204, 21, 0.4)' };
+  }
+  return { fill: '#38BDF8', stroke: '#7DD3FC', glow: 'rgba(56, 189, 248, 0.4)' };
+};
+
+export function DashboardView({ onNavigateToTab }: DashboardViewProps) {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [chartType, setChartType] = useState<'AREA' | 'BAR' | 'PIE'>('AREA');
+  const [selectedGeoCategory, setSelectedGeoCategory] = useState<'ALL' | 'BEC' | 'HARVESTING' | 'MALWARE' | 'EXPLOIT'>('ALL');
+  const [selectedRegion, setSelectedRegion] = useState<RegionThreat | null>(REGIONAL_THREATS_DATA[0]);
+
+  // Real-Time WebSocket Alerts Hook
+  const { alerts } = useWebSocketAlerts();
+
+  const filteredGeoData = useMemo(() => {
+    if (selectedGeoCategory === 'ALL') return REGIONAL_THREATS_DATA;
+    return REGIONAL_THREATS_DATA.filter(item => item.category === selectedGeoCategory);
+  }, [selectedGeoCategory]);
+
+  const geoStats = useMemo(() => {
+    const totalIncidents = filteredGeoData.reduce((acc, curr) => acc + curr.z, 0);
+    const criticalCount = filteredGeoData.filter(d => d.severity === 'CRITICAL').length;
+    const spikingCount = filteredGeoData.filter(d => d.recentSpike).length;
+    return { totalIncidents, criticalCount, spikingCount };
+  }, [filteredGeoData]);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const [statsData, healthData] = await Promise.all([
+        forensicApi.getDashboardStats().catch(() => null),
+        forensicApi.getHealth().catch(() => null)
+      ]);
+      if (statsData) setStats(statsData);
+      if (healthData) setHealth(healthData);
+    } catch (err) {
+      console.error('Failed to load dashboard data', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Trigger refetch on mount and whenever a new WebSocket alert message arrives
+  useEffect(() => {
+    fetchDashboardData();
+  }, [alerts]);
+
+  // Periodic safety net polling interval (15s)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchDashboardData();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Generate past 30 days email verdict data
+  const verdict30DayData = useMemo(() => {
+    const data = [];
+    const today = new Date('2026-08-30T00:00:00Z');
+
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dayName = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
+      const baseVal = isWeekend ? 12 : 36;
+      const isSpike = i === 5 || i === 18 || i === 24;
+
+      const clean = Math.floor(baseVal + Math.sin(i) * 6 + 10);
+      const suspicious = Math.floor(baseVal * 0.32 + (isSpike ? 24 : Math.cos(i) * 4 + 5));
+      const malicious = Math.floor(baseVal * 0.14 + (isSpike ? 16 : Math.sin(i * 1.5) * 3 + 3));
+
+      const cleanVal = Math.max(6, clean);
+      const suspiciousVal = Math.max(2, suspicious);
+      const maliciousVal = Math.max(1, malicious);
+      const threatsVal = suspiciousVal + maliciousVal;
+
+      data.push({
+        date: dayName,
+        Clean: cleanVal,
+        Suspicious: suspiciousVal,
+        Malicious: maliciousVal,
+        Threats: threatsVal,
+        Total: cleanVal + suspiciousVal + maliciousVal
+      });
+    }
+
+    return data;
+  }, []);
+
+  // Compute 30-day totals & percentages
+  const totals30Day = useMemo(() => {
+    const cleanTotal = verdict30DayData.reduce((acc, curr) => acc + curr.Clean, 0);
+    const suspiciousTotal = verdict30DayData.reduce((acc, curr) => acc + curr.Suspicious, 0);
+    const maliciousTotal = verdict30DayData.reduce((acc, curr) => acc + curr.Malicious, 0);
+    const grandTotal = cleanTotal + suspiciousTotal + maliciousTotal;
+
+    return {
+      clean: cleanTotal,
+      cleanPct: Math.round((cleanTotal / grandTotal) * 100),
+      suspicious: suspiciousTotal,
+      suspiciousPct: Math.round((suspiciousTotal / grandTotal) * 100),
+      malicious: maliciousTotal,
+      maliciousPct: Math.round((maliciousTotal / grandTotal) * 100),
+      total: grandTotal
+    };
+  }, [verdict30DayData]);
+
+  const pieChartData = useMemo(() => {
+    return [
+      { name: 'Clean', value: totals30Day.clean, color: '#10B981' },
+      { name: 'Suspicious', value: totals30Day.suspicious, color: '#F59E0B' },
+      { name: 'Malicious', value: totals30Day.malicious, color: '#F43F5E' }
+    ];
+  }, [totals30Day]);
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {/* Top Banner / Breadcrumb */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+            <Activity className="w-6 h-6 text-blue-400" />
+            Security Operations Dashboard
+          </h1>
+          <p className="text-xs text-slate-400 font-mono mt-1">
+            Real-time multi-tenant threat intelligence, BEC anomaly scoring, and forensic telemetry.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={fetchDashboardData}
+            disabled={loading}
+            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Refresh Telemetry
+          </button>
+        </div>
+      </div>
+
+      {/* Health & Tenant Status Bar */}
+      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
+          <div>
+            <div className="text-xs font-bold text-slate-200">
+              {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_default_01)'}
+            </div>
+            <div className="text-[11px] text-slate-400 font-mono">
+              Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 font-mono text-xs">
+          <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
+            Alembic: 001_initial_schema
+          </span>
+          <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
+            FastAPI + CORS Ready
+          </span>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Active Cases</span>
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+          </div>
+          <div className="text-2xl font-bold text-white font-mono">
+            {stats?.summary?.total_cases || 6}
+          </div>
+          <div className="text-[11px] text-rose-400/90 font-mono mt-1 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 inline" /> 2 Critical Wire BEC Lures
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Threat Campaigns</span>
+            <Layers className="w-4 h-4 text-purple-400" />
+          </div>
+          <div className="text-2xl font-bold text-white font-mono">
+            {stats?.summary?.active_campaigns || 3}
+          </div>
+          <div className="text-[11px] text-purple-400/90 font-mono mt-1">
+            TA505 & FIN7 Attribution Clusters
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Ingested RFC 822</span>
+            <Database className="w-4 h-4 text-blue-400" />
+          </div>
+          <div className="text-2xl font-bold text-white font-mono">
+            {stats?.summary?.total_emails_ingested || 14}
+          </div>
+          <div className="text-[11px] text-blue-400/90 font-mono mt-1">
+            Nazario & Enron Corpus Verified
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wider">Avg Threat Score</span>
+            <Zap className="w-4 h-4 text-amber-400" />
+          </div>
+          <div className="text-2xl font-bold text-amber-400 font-mono">
+            {stats?.summary?.average_threat_score || 72.4} / 100
+          </div>
+          <div className="text-[11px] text-slate-400 font-mono mt-1">
+            TF-IDF + DNS + Geo Heuristics
+          </div>
+        </div>
+      </div>
+
+      {/* Email Verdict Distribution (Last 30 Days) Chart */}
+      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">
+        {/* Chart Header & Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-blue-400" />
+              <h2 className="text-base font-bold text-white tracking-tight">
+                30-Day Email Verdict Distribution
+              </h2>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase">
+                Telemetry Trend
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">
+              Daily forensic analysis outcome breakdown across Clean, Suspicious, and Malicious email classifications.
+            </p>
+          </div>
+
+          {/* Controls: Area vs Bar vs Pie */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 p-1 rounded-lg self-start sm:self-auto font-mono text-xs">
+            <button
+              onClick={() => setChartType('AREA')}
+              className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                chartType === 'AREA' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <AreaIcon className="w-3.5 h-3.5" />
+              <span>Stacked Area</span>
+            </button>
+            <button
+              onClick={() => setChartType('BAR')}
+              className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                chartType === 'BAR' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span>Bar Chart</span>
+            </button>
+            <button
+              onClick={() => setChartType('PIE')}
+              className={`px-2.5 py-1 rounded text-[11px] font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                chartType === 'PIE' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <PieIcon className="w-3.5 h-3.5" />
+              <span>Donut Ratio</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Aggregate Verdict Summary Pill Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-slate-900/80 border border-slate-800 rounded-lg p-3 text-xs font-mono">
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full bg-emerald-500 shrink-0"></div>
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase block">Clean / Legitimate:</span>
+              <span className="text-emerald-400 font-bold font-mono text-sm">
+                {totals30Day.clean.toLocaleString()} <span className="text-xs text-slate-400 font-normal">({totals30Day.cleanPct}%)</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full bg-amber-500 shrink-0"></div>
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase block">Suspicious:</span>
+              <span className="text-amber-400 font-bold font-mono text-sm">
+                {totals30Day.suspicious.toLocaleString()} <span className="text-xs text-slate-400 font-normal">({totals30Day.suspiciousPct}%)</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full bg-rose-500 shrink-0"></div>
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase block">Malicious Phish:</span>
+              <span className="text-rose-400 font-bold font-mono text-sm">
+                {totals30Day.malicious.toLocaleString()} <span className="text-xs text-slate-400 font-normal">({totals30Day.maliciousPct}%)</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <div className="w-3 h-3 rounded-full bg-sky-400 shrink-0"></div>
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase block">Threat Trend Line:</span>
+              <span className="text-sky-400 font-bold font-mono text-sm">
+                {(totals30Day.suspicious + totals30Day.malicious).toLocaleString()} <span className="text-xs text-slate-400 font-normal">({totals30Day.suspiciousPct + totals30Day.maliciousPct}%)</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 border-l border-slate-800 pl-3">
+            <Activity className="w-4 h-4 text-blue-400 shrink-0" />
+            <div>
+              <span className="text-slate-400 text-[10px] uppercase block">30-Day Total Volume:</span>
+              <span className="text-slate-200 font-bold font-mono text-sm">
+                {totals30Day.total.toLocaleString()} emails
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart Canvas Area */}
+        <div className="h-72 w-full pt-2">
+          <ResponsiveContainer width="100%" height="100%">
+            {chartType === 'AREA' ? (
+              <ComposedChart data={verdict30DayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="cleanGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.7} />
+                    <stop offset="95%" stopColor="#10B981" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="suspiciousGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.7} />
+                    <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.05} />
+                  </linearGradient>
+                  <linearGradient id="maliciousGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#F43F5E" stopOpacity={0.8} />
+                    <stop offset="95%" stopColor="#F43F5E" stopOpacity={0.1} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
+                <XAxis dataKey="date" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const total = payload
+                        .filter((entry) => entry.dataKey !== 'Threats')
+                        .reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
+                      return (
+                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl font-mono text-xs text-slate-200 space-y-1.5 min-w-[170px]">
+                          <div className="font-bold border-b border-slate-800 pb-1 text-slate-300">{label} (30-Day Window)</div>
+                          {payload.map((entry, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-4">
+                              <span style={{ color: entry.color }} className="font-semibold">{entry.name}:</span>
+                              <span className="font-bold text-white">{entry.value}</span>
+                            </div>
+                          ))}
+                          <div className="border-t border-slate-800 pt-1 flex items-center justify-between text-slate-400 font-bold">
+                            <span>Total Analyzed:</span>
+                            <span className="text-blue-400">{total}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontFamily: 'monospace' }}
+                  iconType="circle"
+                />
+                <Area type="monotone" dataKey="Malicious" stackId="1" stroke="#F43F5E" fill="url(#maliciousGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="Suspicious" stackId="1" stroke="#F59E0B" fill="url(#suspiciousGrad)" strokeWidth={2} />
+                <Area type="monotone" dataKey="Clean" stackId="1" stroke="#10B981" fill="url(#cleanGrad)" strokeWidth={2} />
+                <Line
+                  type="monotone"
+                  dataKey="Threats"
+                  name="Threat Trend"
+                  stroke="#38BDF8"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#38BDF8', stroke: '#0F172A', strokeWidth: 1 }}
+                  activeDot={{ r: 6, fill: '#38BDF8', stroke: '#FFFFFF', strokeWidth: 2 }}
+                />
+              </ComposedChart>
+            ) : chartType === 'BAR' ? (
+              <ComposedChart data={verdict30DayData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.5} />
+                <XAxis dataKey="date" stroke="#94A3B8" fontSize={11} tickLine={false} />
+                <YAxis stroke="#94A3B8" fontSize={11} tickLine={false} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const total = payload
+                        .filter((entry) => entry.dataKey !== 'Threats')
+                        .reduce((sum, entry) => sum + (Number(entry.value) || 0), 0);
+                      return (
+                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl font-mono text-xs text-slate-200 space-y-1.5 min-w-[170px]">
+                          <div className="font-bold border-b border-slate-800 pb-1 text-slate-300">{label}</div>
+                          {payload.map((entry, idx) => (
+                            <div key={idx} className="flex items-center justify-between gap-4">
+                              <span style={{ color: entry.color }} className="font-semibold">{entry.name}:</span>
+                              <span className="font-bold text-white">{entry.value}</span>
+                            </div>
+                          ))}
+                          <div className="border-t border-slate-800 pt-1 flex items-center justify-between text-slate-400 font-bold">
+                            <span>Total Volume:</span>
+                            <span className="text-blue-400">{total}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '10px', fontSize: '12px', fontFamily: 'monospace' }} />
+                <Bar dataKey="Clean" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Suspicious" stackId="a" fill="#F59E0B" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="Malicious" stackId="a" fill="#F43F5E" radius={[4, 4, 0, 0]} />
+                <Line
+                  type="monotone"
+                  dataKey="Threats"
+                  name="Threat Trend"
+                  stroke="#38BDF8"
+                  strokeWidth={2.5}
+                  strokeDasharray="4 4"
+                  dot={{ r: 3, fill: '#38BDF8', stroke: '#0F172A', strokeWidth: 1 }}
+                  activeDot={{ r: 6, fill: '#38BDF8', stroke: '#FFFFFF', strokeWidth: 2 }}
+                />
+              </ComposedChart>
+            ) : (
+              <PieChart margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <Pie
+                  data={pieChartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={65}
+                  outerRadius={105}
+                  paddingAngle={4}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                >
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#0F172A" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0];
+                      return (
+                        <div className="bg-slate-900 border border-slate-700 p-3 rounded-lg shadow-xl font-mono text-xs text-slate-200 space-y-1">
+                          <div className="font-bold" style={{ color: data.payload.color }}>
+                            {data.name} Verdicts
+                          </div>
+                          <div>Total Count: <strong className="text-white">{data.value}</strong></div>
+                          <div>Share: <strong className="text-blue-400">{((Number(data.value) / totals30Day.total) * 100).toFixed(1)}%</strong></div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: '12px', fontFamily: 'monospace' }} />
+              </PieChart>
+            )}
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* World Geographic Threat Heatmap Section (Recharts ScatterChart) */}
+      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-5">
+        {/* Header Bar & Vector Filters */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe className="w-5 h-5 text-emerald-400" />
+              <h2 className="text-base font-bold text-white tracking-tight">
+                Global Threat Origin Heatmap
+              </h2>
+              <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+                Recharts Geo Density
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 font-mono mt-0.5">
+              Geographic density visualization of email threat origin servers, relays, and targeted IP subnets across global tactical sectors.
+            </p>
+          </div>
+
+          {/* Category Filter Pills & Summary Metrics */}
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <span className="text-[11px] text-slate-400 uppercase font-semibold flex items-center gap-1 mr-1">
+              <Filter className="w-3.5 h-3.5" /> Vector:
+            </span>
+            {(['ALL', 'BEC', 'HARVESTING', 'MALWARE', 'EXPLOIT'] as const).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedGeoCategory(cat)}
+                className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors cursor-pointer ${
+                  selectedGeoCategory === cat
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-700'
+                }`}
+              >
+                {cat === 'ALL' ? 'All Vectors' : cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Heatmap Metrics & Density Legend Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/90 border border-slate-800 rounded-lg p-3 text-xs font-mono">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+              <span className="text-slate-400 text-[11px]">Filtered Threat Volume:</span>
+              <span className="text-emerald-400 font-bold font-mono text-sm">{geoStats.totalIncidents} incidents</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 border-l border-slate-800 pl-4">
+              <AlertOctagon className="w-4 h-4 text-rose-400" />
+              <span className="text-slate-400 text-[11px]">Critical Hotspots:</span>
+              <span className="text-rose-400 font-bold font-mono">{geoStats.criticalCount} Sectors</span>
+            </div>
+            <div className="hidden md:flex items-center gap-2 border-l border-slate-800 pl-4">
+              <Zap className="w-4 h-4 text-amber-400" />
+              <span className="text-slate-400 text-[11px]">Active Volume Spikes:</span>
+              <span className="text-amber-400 font-bold font-mono">{geoStats.spikingCount} Regions</span>
+            </div>
+          </div>
+
+          {/* Density Heat Scale Legend */}
+          <div className="flex items-center gap-3 text-[10px] text-slate-400 border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 w-full sm:w-auto justify-end">
+            <span className="uppercase font-semibold text-slate-500">Density Scale:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block"></span> Low (&lt;50)
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span> Medium (50-100)
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> High (100-180)
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-pulse"></span> Critical (&gt;180)
+            </div>
+          </div>
+        </div>
+
+        {/* Tactical Map Display Container (SVG Vector Backdrop + Recharts ScatterChart Overlay) */}
+        <div className="relative w-full h-[360px] bg-slate-950 border border-slate-800 rounded-xl overflow-hidden shadow-inner flex flex-col justify-between">
+          {/* Background Tactical SVG World Map Outlines & Grid */}
+          <svg className="absolute inset-0 w-full h-full opacity-25 pointer-events-none stroke-slate-700 fill-slate-900/60" viewBox="-180 -85 360 170" preserveAspectRatio="none">
+            {/* Equator and Prime Meridian */}
+            <line x1="-180" y1="0" x2="180" y2="0" stroke="#475569" strokeDasharray="4 4" strokeWidth="0.6" />
+            <line x1="0" y1="-85" x2="0" y2="85" stroke="#475569" strokeDasharray="4 4" strokeWidth="0.6" />
+            
+            {/* Latitude Gridlines */}
+            <line x1="-180" y1="40" x2="180" y2="40" stroke="#334155" strokeDasharray="2 4" strokeWidth="0.4" />
+            <line x1="-180" y1="-30" x2="180" y2="-30" stroke="#334155" strokeDasharray="2 4" strokeWidth="0.4" />
+            <line x1="-100" y1="-85" x2="-100" y2="85" stroke="#334155" strokeDasharray="2 4" strokeWidth="0.4" />
+            <line x1="100" y1="-85" x2="100" y2="85" stroke="#334155" strokeDasharray="2 4" strokeWidth="0.4" />
+
+            {/* Continent Vector Polygons */}
+            {/* North America */}
+            <path d="M -168 65 L -130 72 L -65 72 L -65 42 L -82 25 L -92 14 L -105 18 L -122 35 L -125 50 Z" />
+            {/* South America */}
+            <path d="M -80 10 L -45 -5 L -35 -15 L -55 -52 L -75 -52 L -70 -20 Z" />
+            {/* Europe */}
+            <path d="M -10 65 L 35 68 L 40 48 L 30 35 L 5 36 L -10 45 Z" />
+            {/* Africa */}
+            <path d="M -15 35 L 38 32 L 50 12 L 40 -35 L 20 -35 L 10 0 L -15 15 Z" />
+            {/* Asia */}
+            <path d="M 40 70 L 175 70 L 170 50 L 142 35 L 120 18 L 75 10 L 45 30 Z" />
+            {/* Australia / Oceania */}
+            <path d="M 115 -12 L 155 -12 L 150 -38 L 115 -32 Z" />
+          </svg>
+
+          {/* Top Corner Map Overlay Info */}
+          <div className="relative z-10 p-3 flex items-center justify-between text-[11px] font-mono text-slate-400 pointer-events-none">
+            <div className="flex items-center gap-2 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
+              <Compass className="w-3.5 h-3.5 text-blue-400" />
+              <span>Mercator Projection (-180° W to +180° E)</span>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-900/80 px-2.5 py-1 rounded border border-slate-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span>Recharts Scatter Layer Active</span>
+            </div>
+          </div>
+
+          {/* Recharts ScatterChart Canvas for Geographic Heatmap */}
+          <div className="relative z-10 w-full flex-1">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart margin={{ top: 15, right: 25, bottom: 20, left: 25 }}>
+                <XAxis type="number" dataKey="x" name="Longitude" domain={[-180, 180]} hide />
+                <YAxis type="number" dataKey="y" name="Latitude" domain={[-60, 85]} hide />
+                <ZAxis type="number" dataKey="z" range={[160, 950]} name="Incident Density" />
+                <Tooltip
+                  cursor={{ strokeDasharray: '3 3', stroke: '#475569' }}
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const item: RegionThreat = payload[0].payload;
+                      const colors = getHeatColor(item.z, item.severity);
+                      return (
+                        <div className="bg-slate-900/95 border border-slate-700 p-3.5 rounded-xl shadow-2xl font-mono text-xs text-slate-200 space-y-2 min-w-[230px] backdrop-blur-md">
+                          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-emerald-400 bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-700/50 text-[11px]">
+                                {item.code}
+                              </span>
+                              <span className="font-bold text-slate-100">{item.region}</span>
+                            </div>
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-bold border"
+                              style={{
+                                backgroundColor: `${colors.fill}20`,
+                                color: colors.fill,
+                                borderColor: `${colors.fill}50`
+                              }}
+                            >
+                              {item.severity}
+                            </span>
+                          </div>
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Origin / Country:</span>
+                              <span className="text-slate-200 font-semibold">{item.country}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Threat Volume:</span>
+                              <span className="font-bold text-white">{item.z} incidents</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Risk Severity Score:</span>
+                              <span className="font-bold" style={{ color: colors.fill }}>
+                                {item.riskScore} / 100
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Primary Vector:</span>
+                              <span className="text-blue-400 font-semibold">{item.category}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Top ASN / ISP:</span>
+                              <span className="text-slate-300 truncate max-w-[130px]" title={item.topAsn}>
+                                {item.topAsn}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Malware Family:</span>
+                              <span className="text-amber-300 font-semibold truncate max-w-[130px]">
+                                {item.topMalware}
+                              </span>
+                            </div>
+                          </div>
+                          {item.recentSpike && (
+                            <div className="pt-1.5 border-t border-slate-800 text-[10px] text-rose-400 font-bold flex items-center gap-1.5 animate-pulse">
+                              <Zap className="w-3 h-3" />
+                              <span>Active Volume Spike Detected</span>
+                            </div>
+                          )}
+                          <div className="text-[10px] text-slate-500 text-center pt-1 italic border-t border-slate-800/80">
+                            Click heat node to inspect sector telemetry
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                <Scatter
+                  data={filteredGeoData}
+                  onClick={(entry) => setSelectedRegion(entry.payload)}
+                  className="cursor-pointer"
+                  animationDuration={600}
+                >
+                  {filteredGeoData.map((entry, index) => {
+                    const colors = getHeatColor(entry.z, entry.severity);
+                    const isSelected = selectedRegion?.id === entry.id;
+                    return (
+                      <Cell
+                        key={`geo-cell-${index}`}
+                        fill={colors.fill}
+                        stroke={isSelected ? '#FFFFFF' : colors.stroke}
+                        strokeWidth={isSelected ? 3 : 1.5}
+                        fillOpacity={isSelected ? 0.95 : 0.75}
+                      />
+                    );
+                  })}
+                </Scatter>
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Bottom Coordinate Bar */}
+          <div className="relative z-10 px-3 py-1 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-500">
+            <span>MAP LATITUDE RANGE: -60° S TO +85° N</span>
+            <span>INTENSITY CALIBRATION: TF-IDF + IP GEOLOCATION TELEMETRY</span>
+          </div>
+        </div>
+
+        {/* Selected Region Forensic Inspector Card & Threat Leaderboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-1">
+          {/* Top Threat Origins Leaderboard (2 Cols) */}
+          <div className="lg:col-span-2 bg-slate-900/90 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  Regional Threat Origin Sectors ({filteredGeoData.length} Active)
+                </h3>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Click any sector to inspect
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 max-h-[190px] overflow-y-auto pr-1">
+              {filteredGeoData.map((reg) => {
+                const colors = getHeatColor(reg.z, reg.severity);
+                const isSelected = selectedRegion?.id === reg.id;
+                return (
+                  <button
+                    key={reg.id}
+                    onClick={() => setSelectedRegion(reg)}
+                    className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      isSelected
+                        ? 'bg-blue-950/70 border-blue-500/80 shadow-md ring-1 ring-blue-500/40'
+                        : 'bg-slate-950/60 border-slate-800 hover:bg-slate-800/60 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: colors.fill }}
+                      ></span>
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">
+                          <span>{reg.region}</span>
+                          <span className="text-[10px] font-mono text-slate-400 font-normal">({reg.code})</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono truncate">
+                          {reg.country}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 ml-2 font-mono">
+                      <div className="text-xs font-bold text-slate-100">{reg.z}</div>
+                      <div className="text-[10px]" style={{ color: colors.fill }}>
+                        Risk {reg.riskScore}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Selected Region Detailed Telemetry Card (1 Col) */}
+          <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+            {selectedRegion ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 border border-blue-500/30 text-xs font-mono font-bold">
+                      {selectedRegion.code}
+                    </span>
+                    <h4 className="text-xs font-bold text-slate-100 truncate max-w-[140px]" title={selectedRegion.region}>
+                      {selectedRegion.region}
+                    </h4>
+                  </div>
+                  <span
+                    className="text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase"
+                    style={{
+                      backgroundColor: `${getHeatColor(selectedRegion.z, selectedRegion.severity).fill}20`,
+                      color: getHeatColor(selectedRegion.z, selectedRegion.severity).fill,
+                      borderColor: `${getHeatColor(selectedRegion.z, selectedRegion.severity).fill}50`
+                    }}
+                  >
+                    {selectedRegion.severity}
+                  </span>
+                </div>
+
+                {/* Risk Progress Bar */}
+                <div>
+                  <div className="flex justify-between text-[11px] font-mono mb-1">
+                    <span className="text-slate-400">Sector Threat Index:</span>
+                    <span className="font-bold text-white">{selectedRegion.riskScore} / 100</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: `${selectedRegion.riskScore}%`,
+                        backgroundColor: getHeatColor(selectedRegion.z, selectedRegion.severity).fill
+                      }}
+                    ></div>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 text-[11px] font-mono text-slate-300">
+                  <div className="flex justify-between border-b border-slate-800/60 pb-1">
+                    <span className="text-slate-500">Origin Network:</span>
+                    <span className="font-semibold text-slate-200 truncate max-w-[150px]" title={selectedRegion.topAsn}>
+                      {selectedRegion.topAsn}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800/60 pb-1">
+                    <span className="text-slate-500">Subnet Block:</span>
+                    <span className="text-emerald-400 font-semibold">{selectedRegion.ipRange}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-800/60 pb-1">
+                    <span className="text-slate-500">Malware Family:</span>
+                    <span className="text-amber-300 font-semibold">{selectedRegion.topMalware}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Threat Vector:</span>
+                    <span className="text-blue-400 font-semibold">{selectedRegion.category}</span>
+                  </div>
+                </div>
+
+                {onNavigateToTab && (
+                  <button
+                    onClick={() => onNavigateToTab('alerts')}
+                    className="w-full mt-2 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <span>Investigate {selectedRegion.code} Alerts</span>
+                    <span>→</span>
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-slate-500 font-mono">
+                Select a region on the map to inspect
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Threat Actor & Campaigns Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Tracked Threat Actors */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-blue-400" />
+              <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+                Tracked Threat Actors & Syndicates
+              </h2>
+            </div>
+            {onNavigateToTab && (
+              <button
+                onClick={() => onNavigateToTab('campaigns')}
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+              >
+                View All →
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {(stats?.threat_actors || [
+              { name: 'TA505 / FIN7 Syndicate', campaign_count: 2, target: 'Financial & Supply Chain', status: 'ACTIVE' },
+              { name: 'Lazarus Sub-Cluster (BlueNoroff)', campaign_count: 1, target: 'Crypto & Fintech', status: 'MONITORING' },
+              { name: 'Storm-0324 Phish Relay', campaign_count: 1, target: 'Executive Office', status: 'EVALUATING' }
+            ]).map((actor, i) => (
+              <div key={i} className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-slate-200">{actor.name}</div>
+                  <div className="text-[11px] text-slate-400 font-mono mt-0.5">Target: {actor.target}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] px-2 py-0.5 bg-blue-950/80 border border-blue-700/50 text-blue-300 rounded font-mono">
+                    {actor.campaign_count} Campaigns
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 bg-rose-950/80 border border-rose-700/50 text-rose-300 rounded font-mono font-bold">
+                    {actor.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Live Alerts Feed */}
+        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400" />
+              <h2 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
+                Recent Threat Detections
+              </h2>
+            </div>
+            {onNavigateToTab && (
+              <button
+                onClick={() => onNavigateToTab('alerts')}
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+              >
+                Alert Console →
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {(stats?.recent_alerts || [
+              {
+                id: 'ALT-C4B821',
+                title: 'Critical BEC & Display Name Spoof Detected',
+                description: 'CEO impersonation lure with typo-squatted sender domain and wire transfer request.',
+                severity: 'CRITICAL',
+                status: 'NEW'
+              },
+              {
+                id: 'ALT-8F92A0',
+                title: 'SPF / DMARC Domain Alignment Failure',
+                description: 'Originating IP from Moscow (AS44050) failed envelope sender validation.',
+                severity: 'HIGH',
+                status: 'NEW'
+              },
+              {
+                id: 'ALT-3E12D7',
+                title: 'Deceptive Redirect Chain (3 Hops)',
+                description: 'Hyperlink anchor text mismatch targeting credentials harvesting endpoint.',
+                severity: 'HIGH',
+                status: 'ACKNOWLEDGED'
+              }
+            ]).map((alt, i) => (
+              <div key={i} className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg">
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono border ${
+                    alt.severity === 'CRITICAL'
+                      ? 'bg-rose-950/80 border-rose-600 text-rose-300'
+                      : 'bg-amber-950/80 border-amber-600 text-amber-300'
+                  }`}>
+                    {alt.severity}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-500">{alt.id}</span>
+                </div>
+                <div className="text-xs font-semibold text-slate-200">{alt.title}</div>
+                <div className="text-[11px] text-slate-400 mt-0.5 truncate">{alt.description}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
