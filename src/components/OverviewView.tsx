@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -22,13 +22,201 @@ import {
   Check,
   FileCheck2,
   KeyRound,
-  Clock
+  Clock,
+  Sparkles,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Cpu
 } from 'lucide-react';
-import { EmailAnalysis } from '../types';
+import { EmailAnalysis, AINarrative } from '../types';
 import { computeSha256 } from '../utils/crypto';
 import { WhyAffordance } from './WhyAffordance';
-import { AICaseSummaryCard } from './AICaseSummaryCard';
 import { RelationshipGraphView } from './RelationshipGraphView';
+
+interface AICaseSummaryProps {
+  analysis: EmailAnalysis;
+  className?: string;
+  onNarrativeLoaded?: (narrative: AINarrative) => void;
+}
+
+/**
+ * AI Case Summary Component
+ * Fetches and renders the `ai_narrative` field from the analysis data.
+ * Displays the required forensic disclaimer and remains strictly non-blocking if the field is missing or fetch fails.
+ */
+export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) {
+  const [narrativeData, setNarrativeData] = useState<AINarrative | null>(() => {
+    const raw = analysis.ai_narrative || analysis.aiNarrative;
+    if (!raw) return null;
+    if (typeof raw === 'string') {
+      return {
+        narrative: raw,
+        model: 'llama-3.3-70b-versatile',
+        source: 'Groq AI Narrative Engine',
+        disclaimer: 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
+      };
+    }
+    return raw;
+  });
+
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+
+  // Sync state if analysis prop updates
+  useEffect(() => {
+    const raw = analysis.ai_narrative || analysis.aiNarrative;
+    if (raw) {
+      if (typeof raw === 'string') {
+        setNarrativeData({
+          narrative: raw,
+          model: 'llama-3.3-70b-versatile',
+          source: 'Groq AI Narrative Engine',
+          disclaimer: 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
+        });
+      } else {
+        setNarrativeData(raw);
+      }
+    } else {
+      // Non-blocking background fetch attempt if analysis has an ID
+      let isMounted = true;
+      const attemptFetchNarrative = async () => {
+        if (!analysis.id) return;
+        try {
+          setIsLoading(true);
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3500);
+
+          const res = await fetch(`/api/v1/cases/${analysis.id}/ai-narrative`, {
+            signal: controller.signal
+          }).catch(() => null);
+
+          clearTimeout(timeout);
+
+          if (res && res.ok && isMounted) {
+            const data = await res.json();
+            const narrativeObj = data.ai_narrative || data.narrative || data;
+            if (narrativeObj && (narrativeObj.narrative || typeof narrativeObj === 'string')) {
+              const formatted: AINarrative = typeof narrativeObj === 'string' ? {
+                narrative: narrativeObj,
+                model: data.model || 'llama-3.3-70b-versatile',
+                source: data.source || 'Groq AI Narrative Engine',
+                disclaimer: data.disclaimer || 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
+              } : {
+                narrative: narrativeObj.narrative,
+                model: narrativeObj.model || 'llama-3.3-70b-versatile',
+                source: narrativeObj.source || 'Groq AI Narrative Engine',
+                disclaimer: narrativeObj.disclaimer || 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
+              };
+              setNarrativeData(formatted);
+            }
+          }
+        } catch {
+          // Strictly non-blocking: silently ignore errors so overview never fails
+        } finally {
+          if (isMounted) setIsLoading(false);
+        }
+      };
+
+      attemptFetchNarrative();
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [analysis.id, analysis.ai_narrative, analysis.aiNarrative]);
+
+  const handleCopy = () => {
+    if (!narrativeData?.narrative) return;
+    navigator.clipboard.writeText(narrativeData.narrative);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  // If there's no narrative data and not loading, remain non-blocking by returning null
+  if (!narrativeData || !narrativeData.narrative) {
+    if (isLoading) {
+      return (
+        <div className={`bg-[#1E293B] border border-purple-500/20 rounded-lg p-3 text-xs text-slate-400 flex items-center gap-2.5 font-mono ${className}`}>
+          <RefreshCw className="w-3.5 h-3.5 text-purple-400 animate-spin shrink-0" />
+          <span>Synthesizing Groq AI Case Narrative in background...</span>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  const defaultDisclaimer = 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.';
+  const effectiveDisclaimer = narrativeData.disclaimer || defaultDisclaimer;
+
+  return (
+    <div 
+      id="ai-case-summary-card"
+      className={`bg-[#1E293B] border border-purple-500/40 rounded-lg p-5 shadow-sm relative overflow-hidden bg-gradient-to-r from-[#1E293B] via-purple-950/20 to-slate-900 ${className}`}
+    >
+      {/* Header section with badges and quick actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/30 pb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 font-bold shrink-0">
+            <Sparkles className="w-4 h-4 text-purple-300" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-purple-200 uppercase tracking-wider font-mono">
+                AI Case Summary
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
+                <Cpu className="w-3 h-3" />
+                {narrativeData.source || 'GROQ NARRATIVE SYNTHESIS'}
+              </span>
+            </div>
+            {narrativeData.model && (
+              <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                Model: <span className="text-purple-300">{narrativeData.model}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={handleCopy}
+            className="text-xs text-purple-300 hover:text-purple-100 flex items-center gap-1 bg-purple-950/40 hover:bg-purple-900/40 border border-purple-700/50 px-2.5 py-1 rounded cursor-pointer font-mono transition-colors"
+            title="Copy narrative text to clipboard"
+          >
+            {isCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            <span>{isCopied ? 'Copied' : 'Copy Summary'}</span>
+          </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="p-1 rounded text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            title={isExpanded ? 'Collapse Summary' : 'Expand Summary'}
+          >
+            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Narrative Body and Disclaimer */}
+      {isExpanded && (
+        <div className="mt-3 space-y-3">
+          <div className="text-xs text-slate-200 leading-relaxed font-sans bg-slate-950/60 p-4 rounded border border-purple-900/40 whitespace-pre-line shadow-inner">
+            {narrativeData.narrative}
+          </div>
+
+          {/* Mandatory AI Disclaimer */}
+          <div className="flex items-start gap-2 text-[10px] text-slate-400 font-mono bg-purple-950/20 p-2 rounded border border-purple-900/30">
+            <Info className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
+            <span className="leading-tight">
+              <strong className="text-purple-300">Disclaimer: </strong>
+              {effectiveDisclaimer}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface OverviewViewProps {
   analysis: EmailAnalysis;
@@ -234,10 +422,7 @@ export function OverviewView({
         </div>
 
         {/* AI Case Summary (Groq AI Reasoner Narrative Synthesis) */}
-        <AICaseSummaryCard
-          aiNarrative={analysis.aiNarrative}
-          ai_narrative={analysis.ai_narrative}
-        />
+        <AICaseSummary analysis={analysis} />
 
         {/* Authentication Status KPI Trio */}
 
