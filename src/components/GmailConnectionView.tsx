@@ -31,6 +31,7 @@ interface GmailConnectionViewProps {
 export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionViewProps) {
   const [status, setStatus] = useState<GmailStatusResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [syncing, setSyncing] = useState<boolean>(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
     } finally {
       clearTimeout(timeout);
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -174,7 +176,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
       const res = await fetch(`${API_URL}/api/gmail/disconnect`, { method: 'POST', signal: controller.signal });
       clearTimeout(timeout);
       if (res.ok) {
-        fetchStatus(false);
+        fetchStatus();
         setSyncResult('Gmail account disconnected.');
       }
     } catch (e: any) {
@@ -257,7 +259,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
             <span>{errorMsg}</span>
           </div>
           <button
-            onClick={() => fetchStatus(false)}
+            onClick={() => fetchStatus()}
             className="px-3 py-1 bg-rose-900 hover:bg-rose-800 text-rose-100 rounded text-xs font-semibold transition-colors"
           >
             Retry

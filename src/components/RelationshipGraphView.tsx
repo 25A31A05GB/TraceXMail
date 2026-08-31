@@ -14,7 +14,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Mail, Globe, Server, Network, Layers, FileText, ShieldAlert } from 'lucide-react';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+const API_URL = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '');
 
 // Custom Node component
 const EntityNode = ({ data }: any) => {

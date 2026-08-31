@@ -137,16 +137,27 @@ export interface AINarrative {
 
 export interface EmailAnalysis {
   id: string;
-  sessionId: string;
-  trackingId: string;
+  sessionId?: string;
+  trackingId?: string;
   evidenceId?: string;
   sha256Hash?: string;
+  sha256?: string;
   custodyHash?: string;
   evidenceSource?: string;
   evidenceReceivedAt?: string;
   hashVerified?: boolean;
-  name: string;
-  analyzedAt: string;
+  name?: string;
+  analyzedAt?: string;
+  subject?: string;
+  from?: string;
+  to?: string;
+  date?: string;
+  messageId?: string;
+  threatVerdict?: string;
+  threatScore?: number;
+  rawHeaders?: string;
+  authResults?: AuthResults;
+  heuristicSignals?: HeuristicSignal[];
   headers: {
     subject: string;
     from: string;
@@ -170,7 +181,7 @@ export interface EmailAnalysis {
   heuristics: HeuristicSignal[];
   logs: ForensicLogEntry[];
   riskScore: number; // 0 to 100
-  verdict: 'MALICIOUS PHISH' | 'SUSPICIOUS' | 'SPAM' | 'LEGITIMATE';
+  verdict: 'MALICIOUS PHISH' | 'SUSPICIOUS' | 'SPAM' | 'LEGITIMATE' | string;
   mlConfidence: number; // e.g. 0.98
   rawEml: string;
   summary: string;

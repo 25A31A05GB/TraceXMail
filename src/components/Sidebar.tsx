@@ -58,8 +58,8 @@ export function Sidebar({ activeTab, setActiveTab, alertCount, wsStatus }: Sideb
     { id: 'alerts' as const, label: 'Live Alerts', icon: Bell, badge: alertCount },
   ];
 
-  const isWsConnected = wsStatus === 'CONNECTED';
-  const isWsReconnecting = wsStatus === 'RECONNECTING' || wsStatus === 'CONNECTING';
+  const isWsConnected = (wsStatus as string)?.toLowerCase() === 'connected';
+  const isWsReconnecting = (wsStatus as string)?.toLowerCase() === 'reconnecting' || (wsStatus as string)?.toLowerCase() === 'connecting';
 
   return (
     <aside id="app-sidebar" className="w-64 bg-[#1E293B] border-r border-slate-700 flex flex-col shrink-0 select-none">

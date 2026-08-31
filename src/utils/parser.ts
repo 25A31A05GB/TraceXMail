@@ -60,8 +60,8 @@ function estimateGeo(ip?: string) {
 
 export function mapBackendCaseToAnalysis(
   apiResponse: any,
-  rawContent: string,
-  fileName: string
+  rawContent: string = '',
+  fileName: string = 'email.eml'
 ): EmailAnalysis {
   const data = apiResponse?.analysis || apiResponse;
 
