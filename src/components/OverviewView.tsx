@@ -369,49 +369,44 @@ export function OverviewView({
     if (rawIntel && rawIntel.domain && !rawIntel.error && rawIntel.status !== 'api_error') {
       return rawIntel;
     }
-    const detectedDomain = analysis.headers.fromEmail?.split('@')[1] || analysis.auth?.spf?.domain || 'paypal-account-security-update.com';
-    const isPhish = analysis.verdict === 'MALICIOUS PHISH' || (analysis.riskScore !== undefined && analysis.riskScore >= 70);
+    const detectedDomain = analysis.headers.fromEmail?.split('@')[1] || analysis.auth?.spf?.domain || 'sender-domain.com';
+    const isPhish = analysis.verdict === 'MALICIOUS PHISH' || (analysis.riskScore !== undefined && analysis.riskScore >= 75);
+    const hasSpf = Boolean(analysis.auth?.spf?.record);
+    const hasDmarc = Boolean(analysis.auth?.dmarc?.policy);
+
     return {
       status: 'ok',
       domain: detectedDomain,
-      registrar: isPhish ? 'NameCheap, Inc.' : 'MarkMonitor Inc.',
-      created_date: isPhish ? '2024-07-04T12:00:00Z' : '2015-03-12T00:00:00Z',
-      expiration_date: isPhish ? '2025-07-04T12:00:00Z' : '2026-03-12T00:00:00Z',
-      domain_age_days: isPhish ? 14 : 3420,
-      is_newly_registered: isPhish,
-      is_typosquat: isPhish,
-      typosquat_matched_brand: isPhish ? 'paypal.com' : undefined,
-      rdap: {
-        registrar: isPhish ? 'NameCheap, Inc.' : 'MarkMonitor Inc.',
-        creation_date: isPhish ? '2024-07-04T12:00:00Z' : '2015-03-12T00:00:00Z',
-        expiration_date: isPhish ? '2025-07-04T12:00:00Z' : '2026-03-12T00:00:00Z'
+      registrar: rawIntel?.registrar || 'Registry Network / Privacy Service',
+      created_date: rawIntel?.created_date,
+      expiration_date: rawIntel?.expiration_date,
+      domain_age_days: rawIntel?.domain_age_days,
+      is_newly_registered: rawIntel?.is_newly_registered ?? false,
+      is_typosquat: rawIntel?.is_typosquat ?? false,
+      typosquat_matched_brand: rawIntel?.typosquat_matched_brand,
+      rdap: rawIntel?.rdap || {
+        registrar: rawIntel?.registrar || 'Registry Network / Privacy Service',
+        creation_date: rawIntel?.created_date,
+        expiration_date: rawIntel?.expiration_date
       },
-      dns: {
+      dns: rawIntel?.dns || {
         domain: detectedDomain,
-        ns: ['ns1.dns-parking.net', 'ns2.dns-parking.net'],
+        ns: rawIntel?.nameservers || [],
         a_records: analysis.hops.map(h => h.fromIp).filter(Boolean) as string[],
-        mx: ['10 mail.unauthorized-relay.net'],
-        mx_records: [
-          { priority: 10, host: 'mail.unauthorized-relay.net', status: isPhish ? 'UNAUTHENTICATED' : 'VERIFIED' }
-        ],
-        spf: analysis.auth.spf.record || 'v=spf1 include:_spf.unauthorized.net ~all',
-        spf_qualifier: analysis.auth.spf.status === 'PASS' ? '-all (HardFail - Enforced)' : '~all (SoftFail - Permissive)',
-        spf_mechanisms: ['include:_spf.unauthorized.net', '~all'],
-        dmarc: analysis.auth.dmarc.policy || 'v=DMARC1; p=none; sp=none; pct=100; rua=mailto:reports@unauthorized.net',
-        dmarc_policy: analysis.auth.dmarc.status === 'PASS' ? 'reject' : 'none',
-        dmarc_sp: 'none',
-        dmarc_pct: 100,
-        dmarc_rua: 'reports@unauthorized.net',
-        dmarc_enforcement: analysis.auth.dmarc.status === 'PASS' ? 'REJECT (Strict Enforced)' : 'NONE (Monitoring Only)',
-        dnssec: 'VALIDATED'
+        mx: rawIntel?.mx_records || [],
+        mx_records: rawIntel?.dns?.mx_records || [],
+        spf: analysis.auth?.spf?.record,
+        spf_qualifier: analysis.auth?.spf?.status === 'PASS' ? '-all (HardFail - Enforced)' : '~all (SoftFail - Permissive)',
+        dmarc: analysis.auth?.dmarc?.policy,
+        dmarc_policy: analysis.auth?.dmarc?.policy || (analysis.auth?.dmarc?.status === 'PASS' ? 'reject' : 'none'),
+        dmarc_enforcement: analysis.auth?.dmarc?.status === 'PASS' ? 'REJECT (Strict Enforced)' : 'NONE (Monitoring Only)'
       },
-      typosquatting: {
-        is_typosquat: isPhish,
-        target_brand: isPhish ? 'paypal.com' : undefined,
-        distance: isPhish ? 1 : 0,
-        technique: isPhish ? 'Brand Impersonation / Deceptive Subdomain' : 'None'
+      typosquatting: rawIntel?.typosquatting || {
+        is_typosquat: false,
+        distance: 0,
+        technique: 'None'
       },
-      risk_flags: isPhish ? ['Newly Registered Domain (<30 days)', 'Permissive SPF Qualifier (~all)', 'DMARC Enforcement Inactive (p=none)'] : ['Corporate Authenticated Domain']
+      risk_flags: rawIntel?.risk_flags || (isPhish ? ['Suspicious Origin Telemetry'] : ['Domain Route Verified'])
     };
   })();
 
@@ -914,7 +909,7 @@ export function OverviewView({
               <div>
                 <div className="text-slate-400 text-[10px] uppercase font-mono font-semibold tracking-wider">REGISTRAR</div>
                 <div className="text-white text-sm font-bold mt-1 truncate" title={effectiveDomainIntelligence.registrar || effectiveDomainIntelligence.rdap?.registrar}>
-                  {effectiveDomainIntelligence.registrar || effectiveDomainIntelligence.rdap?.registrar || 'NameCheap, Inc.'}
+                  {effectiveDomainIntelligence.registrar || effectiveDomainIntelligence.rdap?.registrar || 'Privacy / Unlisted'}
                 </div>
               </div>
               <div>
@@ -926,40 +921,79 @@ export function OverviewView({
               <div>
                 <div className="text-slate-400 text-[10px] uppercase font-mono font-semibold tracking-wider">DOMAIN AGE</div>
                 <div className="text-white text-sm font-bold mt-1 flex items-center gap-2 truncate">
-                  <span>{effectiveDomainIntelligence.domain_age_days ?? 14} days</span>
-                  <span className="px-1.5 py-0.5 bg-rose-950 text-rose-300 border border-rose-700 rounded text-[10px] font-mono font-bold">
-                    NEW
+                  <span>
+                    {effectiveDomainIntelligence.domain_age_days !== undefined
+                      ? `${effectiveDomainIntelligence.domain_age_days} days`
+                      : 'Established'}
                   </span>
+                  {(effectiveDomainIntelligence.is_newly_registered || (effectiveDomainIntelligence.domain_age_days !== undefined && effectiveDomainIntelligence.domain_age_days < 30)) ? (
+                    <span className="px-1.5 py-0.5 bg-rose-950 text-rose-300 border border-rose-700 rounded text-[10px] font-mono font-bold">
+                      NEW
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 bg-emerald-950 text-emerald-300 border border-emerald-700 rounded text-[10px] font-mono font-bold">
+                      VERIFIED
+                    </span>
+                  )}
                 </div>
               </div>
               <div>
                 <div className="text-slate-400 text-[10px] uppercase font-mono font-semibold tracking-wider">NAMESERVERS</div>
                 <div className="text-white text-sm font-bold mt-1 font-mono">
-                  {effectiveDomainIntelligence.dns?.ns?.length ? `${effectiveDomainIntelligence.dns.ns.length} records` : '2 records'}
+                  {(effectiveDomainIntelligence.dns?.ns?.length || effectiveDomainIntelligence.nameservers?.length)
+                    ? `${effectiveDomainIntelligence.dns?.ns?.length || effectiveDomainIntelligence.nameservers?.length} records`
+                    : 'Unresolved'}
                 </div>
               </div>
             </div>
 
-            {/* Badges Row matching image */}
+            {/* Dynamic Security & Authentication Badges */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono font-semibold rounded-md shadow-sm">
-                MX RECORD: MISSING
-              </span>
-              <span className="px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono font-semibold rounded-md shadow-sm">
-                SPF RECORD: MISSING
-              </span>
-              <span className="px-3 py-1.5 bg-red-950/80 border border-red-700 text-red-300 text-xs font-mono font-semibold rounded-md shadow-sm">
-                TYPOSQUAT: {effectiveDomainIntelligence.typosquatting?.target_brand || effectiveDomainIntelligence.typosquat_matched_brand || 'paypal.com'}
-              </span>
-              <span className="px-3 py-1.5 bg-amber-950/80 border border-amber-600/80 text-amber-300 text-xs font-mono font-semibold rounded-md shadow-sm">
-                FLAG: Newly Registered Domain
-              </span>
-              <span className="px-3 py-1.5 bg-amber-950/80 border border-amber-600/80 text-amber-300 text-xs font-mono font-semibold rounded-md shadow-sm">
-                FLAG: Missing MX Record
-              </span>
-              <span className="px-3 py-1.5 bg-amber-950/80 border border-amber-600/80 text-amber-300 text-xs font-mono font-semibold rounded-md shadow-sm">
-                FLAG: Missing SPF
-              </span>
+              {((effectiveDomainIntelligence.dns?.mx_records && effectiveDomainIntelligence.dns.mx_records.length > 0) || (effectiveDomainIntelligence.dns?.mx && effectiveDomainIntelligence.dns.mx.length > 0)) ? (
+                <span className="px-3 py-1.5 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                  MX RECORD: CONFIGURED
+                </span>
+              ) : (
+                <span className="px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                  MX RECORD: MISSING
+                </span>
+              )}
+
+              {(effectiveDomainIntelligence.dns?.spf || effectiveDomainIntelligence.spf_record) ? (
+                <span className="px-3 py-1.5 bg-emerald-950/80 border border-emerald-700 text-emerald-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                  SPF: {effectiveDomainIntelligence.dns?.spf_qualifier?.includes('HardFail') ? 'ENFORCED (-ALL)' : 'CONFIGURED'}
+                </span>
+              ) : (
+                <span className="px-3 py-1.5 bg-amber-950/80 border border-amber-600/80 text-amber-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                  SPF: MISSING
+                </span>
+              )}
+
+              {(effectiveDomainIntelligence.dns?.dmarc || effectiveDomainIntelligence.dmarc_record) && (
+                <span className="px-3 py-1.5 bg-blue-950/80 border border-blue-700 text-blue-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                  DMARC: {effectiveDomainIntelligence.dns?.dmarc_policy ? effectiveDomainIntelligence.dns.dmarc_policy.toUpperCase() : 'CONFIGURED'}
+                </span>
+              )}
+
+              {(effectiveDomainIntelligence.typosquatting?.is_typosquat || effectiveDomainIntelligence.is_typosquat) && (
+                <span className="px-3 py-1.5 bg-red-950/80 border border-red-700 text-red-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                  TYPOSQUAT: {effectiveDomainIntelligence.typosquatting?.target_brand || effectiveDomainIntelligence.typosquat_matched_brand || 'Impersonation'}
+                </span>
+              )}
+
+              {effectiveDomainIntelligence.risk_flags && effectiveDomainIntelligence.risk_flags.length > 0 ? (
+                effectiveDomainIntelligence.risk_flags.map((flag: string, idx: number) => (
+                  <span key={idx} className="px-3 py-1.5 bg-amber-950/80 border border-amber-600/80 text-amber-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                    FLAG: {flag}
+                  </span>
+                ))
+              ) : effectiveDomainIntelligence.flags && effectiveDomainIntelligence.flags.length > 0 ? (
+                effectiveDomainIntelligence.flags.map((flag: string, idx: number) => (
+                  <span key={idx} className="px-3 py-1.5 bg-slate-900 border border-slate-700 text-slate-300 text-xs font-mono font-semibold rounded-md shadow-sm">
+                    {flag}
+                  </span>
+                ))
+              ) : null}
             </div>
 
             {/* Typosquatting / Lookalike Detection Banner */}
@@ -970,7 +1004,7 @@ export function OverviewView({
                   <div className="font-bold text-rose-300 flex items-center gap-2">
                     <span>TYPOSQUATTING / BRAND IMPERSONATION DETECTED</span>
                     <span className="px-1.5 py-0.5 bg-rose-900/60 rounded text-[10px] font-mono text-rose-200">
-                      TARGET: {effectiveDomainIntelligence.typosquatting?.target_brand || effectiveDomainIntelligence.typosquat_matched_brand || 'paypal.com'}
+                      TARGET: {effectiveDomainIntelligence.typosquatting?.target_brand || effectiveDomainIntelligence.typosquat_matched_brand || 'Target Entity'}
                     </span>
                   </div>
                   <div className="text-rose-200/80 mt-1">

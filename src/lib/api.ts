@@ -20,17 +20,6 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
-// Request interceptor to attach JWT token for verified RBAC roles
-apiClient.interceptors.request.use((config) => {
-  try {
-    const token = localStorage.getItem('tracexmail_auth_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  } catch {}
-  return config;
-});
-
 // Response interceptor for unified error logging
 apiClient.interceptors.response.use(
   (response) => response,

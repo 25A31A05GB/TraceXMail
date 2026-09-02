@@ -14,8 +14,7 @@ import {
   FolderOpen,
   LayoutDashboard,
   Clock,
-  Share2,
-  ShieldCheck
+  Share2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus } from '../hooks/useWebSocketAlerts';
@@ -25,7 +24,6 @@ export type NavTab =
   | 'cases'
   | 'campaigns'
   | 'search'
-  | 'compliance'
   | 'overview'
   | 'timeline'
   | 'graph'
@@ -48,7 +46,6 @@ export function Sidebar({ activeTab, setActiveTab, alertCount, wsStatus }: Sideb
     { id: 'dashboard' as const, label: 'Dashboard', icon: LayoutDashboard },
     { id: 'cases' as const, label: 'Cases', icon: FolderOpen },
     { id: 'campaigns' as const, label: 'Campaigns', icon: Layers },
-    { id: 'compliance' as const, label: 'Audit & Retention', icon: ShieldCheck },
     { id: 'search' as const, label: 'Search', icon: Search },
   ];
 
