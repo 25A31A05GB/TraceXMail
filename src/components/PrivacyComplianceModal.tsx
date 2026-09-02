@@ -98,7 +98,7 @@ export function PrivacyComplianceModal({
                   )}
                 </div>
                 <div className="text-xs text-slate-400 mt-0.5">
-                  Redacts personally identifiable information (PII), recipient addresses, and private network topologies in compliance with GDPR &amp; privacy policies.
+                  Redacts personally identifiable information (PII), recipient addresses, and private network topologies according to data minimization principles.
                 </div>
               </div>
             </div>
@@ -222,8 +222,8 @@ export function PrivacyComplianceModal({
               {[
                 { id: 'ephemeral' as const, label: 'Ephemeral', sub: 'Zero-Retention' },
                 { id: '30_days' as const, label: '30 Days', sub: 'Rapid Triage' },
-                { id: '90_days' as const, label: '90 Days', sub: 'SOC Standard' },
-                { id: '365_days' as const, label: '1 Year', sub: 'Compliance Audit' },
+                { id: '90_days' as const, label: '90 Days', sub: 'Standard Cycle' },
+                { id: '365_days' as const, label: '1 Year', sub: 'Extended Cycle' },
                 { id: 'legal_hold' as const, label: 'Legal Hold', sub: 'Subpoena Lock' }
               ].map((item) => (
                 <button

@@ -15,6 +15,7 @@ import { ThreatLogView } from './components/ThreatLogView';
 import { RawHeaderView } from './components/RawHeaderView';
 import { AlertsView } from './components/AlertsView';
 import { IngestionPipelineView } from './components/IngestionPipelineView';
+import { AuditComplianceView } from './components/AuditComplianceView';
 import { NewAnalysisModal } from './components/NewAnalysisModal';
 import { ReportModal } from './components/ReportModal';
 import { PrivacyComplianceModal } from './components/PrivacyComplianceModal';
@@ -116,6 +117,10 @@ export default function App() {
 
           {activeTab === 'campaigns' && (
             <CampaignsView />
+          )}
+
+          {activeTab === 'compliance' && (
+            <AuditComplianceView />
           )}
 
           {activeTab === 'search' && (

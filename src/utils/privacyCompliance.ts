@@ -8,7 +8,7 @@ export interface PrivacyConfig {
   maskInternalIps: boolean;
   maskingMode: MaskingMode;
   retentionPolicy: RetentionPolicy;
-  complianceStandard: 'NIST SP 800-86' | 'ISO/IEC 27037' | 'GDPR Art. 17 (Right to Erasure)' | 'CJIS Compliance';
+  complianceStandard: 'NIST SP 800-86' | 'ISO/IEC 27037' | 'Data Minimization & Sanitization' | 'CJIS Guidelines';
   evidencePreservationSeal: boolean;
   operatorId: string;
 }

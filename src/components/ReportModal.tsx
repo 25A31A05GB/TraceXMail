@@ -450,8 +450,8 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
 
                   <div className="p-3 rounded-lg bg-slate-800/40 border border-slate-700 flex justify-between items-center">
                     <div>
-                      <div className="font-bold text-slate-200">CAN-SPAM Act (18 U.S.C. § 1037) &amp; EU GDPR Art. 33 Breach Assessment</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Falsified email header information and unauthorized targeted collection of personal corporate identifiers.</div>
+                      <div className="font-bold text-slate-200">Anti-Spam Statutory Framework &amp; Incident Breach Notification Assessment</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Falsified email header information and unauthorized targeted collection of corporate identifiers.</div>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 font-mono text-[10px] font-bold border border-purple-800">
                       NOTIFICATION REQ.

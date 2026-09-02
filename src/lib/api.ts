@@ -20,6 +20,17 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
+// Request interceptor to attach JWT token for verified RBAC roles
+apiClient.interceptors.request.use((config) => {
+  try {
+    const token = localStorage.getItem('tracexmail_auth_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch {}
+  return config;
+});
+
 // Response interceptor for unified error logging
 apiClient.interceptors.response.use(
   (response) => response,
@@ -229,6 +240,11 @@ export const forensicApi = {
 
   updateCase: async (caseId: string, updates: { status?: string; notes?: string; analyst_notes?: string; severity?: string; tags?: string[] }): Promise<CaseItem> => {
     const res = await apiClient.patch<CaseItem>(`/cases/${caseId}`, updates);
+    return res.data;
+  },
+
+  deleteCase: async (caseId: string): Promise<any> => {
+    const res = await apiClient.delete(`/cases/${caseId}`);
     return res.data;
   },
 
