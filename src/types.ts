@@ -24,6 +24,7 @@ export interface EmailHop {
   region?: string;
   reverseDns?: string;
   abuseScore?: number;
+  abuseStatus?: string;
   isBlacklisted?: boolean;
   isProxyOrVpn?: boolean;
   isOrigin?: boolean;
