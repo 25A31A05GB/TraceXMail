@@ -11,6 +11,14 @@ import { extractHopsAndOriginIp, classifyIp } from './src/server/ipExtractor';
 import { resolveIpGeolocation } from './src/server/geoService';
 import { resolveDomainIntelligence } from './src/server/domainService';
 import {
+  getSlackConfig,
+  updateSlackConfig,
+  getSlackDeliveries,
+  dispatchSlackCaseAlert,
+  sendTestSlackAlert,
+  maskWebhookUrl
+} from './src/server/slackService';
+import {
   getSupabaseClient,
   logAuditAction,
   getAuditLogs,
@@ -163,6 +171,9 @@ const INITIAL_ALERTS = [
 let casesStore = [...INITIAL_CASES];
 let campaignsStore = [...INITIAL_CAMPAIGNS];
 let alertsStore = [...INITIAL_ALERTS];
+
+// Global WebSocket broadcaster
+let broadcastWebSocketEvent: (eventData: any) => void = () => {};
 
 // Notice definitions for IP telemetry disclosures
 const maxmindCopyrightNotice = 'Database and Contents Copyright (c) 2026 MaxMind, Inc.';
@@ -505,7 +516,68 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     }
   };
 
-  return { case: newCaseItem, analysis: emailAnalysis };
+  // 2. Automatically generate SIEM Alert for newly analyzed case
+  const alertSeverity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' = severity === 'CLEAN' ? 'LOW' : (severity as any);
+  const alertCategory = isTyposquat ? 'TYPOSQUATTING_DOMAIN' : torHop ? 'TOR_RELAY_ANOMALY' : threatScore >= 80 ? 'PHISHING_LURE' : 'FORENSIC_INGEST';
+  
+  const newAlert = {
+    id: `alt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    case_id: newId,
+    timestamp: new Date().toISOString(),
+    severity: alertSeverity,
+    title: isTyposquat 
+      ? `🚨 Typosquatting Phishing Detected: ${fromDomain}`
+      : torHop 
+      ? `⚠️ Tor Exit Node Routing Detected: ${subject}`
+      : threatScore >= 75 
+      ? `🚨 High-Risk Threat Alert (${threatScore}/100): ${subject}`
+      : `🔍 Forensic Case Ingested: ${subject}`,
+    description: isTyposquat
+      ? `Sender domain ${fromDomain} is a lookalike spoofing ${targetBrand || 'enterprise brand'}. Origin IP: ${primaryGeoHop?.fromIp || '127.0.0.1'} (${primaryGeoHop?.city || 'LAN'}, ${primaryGeoHop?.country || 'Private Space'}). Risk score: ${threatScore}/100.`
+      : torHop
+      ? `Anomalous relay detected via Tor Exit Node (${torHop.fromIp || '185.220.101.5'}). Sender: ${from}. Risk score: ${threatScore}/100.`
+      : threatScore >= 75
+      ? `High-risk indicators identified in forensic trace (${heuristics.map(h => h.title).slice(0, 2).join(', ')}). Threat score: ${threatScore}/100.`
+      : `Forensic email analyzed from ${fromDomain}. Threat score: ${threatScore}/100.`,
+    source: 'forensic-pipeline',
+    read: false,
+    threat_score: threatScore,
+    category: alertCategory,
+    sender: from,
+    subject: subject
+  };
+
+  alertsStore.unshift(newAlert);
+
+  // 3. Broadcast real-time WebSocket alert and case creation events
+  try {
+    broadcastWebSocketEvent(newAlert);
+    broadcastWebSocketEvent({ type: 'ALERT', alert: newAlert, case: newCaseItem });
+    broadcastWebSocketEvent({ type: 'CASE_CREATED', case: newCaseItem, alert: newAlert });
+  } catch (err: any) {
+    console.warn('[WebSocket Broadcast Exception]', err?.message);
+  }
+
+  // 4. Send rich Block Kit alert to Slack webhook
+  dispatchSlackCaseAlert({
+    caseItem: newCaseItem,
+    alertItem: newAlert,
+    fileName,
+    threatScore,
+    verdict,
+    from,
+    to,
+    subject,
+    fromDomain,
+    primaryGeoHop,
+    domainIntelligence,
+    spfResult,
+    dmarcResult,
+    isTyposquat,
+    torHop
+  }).catch(err => console.warn('[Slack Auto-Dispatch Exception]', err?.message));
+
+  return { case: newCaseItem, analysis: emailAnalysis, alert: newAlert };
 }
 
 async function startServer() {
@@ -1165,6 +1237,99 @@ Link: https://verify-auth-portal.net/login`;
     res.json(alertsStore);
   });
 
+  app.patch('/api/alerts/:alertId/read', (req, res) => {
+    const alertId = req.params.alertId;
+    const alert = alertsStore.find(a => a.id === alertId);
+    if (alert) {
+      alert.read = true;
+      res.json({ status: 'success', alert });
+    } else {
+      res.status(404).json({ error: 'Alert not found' });
+    }
+  });
+
+  app.post('/api/alerts/mark-all-read', (_req, res) => {
+    alertsStore.forEach(a => { a.read = true; });
+    res.json({ status: 'success', count: alertsStore.length });
+  });
+
+  // Slack Integration API
+  app.get('/api/slack/status', (_req, res) => {
+    const config = getSlackConfig();
+    const deliveries = getSlackDeliveries();
+    res.json({
+      status: 'ok',
+      configured: Boolean(config.webhookUrl && config.webhookUrl.startsWith('http')),
+      webhook_url_masked: maskWebhookUrl(config.webhookUrl),
+      auto_send: config.autoSendAlerts,
+      min_severity: config.minSeverity,
+      channel: config.channel,
+      username: config.username,
+      total_deliveries: deliveries.length,
+      recent_deliveries: deliveries.slice(0, 15)
+    });
+  });
+
+  app.post('/api/slack/config', (req, res) => {
+    const { webhook_url, auto_send, min_severity, channel, username } = req.body || {};
+    const updated = updateSlackConfig({
+      ...(webhook_url !== undefined && { webhookUrl: String(webhook_url).trim() }),
+      ...(auto_send !== undefined && { autoSendAlerts: Boolean(auto_send) }),
+      ...(min_severity !== undefined && { minSeverity: min_severity }),
+      ...(channel !== undefined && { channel: String(channel).trim() }),
+      ...(username !== undefined && { username: String(username).trim() })
+    });
+    res.json({
+      status: 'success',
+      config: {
+        configured: Boolean(updated.webhookUrl && updated.webhookUrl.startsWith('http')),
+        webhook_url_masked: maskWebhookUrl(updated.webhookUrl),
+        auto_send: updated.autoSendAlerts,
+        min_severity: updated.minSeverity,
+        channel: updated.channel,
+        username: updated.username
+      }
+    });
+  });
+
+  app.post('/api/slack/test', async (req, res) => {
+    const { webhook_url } = req.body || {};
+    const result = await sendTestSlackAlert(webhook_url);
+    res.status(result.success ? 200 : (result.statusCode || 400)).json(result);
+  });
+
+  app.get('/api/slack/deliveries', (_req, res) => {
+    res.json(getSlackDeliveries());
+  });
+
+  app.post('/api/slack/send-case/:caseId', async (req, res) => {
+    const caseId = req.params.caseId;
+    const targetCase = casesStore.find(c => c.id === caseId);
+    if (!targetCase) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+    const matchingAlert = alertsStore.find(a => a.case_id === caseId);
+    const resultLog = await dispatchSlackCaseAlert({
+      caseItem: targetCase,
+      alertItem: matchingAlert,
+      fileName: 'case_evidence.eml',
+      threatScore: targetCase.threat_score || 85,
+      verdict: targetCase.severity === 'CRITICAL' ? 'MALICIOUS (CRITICAL)' : 'SUSPICIOUS (HIGH RISK)',
+      from: matchingAlert?.sender || targetCase.title || 'analyst@enterprise.corp',
+      subject: targetCase.title,
+      fromDomain: (matchingAlert?.sender?.split('@')[1]) || 'enterprise.corp',
+      primaryGeoHop: {
+        fromIp: '185.220.101.5',
+        city: 'Sofia',
+        country: 'Bulgaria',
+        countryCode: 'BG',
+        asn: 'AS200548',
+        org: 'Zettahost Cyber Ltd'
+      }
+    });
+    res.json({ status: resultLog.status, log: resultLog });
+  });
+
   // VirusTotal Enrichment
   app.post('/api/virustotal/enrich', (req, res) => {
     const { urls = [], attachments = [] } = req.body;
@@ -1204,6 +1369,19 @@ Link: https://verify-auth-portal.net/login`;
   // WebSocket Server for Real-Time Alerts
   const wss = new WebSocketServer({ noServer: true });
   const activeSockets = new Set<WebSocket>();
+
+  broadcastWebSocketEvent = (eventData: any) => {
+    const payload = JSON.stringify(eventData);
+    activeSockets.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        try {
+          ws.send(payload);
+        } catch (err: any) {
+          console.warn('[WebSocket Broadcast Exception]', err?.message);
+        }
+      }
+    });
+  };
 
   wss.on('connection', (ws: WebSocket) => {
     activeSockets.add(ws);

@@ -245,7 +245,18 @@ Subject: [URGENT] Account Action Required
               {SAMPLE_ANALYSES.map((sample) => (
                 <div
                   key={sample.id}
-                  onClick={() => {
+                  onClick={async () => {
+                    try {
+                      // Trigger backend ingestion so cases, SIEM alerts, and Slack dispatch occur
+                      const rawContent = sample.rawHeaders || `From: ${sample.headers.from}\nTo: ${sample.headers.to}\nSubject: ${sample.headers.subject}\nDate: ${sample.headers.date}\nMessage-ID: ${sample.headers.messageId}\n\n${sample.name}`;
+                      const formData = new FormData();
+                      formData.append('raw_email', rawContent);
+                      formData.append('filename', `${sample.id}.eml`);
+                      formData.append('source', 'threat_intelligence_preset');
+                      fetch('/api/v1/analyze', { method: 'POST', body: formData }).catch(console.warn);
+                    } catch (e) {
+                      console.warn('Preset ingestion error:', e);
+                    }
                     onAnalysisCreated(sample);
                     onClose();
                   }}

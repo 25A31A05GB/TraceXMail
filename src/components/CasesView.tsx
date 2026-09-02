@@ -20,7 +20,8 @@ import {
   Edit3,
   Check,
   Tag,
-  Download
+  Download,
+  Share2
 } from 'lucide-react';
 import { forensicApi, CaseItem } from '../lib/api';
 import { EmailAnalysis } from '../types';
@@ -107,7 +108,32 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
   };
 
   // Real-Time WebSocket Alerts Hook
-  const { alerts } = useWebSocketAlerts();
+  const { alerts, lastCreatedCaseId } = useWebSocketAlerts();
+
+  // Slack Dispatch State
+  const [sendingSlackCaseId, setSendingSlackCaseId] = useState<string | null>(null);
+  const [slackFeedbackMsg, setSlackFeedbackMsg] = useState<{ id: string; type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSendCaseToSlack = async (e: React.MouseEvent, caseItem: any) => {
+    e.stopPropagation();
+    try {
+      setSendingSlackCaseId(caseItem.id);
+      setSlackFeedbackMsg(null);
+      const res = await forensicApi.sendCaseToSlack(caseItem.id);
+      if (res.status === 'DELIVERED') {
+        setSlackFeedbackMsg({ id: caseItem.id, type: 'success', text: `Dispatched case ${caseItem.id} to Slack channel!` });
+      } else if (res.status === 'SKIPPED_SEVERITY') {
+        setSlackFeedbackMsg({ id: caseItem.id, type: 'error', text: 'Alert skipped: severity is below Slack filter threshold.' });
+      } else {
+        setSlackFeedbackMsg({ id: caseItem.id, type: 'error', text: `Slack dispatch logged: ${res.status}` });
+      }
+    } catch (err: any) {
+      setSlackFeedbackMsg({ id: caseItem.id, type: 'error', text: err?.response?.data?.error || 'Failed to dispatch to Slack' });
+    } finally {
+      setSendingSlackCaseId(null);
+      setTimeout(() => setSlackFeedbackMsg(null), 5000);
+    }
+  };
 
   const fetchCases = async () => {
     setLoading(true);
@@ -131,7 +157,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
   // Trigger refetch on mount, explicit refresh signal, or new WebSocket alert activity
   useEffect(() => {
     fetchCases();
-  }, [alerts, refreshSignal]);
+  }, [alerts, lastCreatedCaseId, refreshSignal]);
 
   // Periodic safety net polling interval (15s)
   useEffect(() => {
@@ -618,6 +644,22 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
                       </td>
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
+                          {slackFeedbackMsg?.id === c.id && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded font-semibold ${
+                              slackFeedbackMsg.type === 'success' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'
+                            }`}>
+                              {slackFeedbackMsg.text}
+                            </span>
+                          )}
+                          <button
+                            onClick={(e) => handleSendCaseToSlack(e, c)}
+                            disabled={sendingSlackCaseId === c.id}
+                            title="Dispatch Block Kit case alert to Slack"
+                            className="px-2 py-1.5 bg-emerald-950/80 hover:bg-emerald-800/80 text-emerald-400 border border-emerald-700/60 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                          >
+                            <Share2 className={`w-3 h-3 ${sendingSlackCaseId === c.id ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline">Slack</span>
+                          </button>
                           {c.members && c.members.length > 0 && (
                             <button
                               onClick={() => {
@@ -892,6 +934,15 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
               </div>
               
               <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => handleSendCaseToSlack(e, selectedCaseDetail)}
+                  disabled={sendingSlackCaseId === selectedCaseDetail.id}
+                  className="px-3 py-1.5 bg-emerald-950 hover:bg-emerald-800 text-emerald-300 rounded border border-emerald-700 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  title="Forward this case to Slack SOC webhook"
+                >
+                  <Share2 className={`w-3.5 h-3.5 ${sendingSlackCaseId === selectedCaseDetail.id ? 'animate-spin' : ''}`} />
+                  <span>{sendingSlackCaseId === selectedCaseDetail.id ? 'Dispatching...' : 'Send to Slack'}</span>
+                </button>
                 <a
                   href={`/api/v1/reports/${selectedCaseDetail.id}`}
                   target="_blank"

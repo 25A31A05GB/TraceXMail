@@ -67,8 +67,28 @@ export function useWebSocketAlerts() {
   const [activeToast, setActiveToast] = useState<WebSocketAlert | null>(null);
   const [status, setStatus] = useState<ConnectionStatus>('disconnected');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
+  const [lastCreatedCaseId, setLastCreatedCaseId] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<any>(null);
+
+  // Fetch initial alerts from backend
+  const refreshAlerts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/alerts');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setAlerts(data);
+        }
+      }
+    } catch {
+      // Keep initial alerts fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshAlerts();
+  }, [refreshAlerts]);
 
   const unreadCount = alerts.filter(a => !a.read).length;
 
@@ -95,10 +115,33 @@ export function useWebSocketAlerts() {
   }, [soundEnabled]);
 
   const addAlert = useCallback((newAlert: WebSocketAlert) => {
-    setAlerts(prev => [newAlert, ...prev.slice(0, 49)]);
+    setAlerts(prev => {
+      // Deduplicate by ID
+      const exists = prev.some(a => a.id === newAlert.id);
+      if (exists) return prev;
+      return [newAlert, ...prev.slice(0, 99)];
+    });
     setActiveToast(newAlert);
     playNotificationSound();
   }, [playNotificationSound]);
+
+  const markAsRead = useCallback(async (alertId: string) => {
+    setAlerts(prev => prev.map(a => (a.id === alertId ? { ...a, read: true } : a)));
+    try {
+      await fetch(`/api/alerts/${alertId}/read`, { method: 'PATCH' });
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const markAllAsRead = useCallback(async () => {
+    setAlerts(prev => prev.map(a => ({ ...a, read: true })));
+    try {
+      await fetch('/api/alerts/mark-all-read', { method: 'POST' });
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const connect = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -117,20 +160,24 @@ export function useWebSocketAlerts() {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data && data.type === 'CASE_CREATED' && data.case?.id) {
+            setLastCreatedCaseId(data.case.id);
+          }
           if (data && (data.title || data.type === 'ALERT')) {
+            const rawAlert = data.alert || data;
             const incoming: WebSocketAlert = {
-              id: data.id || `alt_${Date.now()}`,
-              case_id: data.case_id || data.caseId,
-              timestamp: data.timestamp || new Date().toISOString(),
-              severity: data.severity || 'HIGH',
-              title: data.title || 'Threat Detected',
-              description: data.description || data.message || 'Suspicious forensic pattern observed',
-              source: data.source || 'live-stream',
+              id: rawAlert.id || `alt_${Date.now()}`,
+              case_id: rawAlert.case_id || rawAlert.caseId,
+              timestamp: rawAlert.timestamp || new Date().toISOString(),
+              severity: rawAlert.severity || 'HIGH',
+              title: rawAlert.title || 'Threat Detected',
+              description: rawAlert.description || rawAlert.message || 'Suspicious forensic pattern observed',
+              source: rawAlert.source || 'live-stream',
               read: false,
-              threat_score: data.threat_score || 75,
-              category: data.category || 'THREAT_ALERT',
-              sender: data.sender,
-              subject: data.subject
+              threat_score: rawAlert.threat_score || 75,
+              category: rawAlert.category || 'THREAT_ALERT',
+              sender: rawAlert.sender,
+              subject: rawAlert.subject
             };
             addAlert(incoming);
           }
@@ -199,8 +246,12 @@ export function useWebSocketAlerts() {
     status,
     unreadCount,
     soundEnabled,
+    lastCreatedCaseId,
     setSoundEnabled,
     dismissToast,
+    markAsRead,
+    markAllAsRead,
+    refreshAlerts,
     broadcastTestAlert,
     reconnect
   };

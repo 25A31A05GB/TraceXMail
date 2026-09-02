@@ -306,8 +306,79 @@ export const forensicApi = {
     return res.data;
   },
 
+  markAlertRead: async (alertId: string): Promise<any> => {
+    const res = await apiClient.patch(`/alerts/${alertId}/read`);
+    return res.data;
+  },
+
+  markAllAlertsRead: async (): Promise<any> => {
+    const res = await apiClient.post('/alerts/mark-all-read');
+    return res.data;
+  },
+
   broadcastAlert: async (alertData: { title: string; description: string; severity?: string; category?: string }): Promise<any> => {
     const res = await apiClient.post('/alerts/broadcast', alertData);
+    return res.data;
+  },
+
+  // Slack SOC Integration
+  getSlackStatus: async (): Promise<{
+    status: string;
+    configured: boolean;
+    webhook_url_masked: string;
+    auto_send: boolean;
+    min_severity: string;
+    channel?: string;
+    username?: string;
+    total_deliveries: number;
+    recent_deliveries: Array<{
+      id: string;
+      timestamp: string;
+      case_id?: string;
+      alert_id?: string;
+      subject: string;
+      severity: string;
+      threat_score: number;
+      status: 'DELIVERED' | 'FAILED' | 'SKIPPED_SEVERITY' | 'UNCONFIGURED_WEBHOOK';
+      status_code?: number;
+      error?: string;
+      webhook_url_masked: string;
+      payload_preview: any;
+    }>;
+  }> => {
+    const res = await apiClient.get('/slack/status');
+    return res.data;
+  },
+
+  updateSlackConfig: async (config: {
+    webhook_url?: string;
+    auto_send?: boolean;
+    min_severity?: 'ALL' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+    channel?: string;
+    username?: string;
+  }): Promise<any> => {
+    const res = await apiClient.post('/slack/config', config);
+    return res.data;
+  },
+
+  testSlackWebhook: async (webhookUrl?: string): Promise<{
+    success: boolean;
+    status: string;
+    statusCode?: number;
+    message: string;
+    log: any;
+  }> => {
+    const res = await apiClient.post('/slack/test', { webhook_url: webhookUrl });
+    return res.data;
+  },
+
+  sendCaseToSlack: async (caseId: string): Promise<{ status: string; log: any }> => {
+    const res = await apiClient.post(`/slack/send-case/${caseId}`);
+    return res.data;
+  },
+
+  getSlackDeliveries: async (): Promise<any[]> => {
+    const res = await apiClient.get('/slack/deliveries');
     return res.data;
   },
 
