@@ -4,6 +4,7 @@ import os
 import time
 import urllib.request
 import re
+import ipaddress
 
 TOR_EXIT_LIST_URL = "https://check.torproject.org/torbulkexitlist"
 TOR_CACHE_FILE = "/tmp/tor_exit_nodes.txt"
@@ -90,6 +91,15 @@ def classify_infrastructure(
     """
     Produces honest best-effort infrastructure classification based on real signal sources.
     """
+    # Auto-detect RFC 1918 or private address
+    if not is_private and ip_str:
+        try:
+            ip_obj = ipaddress.ip_address(ip_str)
+            if ip_obj.is_private:
+                is_private = True
+        except Exception:
+            pass
+
     if is_private or not ip_str:
         return {
             "is_hosting_cloud": False,
@@ -99,7 +109,7 @@ def classify_infrastructure(
             "is_open_relay": False,
             "category": "INTERNAL_PRIVATE" if is_private else "UNKNOWN",
             "confidence": 1.0 if is_private else 0.0,
-            "basis": "Private local network IP space" if is_private else "No IP provided",
+            "basis": "RFC 1918 private local network IP space (non-routable)" if is_private else "No IP provided",
             "lookup_method": "signal_analysis",
             "status": "ok" if is_private else "unavailable"
         }

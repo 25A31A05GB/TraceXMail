@@ -13,7 +13,8 @@ import {
   Layers,
   FolderOpen,
   LayoutDashboard,
-  Clock
+  Clock,
+  Share2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { ConnectionStatus } from '../hooks/useWebSocketAlerts';
@@ -25,6 +26,7 @@ export type NavTab =
   | 'search'
   | 'overview'
   | 'timeline'
+  | 'graph'
   | 'hops'
   | 'map'
   | 'logs'
@@ -49,6 +51,7 @@ export function Sidebar({ activeTab, setActiveTab, alertCount, wsStatus }: Sideb
 
   const forensicNavItems = [
     { id: 'overview' as const, label: 'Message Overview', icon: Activity },
+    { id: 'graph' as const, label: 'Relationship Graph', icon: Share2 },
     { id: 'timeline' as const, label: 'Threat Timeline', icon: Clock },
     { id: 'ingest' as const, label: 'Email Ingestion', icon: Database },
     { id: 'hops' as const, label: 'Hop Traceroute', icon: Network },

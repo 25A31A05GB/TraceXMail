@@ -9,23 +9,30 @@ import {
   Activity, 
   Search,
   ExternalLink,
-  Shield
+  Shield,
+  Scale,
+  EyeOff
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
+import { PrivacyConfig } from '../utils/privacyCompliance';
 
 interface HeaderProps {
   currentAnalysis: EmailAnalysis;
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
   onOpenNewModal: () => void;
   onOpenReportModal: () => void;
+  onOpenPrivacyModal?: () => void;
+  privacyConfig?: PrivacyConfig;
 }
 
 export function Header({
   currentAnalysis,
   onSelectAnalysis,
   onOpenNewModal,
-  onOpenReportModal
+  onOpenReportModal,
+  onOpenPrivacyModal,
+  privacyConfig
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -118,7 +125,25 @@ export function Header({
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
+        {onOpenPrivacyModal && (
+          <button
+            onClick={onOpenPrivacyModal}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              privacyConfig?.maskingEnabled
+                ? 'bg-purple-950/70 border-purple-700 text-purple-200'
+                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-300'
+            }`}
+            title="Configure Privacy Safeguards, Retention & PII Masking"
+          >
+            <Scale className="w-3.5 h-3.5 text-purple-400" />
+            <span className="hidden lg:inline">Privacy &amp; Compliance</span>
+            {privacyConfig?.maskingEnabled && (
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+            )}
+          </button>
+        )}
+
         <button
           onClick={onOpenReportModal}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors"

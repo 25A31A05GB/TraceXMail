@@ -28,6 +28,13 @@ export interface EmailHop {
   isBlacklisted?: boolean;
   isProxyOrVpn?: boolean;
   isOrigin?: boolean;
+  isPublicGateway?: boolean;
+  isPrivate?: boolean;
+  isRfc1918?: boolean;
+  subnetType?: string;
+  cidr?: string;
+  scope?: 'PRIVATE_LAN' | 'PUBLIC_INTERNET' | 'LOOPBACK' | 'LINK_LOCAL' | 'UNMAPPED';
+  subnetDescription?: string;
   infrastructureType?: string;
   is_vpn?: boolean;
   is_tor?: boolean;
@@ -36,6 +43,89 @@ export interface EmailHop {
   is_cloud?: boolean;
   lookupMethod?: string;
   why?: WhyExplanation;
+  geonameId?: number;
+  continentCode?: string;
+  continentName?: string;
+  timeZone?: string;
+  isInEuropeanUnion?: boolean;
+  accuracyRadius?: number;
+  maxmindVerified?: boolean;
+  maxmindSource?: string;
+  maxmindCopyright?: string;
+  maxmindLicense?: string;
+}
+
+export interface DomainMxRecord {
+  priority: number;
+  host: string;
+  ip?: string;
+  status?: string;
+}
+
+export interface DomainIntelligence {
+  domain: string;
+  status?: string;
+  error?: string;
+  from_cache?: boolean;
+  registrar?: string;
+  created_date?: string;
+  expiration_date?: string;
+  domain_age_days?: number;
+  is_newly_registered?: boolean;
+  is_typosquat?: boolean;
+  typosquat_matched_brand?: string;
+  typosquatting?: {
+    is_typosquat: boolean;
+    target_brand?: string;
+    distance?: number;
+    similarity_score?: number;
+    is_exact_match?: boolean;
+    reasons?: string[];
+    technique?: string;
+  };
+  rdap?: {
+    domain?: string;
+    registrar?: string;
+    creation_date?: string;
+    expiration_date?: string;
+    updated_date?: string;
+    domain_age_days?: number;
+    is_newly_registered?: boolean;
+    nameservers?: string[];
+    rdap_status?: string[];
+    status?: string;
+  };
+  dns?: {
+    domain?: string;
+    ns?: string[];
+    a?: string[];
+    aaaa?: string[];
+    a_records?: string[];
+    mx?: string[];
+    mx_records?: DomainMxRecord[];
+    txt?: string[];
+    spf?: string;
+    spf_qualifier?: string;
+    spf_mechanisms?: string[];
+    dmarc?: string;
+    dmarc_policy?: string;
+    dmarc_sp?: string;
+    dmarc_pct?: number;
+    dmarc_rua?: string;
+    dmarc_enforcement?: string;
+    dnssec?: string;
+  };
+  mx_records?: string[];
+  mx_missing?: boolean;
+  spf_record?: string | null;
+  spf_missing?: boolean;
+  dmarc_record?: string | null;
+  dmarc_missing?: boolean;
+  nameservers?: string[];
+  a_records?: string[];
+  flags?: string[];
+  risk_flags?: string[];
+  lookup_method?: string;
 }
 
 export type Hop = EmailHop;
@@ -152,6 +242,8 @@ export interface EmailAnalysis {
   subject?: string;
   from?: string;
   to?: string;
+  replyTo?: string;
+  returnPath?: string;
   date?: string;
   messageId?: string;
   threatVerdict?: string;
@@ -186,6 +278,29 @@ export interface EmailAnalysis {
   mlConfidence: number; // e.g. 0.98
   rawEml: string;
   summary: string;
+  domain_intelligence?: DomainIntelligence;
+  domainIntelligence?: DomainIntelligence;
+  maxmindIntelligence?: {
+    geonameId?: number;
+    city?: string;
+    region?: string;
+    country?: string;
+    countryCode?: string;
+    continentCode?: string;
+    continentName?: string;
+    timeZone?: string;
+    isInEuropeanUnion?: boolean;
+    lat?: number;
+    lng?: number;
+    accuracyRadius?: number;
+    asn?: string;
+    asnOrg?: string;
+    sourceFile?: string;
+    copyright?: string;
+    license?: string;
+    isVerified?: boolean;
+    filesFound?: string[];
+  };
   why?: WhyExplanation;
   attributionWhy?: WhyExplanation;
   originWhy?: WhyExplanation;
@@ -193,7 +308,6 @@ export interface EmailAnalysis {
   aiNarrative?: AINarrative | null;
   ai_narrative?: AINarrative | null;
   graph?: any;
-  domain_intelligence?: any;
   isOfflineFallback?: boolean;
 }
 

@@ -8,6 +8,7 @@ import { CampaignsView } from './components/CampaignsView';
 import { SearchView } from './components/SearchView';
 import { OverviewView } from './components/OverviewView';
 import { ThreatTimelineView } from './components/ThreatTimelineView';
+import { RelationshipGraphView } from './components/RelationshipGraphView';
 import { HopTracerouteView } from './components/HopTracerouteView';
 import { MapView } from './components/MapView';
 import { ThreatLogView } from './components/ThreatLogView';
@@ -16,10 +17,12 @@ import { AlertsView } from './components/AlertsView';
 import { IngestionPipelineView } from './components/IngestionPipelineView';
 import { NewAnalysisModal } from './components/NewAnalysisModal';
 import { ReportModal } from './components/ReportModal';
+import { PrivacyComplianceModal } from './components/PrivacyComplianceModal';
 import { AlertToast } from './components/AlertToast';
 import { SAMPLE_ANALYSES } from './data/samples';
 import { EmailAnalysis } from './types';
 import { useWebSocketAlerts, WebSocketAlert } from './hooks/useWebSocketAlerts';
+import { PrivacyConfig, loadPrivacyConfig, savePrivacyConfig } from './utils/privacyCompliance';
 
 export default function App() {
   const publicPath = window.location.pathname;
@@ -37,7 +40,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
+  const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState<boolean>(false);
+  const [privacyConfig, setPrivacyConfig] = useState<PrivacyConfig>(() => loadPrivacyConfig());
   const [casesRefreshSignal, setCasesRefreshSignal] = useState<number>(0);
+
+  const handleUpdatePrivacyConfig = (newCfg: PrivacyConfig) => {
+    setPrivacyConfig(newCfg);
+    savePrivacyConfig(newCfg);
+  };
 
   // Real-Time WebSockets Alerting Hook
   const {
@@ -82,6 +92,8 @@ export default function App() {
           onSelectAnalysis={setCurrentAnalysis}
           onOpenNewModal={() => setIsNewModalOpen(true)}
           onOpenReportModal={() => setIsReportModalOpen(true)}
+          onOpenPrivacyModal={() => setIsPrivacyModalOpen(true)}
+          privacyConfig={privacyConfig}
         />
 
         {/* View Switcher Container */}
@@ -120,7 +132,17 @@ export default function App() {
               onNavigateToLogs={() => setActiveTab('logs')}
               onNavigateToHeaders={() => setActiveTab('headers')}
               onNavigateToTimeline={() => setActiveTab('timeline')}
+              onNavigateToGraph={() => setActiveTab('graph')}
             />
+          )}
+
+          {activeTab === 'graph' && (
+            <div className="flex-1 p-6 overflow-hidden flex flex-col h-full bg-[#0F172A]">
+              <RelationshipGraphView
+                analysis={currentAnalysis}
+                caseId={currentAnalysis?.id}
+              />
+            </div>
           )}
 
           {activeTab === 'timeline' && (
@@ -192,6 +214,18 @@ export default function App() {
           isOpen={isReportModalOpen}
           onClose={() => setIsReportModalOpen(false)}
           analysis={currentAnalysis}
+          privacyConfig={privacyConfig}
+        />
+      )}
+
+      {/* Privacy, Legal & Compliance Safeguards Modal */}
+      {isPrivacyModalOpen && (
+        <PrivacyComplianceModal
+          isOpen={isPrivacyModalOpen}
+          onClose={() => setIsPrivacyModalOpen(false)}
+          config={privacyConfig}
+          onChangeConfig={handleUpdatePrivacyConfig}
+          currentDate={currentAnalysis?.date}
         />
       )}
     </div>

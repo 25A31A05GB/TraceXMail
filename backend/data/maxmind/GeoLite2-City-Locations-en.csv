@@ -1,2 +1,8 @@
 geoname_id,locale_code,continent_code,continent_name,country_iso_code,country_name,subdivision_1_iso_code,subdivision_1_name,subdivision_2_iso_code,subdivision_2_name,city_name,metro_code,time_zone,is_in_european_union
 732800,en,EU,Europe,BG,Bulgaria,,,Sofia,Sofia,,Europe/Sofia,1
+2925533,en,EU,Europe,DE,Germany,HE,Hesse,,Frankfurt am Main,Frankfurt am Main,,Europe/Berlin,1
+618426,en,EU,Europe,MD,Moldova,,,Chisinau,Chisinau,,Europe/Chisinau,0
+683506,en,EU,Europe,RO,Romania,B,Bucharest,,Bucharest,Bucharest,,Europe/Bucharest,1
+5391959,en,NA,North America,US,United States,CA,California,,San Francisco,San Francisco,807,America/Los_Angeles,0
+5375480,en,NA,North America,US,United States,CA,California,,Mountain View,Mountain View,807,America/Los_Angeles,0
+2643743,en,EU,Europe,GB,United Kingdom,ENG,England,,London,London,,Europe/London,0

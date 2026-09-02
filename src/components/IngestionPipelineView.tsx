@@ -81,8 +81,8 @@ export function IngestionPipelineView({
       setCurrentStep(4);
 
       let finalAnalysis: EmailAnalysis;
-      if (backendResult?.case) {
-        finalAnalysis = mapBackendCaseToAnalysis(backendResult.case);
+      if (backendResult?.analysis || backendResult?.case) {
+        finalAnalysis = mapBackendCaseToAnalysis(backendResult.analysis || backendResult, content, name);
       } else {
         finalAnalysis = parseRawEml(content, name);
       }

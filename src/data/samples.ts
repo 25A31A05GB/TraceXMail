@@ -81,6 +81,17 @@ export const SAMPLE_ANALYSES: EmailAnalysis[] = [
         isBlacklisted: true,
         isProxyOrVpn: true,
         isOrigin: true,
+        geonameId: 732800,
+        continentCode: 'EU',
+        continentName: 'Europe',
+        timeZone: 'Europe/Sofia',
+        isInEuropeanUnion: true,
+        accuracyRadius: 10,
+        maxmindVerified: true,
+        maxmindSource: 'backend/data/maxmind/GeoLite2-City-Locations-en.csv',
+        maxmindCopyright: 'Database and Contents Copyright (c) 2026 MaxMind, Inc.',
+        maxmindLicense: "MaxMind GeoLite End User License Agreement (CC BY 4.0 GeoNames)",
+        lookupMethod: 'MaxMind GeoLite2 Offline Database (Local Real Data)'
       },
       {
         hopNumber: 2,
@@ -262,6 +273,33 @@ export const SAMPLE_ANALYSES: EmailAnalysis[] = [
       domain_age_days: 14,
       is_newly_registered: true,
       risk_flags: ["Newly Registered Domain", "Missing MX Record", "Missing SPF"]
+    },
+    maxmindIntelligence: {
+      geonameId: 732800,
+      city: "Sofia",
+      region: "Sofia",
+      country: "Bulgaria",
+      countryCode: "BG",
+      continentCode: "EU",
+      continentName: "Europe",
+      timeZone: "Europe/Sofia",
+      isInEuropeanUnion: true,
+      lat: 42.6977,
+      lng: 23.3219,
+      accuracyRadius: 10,
+      asn: "AS200548",
+      asnOrg: "Zettahost Cyber Ltd",
+      sourceFile: "backend/data/maxmind/GeoLite2-City-Locations-en.csv",
+      copyright: "Database and Contents Copyright (c) 2026 MaxMind, Inc.",
+      license: "MaxMind GeoLite End User License Agreement (incorporates GeoNames under CC BY 4.0)",
+      isVerified: true,
+      filesFound: [
+        "backend/data/maxmind/COPYRIGHT.txt",
+        "backend/data/maxmind/LICENSE.txt",
+        "backend/data/maxmind/GeoLite2-City-Locations-en.csv",
+        "backend/data/maxmind/GeoLite2-City-Blocks-IPv4.csv",
+        "backend/data/maxmind/GeoLite2-ASN-Blocks-IPv4.csv"
+      ]
     },
     originWhy: {
       why: 'Earliest reliable origin relay resolved to 185.220.101.5 in Sofia, Bulgaria (AS200548 - Zettahost Cyber Ltd), operating as an active Tor exit node.',

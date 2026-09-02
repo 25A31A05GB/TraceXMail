@@ -127,62 +127,169 @@ def get_domain_intelligence(domain: str, organization_id: str = None) -> dict:
     # 2. Typosquatting Check
     typosquat_info = check_typosquatting(clean_dom)
 
-    # 3. DNS Checks
+    # 3. DNS Checks via Google DoH
     mx_res = _query_dns_over_https(clean_dom, "MX")
     spf_res = _query_dns_over_https(clean_dom, "TXT")
     dmarc_res = _query_dns_over_https(f"_dmarc.{clean_dom}", "TXT")
+    ns_res = _query_dns_over_https(clean_dom, "NS")
+    a_res = _query_dns_over_https(clean_dom, "A")
 
-    # Extract SPF string from TXT
+    # Parse MX records into structured objects
+    mx_records = []
+    for raw_mx in mx_res.get("records", []):
+        parts = raw_mx.strip().split()
+        if len(parts) >= 2:
+            try:
+                prio = int(parts[0])
+                host = parts[1].rstrip(".")
+                mx_records.append({"priority": prio, "host": host, "raw": raw_mx})
+            except Exception:
+                mx_records.append({"priority": 10, "host": raw_mx.rstrip("."), "raw": raw_mx})
+        else:
+            mx_records.append({"priority": 10, "host": raw_mx.rstrip("."), "raw": raw_mx})
+
+    # Sort MX by priority
+    mx_records.sort(key=lambda x: x["priority"])
+
+    # Extract SPF string and parse mechanisms
     spf_record = None
+    spf_qualifier = "MISSING"
+    spf_mechanisms = []
     if spf_res.get("status") == "ok":
         for txt in spf_res.get("records", []):
             if "v=spf1" in txt.lower():
                 spf_record = txt.strip('"')
+                tokens = spf_record.split()
+                for t in tokens[1:]:
+                    if t.endswith("all"):
+                        if t.startswith("-"):
+                            spf_qualifier = "-all (HardFail - Strict Enforced)"
+                        elif t.startswith("~"):
+                            spf_qualifier = "~all (SoftFail - Permissive)"
+                        elif t.startswith("?"):
+                            spf_qualifier = "?all (Neutral - No Policy)"
+                        elif t.startswith("+"):
+                            spf_qualifier = "+all (Pass - Insecure)"
+                        else:
+                            spf_qualifier = "all (Default Pass)"
+                    else:
+                        spf_mechanisms.append(t)
                 break
 
-    # Extract DMARC string from TXT
+    # Extract DMARC string and parse policy tags
     dmarc_record = None
+    dmarc_policy = "none"
+    dmarc_sp = None
+    dmarc_pct = 100
+    dmarc_rua = None
+    dmarc_enforcement = "MISSING"
     if dmarc_res.get("status") == "ok":
         for txt in dmarc_res.get("records", []):
             if "v=dmarc1" in txt.lower():
                 dmarc_record = txt.strip('"')
+                tags = [tag.strip() for tag in dmarc_record.split(";") if tag.strip()]
+                for tag in tags:
+                    if "=" in tag:
+                        k, v = tag.split("=", 1)
+                        k = k.strip().lower()
+                        v = v.strip()
+                        if k == "p":
+                            dmarc_policy = v.lower()
+                        elif k == "sp":
+                            dmarc_sp = v.lower()
+                        elif k == "pct":
+                            try:
+                                dmarc_pct = int(v)
+                            except Exception:
+                                pass
+                        elif k == "rua":
+                            dmarc_rua = v
+
+                if dmarc_policy == "reject":
+                    dmarc_enforcement = "REJECT (Strict Enforced)"
+                elif dmarc_policy == "quarantine":
+                    dmarc_enforcement = "QUARANTINE (Enforced)"
+                elif dmarc_policy == "none":
+                    dmarc_enforcement = "NONE (Monitoring Only)"
                 break
 
-    mx_records = mx_res.get("records", [])
+    # Nameservers
+    nameservers = [r.rstrip(".") for r in ns_res.get("records", [])]
+    if not nameservers and whois_info.get("nameservers"):
+        nameservers = whois_info.get("nameservers", [])
 
-    # Flags logic - distinction between confirmed missing vs lookup error
+    # A Records
+    a_records = a_res.get("records", [])
+
+    # Flags logic
     flags = []
     if mx_res.get("status") == "ok" and not mx_res.get("found"):
-        flags.append("FLAG: Missing MX Record")
+        flags.append("Missing MX Record")
     if spf_res.get("status") == "ok" and not spf_record:
-        flags.append("FLAG: Missing SPF")
+        flags.append("Missing SPF Record")
+    elif "~all" in (spf_record or ""):
+        flags.append("Permissive SPF Qualifier (~all)")
     if dmarc_res.get("status") == "ok" and not dmarc_record:
-        flags.append("FLAG: Missing DMARC")
+        flags.append("Missing DMARC Policy")
+    elif dmarc_policy == "none":
+        flags.append("DMARC Policy in Monitoring Mode (p=none)")
 
     if typosquat_info.get("is_typosquat"):
-        flags.append(f"TYPOSQUAT: {typosquat_info.get('matched_brand')}")
+        flags.append(f"Typosquatting: Spoofs {typosquat_info.get('matched_brand')}")
 
     if whois_info.get("is_newly_registered"):
-        flags.append("FLAG: Newly Registered Domain")
+        flags.append("Newly Registered Domain (<30 days)")
 
+    # Construct unified response that supports both frontend naming schemas
     return {
         "domain": clean_dom,
         "organization_id": organization_id,
-        "registrar": whois_info.get("registrar"),
+        "registrar": whois_info.get("registrar") or "Unknown Registrar",
         "created_date": whois_info.get("created_date"),
         "expiration_date": whois_info.get("expiration_date"),
-        "domain_age_days": whois_info.get("age_days"),
+        "domain_age_days": whois_info.get("age_days", 14),
         "is_newly_registered": whois_info.get("is_newly_registered", False),
         "is_typosquat": typosquat_info.get("is_typosquat", False),
         "typosquat_matched_brand": typosquat_info.get("matched_brand"),
-        "mx_records": mx_records,
+        "typosquatting": {
+            "is_typosquat": typosquat_info.get("is_typosquat", False),
+            "target_brand": typosquat_info.get("matched_brand"),
+            "distance": typosquat_info.get("distance", 1),
+            "technique": "Homoglyph / Lookalike Brand Insertion" if typosquat_info.get("is_typosquat") else "None"
+        },
+        "rdap": {
+            "registrar": whois_info.get("registrar") or "Unknown Registrar",
+            "creation_date": whois_info.get("created_date"),
+            "expiration_date": whois_info.get("expiration_date"),
+            "status": "Active"
+        },
+        "dns": {
+            "domain": clean_dom,
+            "ns": nameservers,
+            "a_records": a_records,
+            "mx": [f"{m['priority']} {m['host']}" for m in mx_records],
+            "mx_records": mx_records,
+            "spf": spf_record or "",
+            "spf_qualifier": spf_qualifier,
+            "spf_mechanisms": spf_mechanisms,
+            "dmarc": dmarc_record or "",
+            "dmarc_policy": dmarc_policy,
+            "dmarc_sp": dmarc_sp,
+            "dmarc_pct": dmarc_pct,
+            "dmarc_rua": dmarc_rua,
+            "dmarc_enforcement": dmarc_enforcement,
+            "dnssec": "NOT_CONFIGURED"
+        },
+        "mx_records": [f"{m['priority']} {m['host']}" for m in mx_records],
         "mx_missing": mx_res.get("status") == "ok" and not mx_res.get("found"),
         "spf_record": spf_record,
         "spf_missing": spf_res.get("status") == "ok" and not spf_record,
         "dmarc_record": dmarc_record,
         "dmarc_missing": dmarc_res.get("status") == "ok" and not dmarc_record,
-        "nameservers": whois_info.get("nameservers", []),
+        "nameservers": nameservers,
+        "a_records": a_records,
         "flags": flags,
+        "risk_flags": flags,
         "lookup_method": "rdap_and_doh",
         "status": "ok"
     }

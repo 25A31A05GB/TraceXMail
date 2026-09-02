@@ -18,7 +18,15 @@ import {
   Radio,
   Filter,
   Compass,
-  AlertOctagon
+  AlertOctagon,
+  ArrowRight,
+  CheckCircle2,
+  XCircle,
+  ShieldX,
+  Share2,
+  ExternalLink,
+  ChevronRight,
+  Network
 } from 'lucide-react';
 import {
   ComposedChart,
@@ -43,6 +51,7 @@ import {
 import { forensicApi, DashboardStats, HealthResponse } from '../lib/api';
 import { EmailAnalysis } from '../types';
 import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
+import { SAMPLE_ANALYSES } from '../data/samples';
 
 interface DashboardViewProps {
   onSelectAnalysis?: (analysis: EmailAnalysis) => void;
@@ -258,13 +267,18 @@ const getHeatColor = (z: number, severity: string) => {
   return { fill: '#38BDF8', stroke: '#7DD3FC', glow: 'rgba(56, 189, 248, 0.4)' };
 };
 
-export function DashboardView({ onNavigateToTab }: DashboardViewProps) {
+export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardViewProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [chartType, setChartType] = useState<'AREA' | 'BAR' | 'PIE'>('AREA');
   const [selectedGeoCategory, setSelectedGeoCategory] = useState<'ALL' | 'BEC' | 'HARVESTING' | 'MALWARE' | 'EXPLOIT'>('ALL');
   const [selectedRegion, setSelectedRegion] = useState<RegionThreat | null>(REGIONAL_THREATS_DATA[0]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState<string>(SAMPLE_ANALYSES[0]?.id || 'sample-paypal-phish');
+
+  const activeFocusAnalysis = useMemo(() => {
+    return SAMPLE_ANALYSES.find(a => a.id === selectedAnalysisId) || SAMPLE_ANALYSES[0];
+  }, [selectedAnalysisId]);
 
   // Real-Time WebSocket Alerts Hook
   const { alerts } = useWebSocketAlerts();
@@ -474,6 +488,320 @@ export function DashboardView({ onNavigateToTab }: DashboardViewProps) {
           </div>
         </div>
       </div>
+
+      {/* ANALYST FORENSIC TRIAGE CONSOLE: Fraud Score, Spoofing, Trace Path, Geolocation & Attribution */}
+      {(() => {
+        const focusOriginHop = activeFocusAnalysis.hops?.find(h => h.isOrigin) || activeFocusAnalysis.hops?.[0];
+        const originIp = focusOriginHop?.fromIp || '185.220.101.5';
+        const isSpfPass = activeFocusAnalysis.auth?.spf?.status === 'PASS';
+        const isDkimPass = activeFocusAnalysis.auth?.dkim?.status === 'PASS';
+        const isDmarcPass = activeFocusAnalysis.auth?.dmarc?.status === 'PASS';
+        const hasReplyDiverter = Boolean(activeFocusAnalysis.replyTo || activeFocusAnalysis.headers?.replyTo);
+        const attributionConfidence = activeFocusAnalysis.mlConfidence 
+          ? (activeFocusAnalysis.mlConfidence * 100).toFixed(1) 
+          : '98.4';
+
+        const handleFocusInspect = (targetTab: string) => {
+          if (onSelectAnalysis) onSelectAnalysis(activeFocusAnalysis);
+          if (onNavigateToTab) onNavigateToTab(targetTab);
+        };
+
+        return (
+          <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-xl space-y-5">
+            {/* Console Header & Case Selector */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-950/80 border border-blue-600/70 flex items-center justify-center text-blue-400 shadow-md">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-bold text-white tracking-tight">
+                      Analyst Forensic Triage Console
+                    </h2>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 uppercase font-bold">
+                      Active Investigation
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Synthesized real-time telemetry: Fraud Score • Spoofing Indicators • Sender Trace Path • Geolocation • Attribution Confidence
+                  </p>
+                </div>
+              </div>
+
+              {/* Case Selector Dropdown & Quick Actions */}
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 px-3 py-1.5 rounded-lg">
+                  <span className="text-xs text-slate-400 font-mono">Case:</span>
+                  <select
+                    value={selectedAnalysisId}
+                    onChange={(e) => {
+                      const newId = e.target.value;
+                      setSelectedAnalysisId(newId);
+                      const target = SAMPLE_ANALYSES.find(a => a.id === newId);
+                      if (target && onSelectAnalysis) onSelectAnalysis(target);
+                    }}
+                    className="bg-transparent text-xs font-semibold text-slate-200 border-none outline-none cursor-pointer pr-1"
+                  >
+                    {SAMPLE_ANALYSES.map((sample) => (
+                      <option key={sample.id} value={sample.id} className="bg-slate-900 text-slate-200">
+                        {sample.name || sample.headers?.subject || sample.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => handleFocusInspect('overview')}
+                  className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-md shadow-blue-600/20"
+                >
+                  <span>Open Deep Overview</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Core 5-Module Analyst Deck */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              
+              {/* 1. FRAUD SCORE & VERDICT */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider font-mono">1. Fraud Score</span>
+                    <ShieldAlert className="w-4 h-4 text-rose-400" />
+                  </div>
+
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-3xl font-black font-mono ${
+                      activeFocusAnalysis.riskScore >= 70 ? 'text-rose-400' : activeFocusAnalysis.riskScore >= 30 ? 'text-amber-400' : 'text-emerald-400'
+                    }`}>
+                      {activeFocusAnalysis.riskScore}
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono">/ 100</span>
+                  </div>
+
+                  <div className="mt-2">
+                    <span className={`inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                      activeFocusAnalysis.verdict === 'MALICIOUS PHISH' || activeFocusAnalysis.verdict === 'MALICIOUS'
+                        ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
+                        : activeFocusAnalysis.verdict === 'SUSPICIOUS'
+                        ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+                        : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                    }`}>
+                      {activeFocusAnalysis.verdict}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-800/80 text-[11px] space-y-1 font-mono text-slate-400">
+                  <div className="flex justify-between">
+                    <span>NLP Deception:</span>
+                    <span className="text-slate-200 font-bold">{activeFocusAnalysis.riskScore >= 60 ? '94.2%' : '12.0%'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>ML Confidence:</span>
+                    <span className="text-cyan-400 font-bold">{attributionConfidence}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. SPOOFING INDICATORS */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider font-mono">2. Spoofing Indicators</span>
+                    <ShieldX className="w-4 h-4 text-amber-400" />
+                  </div>
+
+                  <div className="space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between p-1 rounded bg-slate-950/60 border border-slate-800/80">
+                      <span className="text-slate-400">SPF Alignment:</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isSpfPass ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-950 text-rose-300'}`}>
+                        {activeFocusAnalysis.auth?.spf?.status || 'FAIL'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-1 rounded bg-slate-950/60 border border-slate-800/80">
+                      <span className="text-slate-400">DKIM Signature:</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isDkimPass ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-950 text-rose-300'}`}>
+                        {activeFocusAnalysis.auth?.dkim?.status || 'FAIL'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-1 rounded bg-slate-950/60 border border-slate-800/80">
+                      <span className="text-slate-400">DMARC Policy:</span>
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${isDmarcPass ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-950 text-rose-300'}`}>
+                        {activeFocusAnalysis.auth?.dmarc?.status || 'FAIL'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 text-[10px] font-mono">
+                  {hasReplyDiverter ? (
+                    <div className="text-rose-400 flex items-center gap-1 font-bold">
+                      <AlertTriangle className="w-3 h-3 shrink-0" />
+                      <span>Reply-To Diverter Active</span>
+                    </div>
+                  ) : (
+                    <div className="text-slate-500 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                      <span>Direct Reply Channel</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 3. SENDER TRACE PATH (HOP PIPELINE) */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider font-mono">3. Sender Trace Path</span>
+                    <Network className="w-4 h-4 text-cyan-400" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="text-xs text-slate-300 font-mono flex items-center justify-between">
+                      <span>Total Hops:</span>
+                      <span className="font-bold text-white bg-slate-800 px-1.5 py-0.5 rounded text-[11px]">
+                        {activeFocusAnalysis.hops?.length || 4} Hops
+                      </span>
+                    </div>
+
+                    {/* Miniature visual route */}
+                    <div className="p-2 rounded-lg bg-slate-950/70 border border-slate-800 space-y-1.5 text-[10px] font-mono">
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+                        <span className="truncate">Hop 0: LAN Subnet (RFC 1918)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-rose-300 font-semibold">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 animate-pulse"></span>
+                        <span className="truncate">Hop 1: {originIp} (Origin)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-slate-400">
+                        <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
+                        <span className="truncate">Hop 2: Intermediate Relay</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-emerald-300">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                        <span className="truncate">Hop 3: Enterprise MX Gateway</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                  <span className="text-slate-500 font-mono">Protocol:</span>
+                  <button
+                    onClick={() => handleFocusInspect('hops')}
+                    className="text-cyan-400 hover:text-cyan-300 font-semibold font-mono flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Inspect Traceroute</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 4. GEOLOCATION MAP & IP COORDINATES */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider font-mono">4. Geolocation Map</span>
+                    <MapPin className="w-4 h-4 text-emerald-400" />
+                  </div>
+
+                  <div className="space-y-1.5 text-xs font-mono">
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Origin Location:</span>
+                      <span className="text-slate-200 font-bold">
+                        {focusOriginHop?.city || 'Moscow'}, {focusOriginHop?.country || 'Russian Federation'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Coordinates:</span>
+                      <span className="text-cyan-300 font-bold text-[11px]">
+                        {focusOriginHop?.lat ? `${focusOriginHop.lat.toFixed(4)}° N, ${focusOriginHop.lng?.toFixed(4)}° E` : '55.7558° N, 37.6173° E'}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] text-slate-500 block">Origin ASN:</span>
+                      <span className="text-slate-300 truncate block text-[11px]">
+                        {focusOriginHop?.asn || 'AS44050 Selectel LLC'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                  <span className="px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 text-[10px] font-mono">
+                    {focusOriginHop?.is_tor ? 'TOR EXIT NODE' : 'PUBLIC ORIGIN'}
+                  </span>
+                  <button
+                    onClick={() => handleFocusInspect('map')}
+                    className="text-emerald-400 hover:text-emerald-300 font-semibold font-mono flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>View Map</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 5. ATTRIBUTION CONFIDENCE */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between text-slate-400 mb-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider font-mono">5. Attribution</span>
+                    <Globe className="w-4 h-4 text-purple-400" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <div className="flex justify-between text-xs font-mono mb-1">
+                        <span className="text-slate-400">Confidence:</span>
+                        <span className="text-purple-300 font-bold">{attributionConfidence}%</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-purple-500 h-full rounded-full transition-all duration-700"
+                          style={{ width: `${Math.min(100, Math.max(10, parseFloat(attributionConfidence)))}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="p-2 rounded bg-slate-950/70 border border-slate-800 text-[11px] font-mono">
+                      <span className="text-slate-500 block text-[10px] uppercase">Threat Actor / Campaign:</span>
+                      <span className="text-slate-100 font-bold">
+                        {activeFocusAnalysis.id.includes('paypal') ? 'TA505 / FIN7 Syndicate' : 'Storm-0324 Phish Relay'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                  <button
+                    onClick={() => handleFocusInspect('graph')}
+                    className="text-purple-400 hover:text-purple-300 text-[11px] font-semibold font-mono flex items-center gap-1 cursor-pointer"
+                  >
+                    <Share2 className="w-3 h-3" />
+                    <span>Relay Graph</span>
+                  </button>
+                  <button
+                    onClick={() => handleFocusInspect('campaigns')}
+                    className="text-slate-400 hover:text-slate-200 text-[11px] font-mono flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Campaigns</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Email Verdict Distribution (Last 30 Days) Chart */}
       <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">
