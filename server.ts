@@ -1456,6 +1456,7 @@ Link: https://verify-auth-portal.net/login`;
   app.get('/api/maxmind/status', (_req, res) => {
     loadMaxMindFilesFromDisk();
     const files = [
+      'README.md',
       'COPYRIGHT.txt',
       'LICENSE.txt',
       'GeoLite2-City-Locations-en.csv',
@@ -1475,6 +1476,9 @@ Link: https://verify-auth-portal.net/login`;
       return { filename: fname, exists, size, lines: lineCount };
     });
 
+    const readmePath = path.join(MAXMIND_DATA_DIR, 'README.md');
+    const readmeContent = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf-8') : '';
+
     const allFilesExist = files.every(f => f.exists && f.size > 0);
     const hasLoadedRecords = Object.keys(maxmindLocations).length > 0 || maxmindCityBlocks.length > 0 || maxmindAsnBlocks.length > 0;
     const isLoaded = allFilesExist && hasLoadedRecords;
@@ -1483,6 +1487,7 @@ Link: https://verify-auth-portal.net/login`;
       status: isLoaded ? 'loaded' : (files.some(f => f.exists && f.size > 0) || hasLoadedRecords ? 'partial' : 'unloaded'),
       database_directory: MAXMIND_DATA_DIR,
       files,
+      readme: readmeContent,
       locations_loaded: Object.keys(maxmindLocations).length,
       city_blocks_loaded: maxmindCityBlocks.length,
       asn_blocks_loaded: maxmindAsnBlocks.length,
@@ -1490,6 +1495,17 @@ Link: https://verify-auth-portal.net/login`;
       license: maxmindLicenseNotice,
       verified: isLoaded
     });
+  });
+
+  // Dedicated MaxMind README Documentation endpoint
+  app.get('/api/maxmind/readme', (_req, res) => {
+    const readmePath = path.join(MAXMIND_DATA_DIR, 'README.md');
+    if (fs.existsSync(readmePath)) {
+      const content = fs.readFileSync(readmePath, 'utf-8');
+      res.type('text/markdown').send(content);
+    } else {
+      res.status(404).send('# MaxMind Documentation Not Found');
+    }
   });
 
 

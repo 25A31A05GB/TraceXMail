@@ -25,7 +25,9 @@ import {
   KeyRound,
   Compass,
   AlertOctagon,
-  UserCheck
+  UserCheck,
+  BookOpen,
+  Database
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { 
@@ -36,6 +38,10 @@ import {
   maskIp, 
   getRetentionPurgeDate 
 } from '../utils/privacyCompliance';
+import { 
+  generateForensicMarkdownReport, 
+  MAXMIND_README_CONTENT 
+} from '../utils/markdownReport';
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -50,6 +56,7 @@ export type ReportTab =
   | 'incident_response'
   | 'lea'
   | 'custody'
+  | 'documentation'
   | 'json';
 
 export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT_PRIVACY_CONFIG }: ReportModalProps) {
@@ -74,8 +81,7 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
 
   // Build sanitized telemetry object if masking is active
   const getExportData = () => {
-    if (!enforceMasking) return analysis;
-    return {
+    const baseExport = !enforceMasking ? { ...analysis } : {
       ...analysis,
       from: displayFrom,
       to: displayTo,
@@ -94,12 +100,40 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
         evidencePreservationSeal: true
       }
     };
+
+    // Attach technical dataset attribution & metadata (from README.md) into export
+    return {
+      ...baseExport,
+      documentationReference: {
+        title: 'MaxMind GeoLite2 Data Directory Documentation',
+        summary: 'Dataset structure and schema for GeoLite2 City Blocks, City Locations, and ASN mappings.',
+        markdownContent: MAXMIND_README_CONTENT
+      }
+    };
   };
 
   const handleCopyJson = () => {
     navigator.clipboard.writeText(JSON.stringify(getExportData(), null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleCopyMarkdown = () => {
+    const mdContent = generateForensicMarkdownReport(analysis, privacyConfig, enforceMasking);
+    navigator.clipboard.writeText(mdContent);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadMarkdown = () => {
+    const mdContent = generateForensicMarkdownReport(analysis, privacyConfig, enforceMasking);
+    const dataStr = "data:text/markdown;charset=utf-8," + encodeURIComponent(mdContent);
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `TraceXMail-Forensic-Report-${analysis.id || 'forensic-case'}${enforceMasking ? '-MASKED' : ''}.md`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
   };
 
   const handleCopyText = (text: string, sectionId: string) => {
@@ -161,11 +195,20 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
               <Printer className="w-4 h-4" />
             </button>
             <button
-              onClick={handleDownloadJson}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
-              title="Download Full JSON Dossier"
+              onClick={handleDownloadMarkdown}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1 text-xs font-medium"
+              title="Download Forensic Markdown Report (.md)"
             >
-              <Download className="w-4 h-4" />
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <span className="hidden sm:inline">Export .MD</span>
+            </button>
+            <button
+              onClick={handleDownloadJson}
+              className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1 text-xs font-medium"
+              title="Download Full JSON Dossier (.json)"
+            >
+              <Download className="w-4 h-4 text-blue-400" />
+              <span className="hidden sm:inline">Export JSON</span>
             </button>
             <button
               onClick={onClose}
@@ -233,6 +276,17 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
             >
               <Lock className="w-3.5 h-3.5" />
               <span>Chain of Custody</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('documentation')}
+              className={`flex items-center gap-1.5 pb-2.5 px-2 text-xs font-semibold border-b-2 transition-colors ${
+                activeTab === 'documentation'
+                  ? 'border-emerald-400 text-emerald-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Documentation &amp; .MD Dossier</span>
             </button>
             <button
               onClick={() => setActiveTab('json')}
@@ -707,7 +761,70 @@ Pursuant to federal law, you are required to preserve these records for a period
             </div>
           )}
 
-          {/* TAB 6: RAW JSON */}
+          {/* TAB 6: DOCUMENTATION & MD DOSSIER */}
+          {activeTab === 'documentation' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span className="text-xs font-semibold text-slate-200">
+                    MaxMind GeoLite2 Technical Documentation &amp; Generated Forensic Markdown Report
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleCopyMarkdown}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copied ? 'Copied Markdown' : 'Copy .MD'}</span>
+                  </button>
+                  <button
+                    onClick={handleDownloadMarkdown}
+                    className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1.5 bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download .MD File</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* MaxMind README.md Embedded Card */}
+              <div className="p-4 rounded-xl bg-slate-950/90 border border-emerald-900/40 space-y-3">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
+                      Repository Documentation: /data/maxmind/README.md
+                    </span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-300 font-mono">
+                    OFFLINE_GEO_INDEX
+                  </span>
+                </div>
+                <pre className="font-mono text-xs text-slate-300 whitespace-pre-wrap leading-relaxed bg-slate-900/80 p-3.5 rounded-lg border border-slate-800/80">
+                  {MAXMIND_README_CONTENT}
+                </pre>
+              </div>
+
+              {/* Full Generated Markdown Dossier */}
+              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                  <span className="text-xs font-bold text-slate-300">
+                    Compiled Forensic Dossier (Markdown Output with Embedded Technical References)
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    Format: CommonMark • Standard: NIST SP 800-86
+                  </span>
+                </div>
+                <div className="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800/90 max-h-[320px] overflow-y-auto font-mono text-xs text-slate-300 select-all whitespace-pre-wrap">
+                  {generateForensicMarkdownReport(analysis, privacyConfig, enforceMasking)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: RAW JSON */}
           {activeTab === 'json' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">

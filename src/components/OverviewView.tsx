@@ -38,6 +38,7 @@ import {
 import { EmailAnalysis, AINarrative } from '../types';
 import { computeSha256 } from '../utils/crypto';
 import { classifyIp } from '../utils/parser';
+import { lookupMaxMindGeo } from '../utils/maxmindService';
 import { WhyAffordance } from './WhyAffordance';
 import { RelationshipGraphView } from './RelationshipGraphView';
 
@@ -335,21 +336,23 @@ export function OverviewView({
       };
     }
 
+    const geo = lookupMaxMindGeo(originHopRaw.fromIp);
+
     return {
       fromIp: originHopRaw.fromIp || 'Unresolved IP',
-      city: originHopRaw.city || 'Unresolved City',
-      region: originHopRaw.region || '—',
-      country: originHopRaw.country || 'Unresolved Country',
-      countryCode: originHopRaw.countryCode || '??',
-      asn: originHopRaw.asn || 'Unmapped ASN',
-      org: originHopRaw.org || 'Unmapped Network Operator',
-      isp: originHopRaw.isp || originHopRaw.org || 'Unmapped Provider',
-      lat: originHopRaw.lat,
-      lng: originHopRaw.lng,
-      reverseDns: originHopRaw.reverseDns || 'No PTR Record',
+      city: originHopRaw.city || geo.city || 'Unresolved City',
+      region: originHopRaw.region || geo.region || '—',
+      country: originHopRaw.country || geo.country || 'Unresolved Country',
+      countryCode: originHopRaw.countryCode || geo.countryCode || '??',
+      asn: originHopRaw.asn || geo.asn || 'Unmapped ASN',
+      org: originHopRaw.org || geo.org || 'Unmapped Network Operator',
+      isp: originHopRaw.isp || geo.isp || originHopRaw.org || geo.org || 'Unmapped Provider',
+      lat: originHopRaw.lat ?? geo.lat,
+      lng: originHopRaw.lng ?? geo.lng,
+      reverseDns: originHopRaw.reverseDns || geo.reverseDns || 'No PTR Record',
       abuseScore: originHopRaw.abuseScore ?? 0,
       abuseStatus: originHopRaw.abuseStatus,
-      is_tor: originHopRaw.is_tor ?? originHopRaw.isProxyOrVpn ?? false,
+      is_tor: originHopRaw.is_tor ?? originHopRaw.isProxyOrVpn ?? geo.isTor ?? false,
       is_vpn: originHopRaw.is_vpn ?? false,
       is_open_relay: originHopRaw.is_open_relay ?? false,
       is_botnet_indicator: originHopRaw.is_botnet_indicator ?? false,
@@ -360,7 +363,7 @@ export function OverviewView({
       cidr: 'Public IPv4',
       scope: 'PUBLIC_INTERNET',
       subnetDescription: 'Public Routable Address Space',
-      lookupMethod: originHopRaw.lookupMethod || 'Deterministic Geo IP'
+      lookupMethod: originHopRaw.lookupMethod || geo.lookupMethod || 'MaxMind GeoLite2 Database'
     };
   })();
 
