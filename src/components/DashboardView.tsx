@@ -79,15 +79,15 @@ const REGIONAL_THREATS_DATA: RegionThreat[] = [
   {
     id: 'geo-1',
     region: 'Eastern Europe / CIS',
-    country: 'Russian Federation (AS44050)',
-    code: 'RU',
+    country: 'Bulgaria (AS200548)',
+    code: 'BG',
     x: 38,
     y: 55,
     z: 284,
     severity: 'CRITICAL',
     category: 'BEC',
-    topAsn: 'AS44050 (Selectel LLC)',
-    topMalware: 'TA505 Custom Loader / QakBot',
+    topAsn: 'AS200548 (Zettahost Ltd)',
+    topMalware: 'Commodity BEC / Phishing Kit',
     ipRange: '185.220.101.0/24',
     riskScore: 94,
     recentSpike: true
@@ -417,7 +417,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
           <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
           <div>
             <div className="text-xs font-bold text-slate-200">
-              {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_default_01)'}
+              {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
             </div>
             <div className="text-[11px] text-slate-400 font-mono">
               Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
@@ -458,7 +458,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
             {stats?.summary?.active_campaigns || 3}
           </div>
           <div className="text-[11px] text-purple-400/90 font-mono mt-1">
-            TA505 & FIN7 Attribution Clusters
+            Unattributed Threat Clusters
           </div>
         </div>
 
@@ -774,7 +774,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                     <div className="p-2 rounded bg-slate-950/70 border border-slate-800 text-[11px] font-mono">
                       <span className="text-slate-500 block text-[10px] uppercase">Threat Actor / Campaign:</span>
                       <span className="text-slate-100 font-bold">
-                        {activeFocusAnalysis.id.includes('paypal') ? 'TA505 / FIN7 Syndicate' : 'Storm-0324 Phish Relay'}
+                        {activeFocusAnalysis.id.includes('paypal') ? 'Unattributed (BEC Spoof Net)' : 'Unattributed (Deceptive Relay)'}
                       </span>
                     </div>
                   </div>
@@ -1450,9 +1450,9 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
 
           <div className="space-y-3">
             {(stats?.threat_actors || [
-              { name: 'TA505 / FIN7 Syndicate', campaign_count: 2, target: 'Financial & Supply Chain', status: 'ACTIVE' },
-              { name: 'Lazarus Sub-Cluster (BlueNoroff)', campaign_count: 1, target: 'Crypto & Fintech', status: 'MONITORING' },
-              { name: 'Storm-0324 Phish Relay', campaign_count: 1, target: 'Executive Office', status: 'EVALUATING' }
+              { name: 'Unattributed (BEC Spoof Net)', campaign_count: 2, target: 'Financial & Supply Chain', status: 'ACTIVE' },
+              { name: 'Unattributed (Credential Phishing Kit)', campaign_count: 1, target: 'Enterprise Office 365', status: 'MONITORING' },
+              { name: 'Unattributed (Deceptive Signature Relay)', campaign_count: 1, target: 'Executive Office', status: 'EVALUATING' }
             ]).map((actor, i) => (
               <div key={i} className="p-3 bg-slate-950/60 border border-slate-800 rounded-lg flex items-center justify-between">
                 <div>

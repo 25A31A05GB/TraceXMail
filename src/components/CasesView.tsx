@@ -41,6 +41,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
+  const [sourceFilter, setSourceFilter] = useState<string>('ALL');
 
   // Create Case Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -218,7 +219,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
         analyst_notes: newCaseNotes,
         status: newCaseStatus,
         severity: newCaseSeverity,
-        organization_id: 'org_default_01'
+        organization_id: 'org_acme_soc_01'
       };
 
       const result = await forensicApi.createCase(payload);
@@ -253,7 +254,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
       const fallbackCase = {
         id: `CASE-FB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         case_id: `CASE-FB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        organization_id: 'org_default_01',
+        organization_id: 'org_acme_soc_01',
         title: caseTitle,
         name: caseTitle,
         subject: caseTitle,
@@ -422,7 +423,12 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
       (c.threat && c.threat.toUpperCase() === severityFilter) ||
       (c.verdict && c.verdict.toUpperCase() === severityFilter);
 
-    return matchesSearch && matchesSeverity;
+    const matchesSource =
+      sourceFilter === 'ALL' ||
+      (sourceFilter === 'REAL' && !c.is_demo) ||
+      (sourceFilter === 'DEMO' && Boolean(c.is_demo));
+
+    return matchesSearch && matchesSeverity && matchesSource;
   });
 
   return (
@@ -497,6 +503,15 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
         <div className="flex items-center gap-2 w-full md:w-auto">
           <Filter className="w-4 h-4 text-slate-400" />
           <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 font-mono cursor-pointer"
+          >
+            <option value="ALL">All Sources</option>
+            <option value="REAL">Ingested Analyses (Live)</option>
+            <option value="DEMO">Demo / Seed Corpus</option>
+          </select>
+          <select
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
             className="bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 font-mono cursor-pointer"
@@ -550,6 +565,17 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
                         <div className="flex items-center gap-1.5">
                           <Layers className="w-3.5 h-3.5 text-blue-500" />
                           <span>{c.id || `TXM-CASE-${i + 1}`}</span>
+                        </div>
+                        <div className="mt-1">
+                          {c.is_demo ? (
+                            <span className="px-1.5 py-0.5 bg-amber-950/70 text-amber-300 border border-amber-800/80 rounded text-[9px] font-mono inline-block">
+                              CORPUS / DEMO
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.5 bg-emerald-950/70 text-emerald-300 border border-emerald-800/80 rounded text-[9px] font-mono inline-block">
+                              LIVE INGEST
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 max-w-md">
@@ -928,7 +954,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Tenant Scoped: {selectedCaseDetail.organization_id || 'org_default_01'}
+                    Tenant Scoped: {selectedCaseDetail.organization_id || 'org_acme_soc_01'}
                   </p>
                 </div>
               </div>

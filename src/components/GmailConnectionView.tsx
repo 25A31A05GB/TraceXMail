@@ -74,7 +74,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
 
       const res = await fetch(`${API_URL}/api/gmail/oauth/start`, {
         headers: {
-          'x-organization-id': 'org_default_01',
+          'x-organization-id': 'org_acme_soc_01',
         },
       });
 

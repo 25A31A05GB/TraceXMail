@@ -219,7 +219,7 @@ export function Sidebar({ activeTab, setActiveTab, alertCount, wsStatus }: Sideb
           </span>
         </div>
         <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-          <span>TENANT: org_default_01</span>
+          <span>TENANT: org_acme_soc_01</span>
           <span>TABLES: 19</span>
         </div>
       </div>

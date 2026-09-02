@@ -5,7 +5,7 @@
 
 import axios, { AxiosInstance } from 'axios';
 
-const DEFAULT_ORG_ID = 'org_default_01';
+const DEFAULT_ORG_ID = 'org_acme_soc_01';
 
 const API_URL = (
   (import.meta as any).env?.VITE_API_URL || ''
@@ -56,6 +56,8 @@ export interface HealthResponse {
 export interface DashboardStats {
   summary: {
     total_cases: number;
+    real_cases_count?: number;
+    demo_cases_count?: number;
     total_emails_ingested: number;
     active_campaigns: number;
     active_alerts: number;
@@ -94,6 +96,10 @@ export interface CaseItem {
   created_at?: string;
   tags?: string[];
   assigned_user?: string;
+  is_demo?: boolean;
+  source?: string;
+  ml_confidence?: number;
+  phishing_probability?: number;
 }
 
 export interface CampaignRelationship {

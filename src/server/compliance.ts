@@ -129,7 +129,7 @@ export async function logAuditAction(
 ): Promise<AuditLogEntry> {
   const auditEntry: AuditLogEntry = {
     id: entry.id || `audit_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-    organization_id: entry.organization_id || 'org_default_01',
+    organization_id: entry.organization_id || 'org_acme_soc_01',
     case_id: entry.case_id || null,
     user_id: entry.user_id || 'system',
     user_email: entry.user_email || 'system@tracexmail.sec',
@@ -575,7 +575,7 @@ export function verifyUserToken(token: string): UserContext | null {
       return {
         userId: decoded.sub || 'user_anon',
         email: decoded.email || 'analyst@tracexmail.sec',
-        organizationId: decoded.organization_id || 'org_default_01',
+        organizationId: decoded.organization_id || 'org_acme_soc_01',
         role: decoded.role as UserRole,
         authMethod: 'jwt'
       };
@@ -593,19 +593,19 @@ const KNOWN_API_KEYS: Record<string, { userId: string; email: string; organizati
   'tracexmail_admin_test_key_soc': {
     userId: 'usr_admin_01',
     email: 'admin@acmedefense.sec',
-    organizationId: 'org_default_01',
+    organizationId: 'org_acme_soc_01',
     role: 'admin'
   },
   'tracexmail_analyst_test_key_soc': {
     userId: 'usr_analyst_01',
     email: 'analyst@acmedefense.sec',
-    organizationId: 'org_default_01',
+    organizationId: 'org_acme_soc_01',
     role: 'analyst'
   },
   'tracexmail_readonly_test_key_soc': {
     userId: 'usr_reader_01',
     email: 'auditor@acmedefense.sec',
-    organizationId: 'org_default_01',
+    organizationId: 'org_acme_soc_01',
     role: 'read_only'
   }
 };
@@ -637,7 +637,7 @@ export function authenticateUser(req: Request, _res: Response, next: NextFunctio
     userContext = {
       userId: `usr_${roleOverrideHeader}_session`,
       email: `${roleOverrideHeader}@acmedefense.sec`,
-      organizationId: (req.headers['x-organization-id'] as string) || 'org_default_01',
+      organizationId: (req.headers['x-organization-id'] as string) || 'org_acme_soc_01',
       role: roleOverrideHeader,
       authMethod: 'session'
     };

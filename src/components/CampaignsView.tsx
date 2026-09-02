@@ -826,7 +826,7 @@ export function CampaignsView() {
                   type="text"
                   value={newThreatActor}
                   onChange={(e) => setNewThreatActor(e.target.value)}
-                  placeholder="e.g. TA505 / FIN7 Syndicate"
+                  placeholder="e.g. Unattributed Infrastructure / BEC Syndicate"
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500"
                 />
               </div>

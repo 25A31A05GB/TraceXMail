@@ -1,7 +1,10 @@
 services:
   - type: web
     name: tracexmail
-    runtime: python
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production

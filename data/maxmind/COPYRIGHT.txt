@@ -1,0 +1,4 @@
+This software includes GeoLite2 data created by MaxMind, available from
+https://www.maxmind.com.
+
+Copyright (c) 2024 MaxMind, Inc. All Rights Reserved.
