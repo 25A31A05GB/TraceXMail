@@ -1,6 +1,7 @@
 import { EmailAnalysis, EmailHop, ExtractedUrl, AttachmentInfo, HeuristicSignal, ForensicLogEntry, AuthResults } from '../types';
 import { sha256Sync, generateEvidenceId } from './crypto';
 import { lookupMaxMindGeo } from './maxmindService';
+import { parseAuthenticationHeaders } from './authParser';
 
 export function defangUrl(url: string): string {
   return url
@@ -186,12 +187,22 @@ function estimateGeo(ip?: string) {
 }
 
 
+export function getHeaderCaseInsensitive(map: Record<string, string>, name: string): string | undefined {
+  if (!map) return undefined;
+  if (map[name] !== undefined) return map[name];
+  const lowerName = name.toLowerCase();
+  for (const [k, v] of Object.entries(map)) {
+    if (k.toLowerCase() === lowerName) return v;
+  }
+  return undefined;
+}
+
 export function mapBackendCaseToAnalysis(
   apiResponse: any,
   rawContent: string = '',
   fileName: string = 'email.eml'
 ): EmailAnalysis {
-  const data = apiResponse?.analysis || (apiResponse?.hops ? apiResponse : apiResponse?.case) || apiResponse;
+  const data = apiResponse?.analysis || (apiResponse?.hops ? apiResponse : apiResponse?.case) || apiResponse || {};
 
   const headersObj = data.headers || {};
   let allHeadersMap: Record<string, string> = {};
@@ -200,19 +211,26 @@ export function mapBackendCaseToAnalysis(
       if (h.name && h.value) allHeadersMap[h.name] = h.value;
     });
   } else if (typeof headersObj === 'object' && headersObj !== null) {
-    allHeadersMap = { ...headersObj };
+    if (headersObj.allHeaders && typeof headersObj.allHeaders === 'object') {
+      allHeadersMap = { ...headersObj.allHeaders, ...headersObj };
+    } else {
+      allHeadersMap = { ...headersObj };
+    }
   }
 
-  const subject = data.subject || allHeadersMap['Subject'] || '(No Subject)';
-  const from = data.from || allHeadersMap['From'] || 'unknown@unknown.com';
-  const to = data.to || allHeadersMap['To'] || 'recipient@domain.com';
-  const replyTo = data.reply_to || allHeadersMap['Reply-To'];
-  const returnPath = data.return_path || allHeadersMap['Return-Path'];
-  const date = data.date || allHeadersMap['Date'] || new Date().toUTCString();
-  const messageId = data.message_id || allHeadersMap['Message-ID'] || `<${Date.now()}@tracexmail.local>`;
+  const subject = data.subject || data.headers?.subject || data.title || data.name || getHeaderCaseInsensitive(allHeadersMap, 'Subject') || '(No Subject)';
+  const rawFrom = data.from || data.headers?.from || data.from_addr || data.headers?.fromEmail || getHeaderCaseInsensitive(allHeadersMap, 'From');
+  const fromDomainFallback = data.from_domain || (data.domainIntelligence?.domain);
+  const from = rawFrom || (fromDomainFallback ? `security@${fromDomainFallback}` : 'unknown@sender.corp');
+  const to = data.to || data.headers?.to || getHeaderCaseInsensitive(allHeadersMap, 'To') || 'recipient@domain.com';
+  const replyTo = data.reply_to || data.replyTo || data.headers?.replyTo || data.headers?.reply_to || getHeaderCaseInsensitive(allHeadersMap, 'Reply-To') || from;
+  const returnPath = data.return_path || data.returnPath || data.headers?.returnPath || data.headers?.return_path || getHeaderCaseInsensitive(allHeadersMap, 'Return-Path') || from;
+  const date = data.date || data.headers?.date || data.created_at || getHeaderCaseInsensitive(allHeadersMap, 'Date') || new Date().toUTCString();
+  const messageId = data.message_id || data.messageId || data.headers?.messageId || getHeaderCaseInsensitive(allHeadersMap, 'Message-ID') || `<${Date.now()}@tracexmail.local>`;
 
-  const fromEmail = data.from_addr || data.from_domain || (from.match(/<([^>]+)>/) || [])[1] || from;
-  const fromName = data.from_name || from.replace(/<[^>]+>/, '').replace(/"/g, '').trim() || fromEmail;
+  const fromEmailMatch = from.match(/<([^>]+)>/) || from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  const fromEmail = data.from_addr || data.fromEmail || (fromEmailMatch ? fromEmailMatch[1] : from);
+  const fromName = data.from_name || data.fromName || (from.includes('<') ? from.replace(/<[^>]+>/, '').replace(/"/g, '').trim() : fromEmail);
 
   // Hops
   const rawHops = Array.isArray(data.hops) ? data.hops : [];
@@ -269,6 +287,54 @@ export function mapBackendCaseToAnalysis(
     };
   });
 
+  // If no hops provided in backend item, construct origin hop from origin_ip
+  if (hops.length === 0 && (data.origin_ip || data.originIp)) {
+    const originIp = data.origin_ip || data.originIp;
+    const classification = classifyIp(originIp);
+    const maxmind = lookupMaxMindGeo(originIp);
+    hops.push({
+      hopNumber: 1,
+      fromHost: `origin-sender (${originIp})`,
+      fromIp: originIp,
+      byHost: 'mx-ingress',
+      protocol: 'ESMTPS',
+      timestamp: date,
+      delaySec: 0,
+      city: classification.isPrivate ? 'Internal Subnet' : (data.origin_country || maxmind.city),
+      country: classification.isPrivate ? 'Private Network (RFC 1918)' : (data.origin_country || maxmind.country),
+      countryCode: classification.isPrivate ? 'LAN' : maxmind.countryCode,
+      region: maxmind.region,
+      lat: maxmind.lat,
+      lng: maxmind.lng,
+      asn: data.origin_asn || maxmind.asn,
+      org: data.origin_asn_org || maxmind.org,
+      isp: maxmind.isp || maxmind.org,
+      reverseDns: maxmind.reverseDns,
+      abuseScore: 0,
+      isBlacklisted: false,
+      isProxyOrVpn: false,
+      is_tor: Boolean(data.infra_type === 'TOR_EXIT_NODE'),
+      isOrigin: true,
+      isPrivate: classification.isPrivate,
+      isRfc1918: classification.isRfc1918,
+      subnetType: classification.subnetType,
+      cidr: classification.cidr,
+      scope: classification.scope,
+      subnetDescription: classification.description,
+      infrastructureType: classification.isPrivate ? 'INTERNAL_PRIVATE' : undefined,
+      lookupMethod: classification.isPrivate ? 'RFC 1918 Subnet Classifier' : maxmind.lookupMethod,
+      geonameId: maxmind.geonameId,
+      continentCode: maxmind.continentCode,
+      continentName: maxmind.continentName,
+      timeZone: maxmind.timeZone,
+      isInEuropeanUnion: maxmind.isInEuropeanUnion,
+      accuracyRadius: maxmind.accuracyRadius,
+      maxmindVerified: maxmind.isVerified,
+      maxmindSource: maxmind.sourceFile,
+      maxmindCopyright: maxmind.copyright,
+      maxmindLicense: maxmind.license
+    });
+  }
 
   // Tag first public hop in the sequence as isPublicGateway if not tagged
   const firstPublicHop = hops.find(h => !h.isPrivate && h.fromIp);
@@ -304,28 +370,36 @@ export function mapBackendCaseToAnalysis(
   }));
 
   // Auth
+  const dataAuth = data.auth || data.authResults || {};
   const dnsAuth = data.dns_auth || {};
   const authResults: AuthResults = {
     spf: {
-      status: (dnsAuth.spf?.status || 'NONE').toUpperCase() as any,
-      record: dnsAuth.spf?.record,
-      details: dnsAuth.spf?.explanation
+      status: (dataAuth.spf?.status || dnsAuth.spf?.status || 'NONE').toUpperCase() as any,
+      record: dataAuth.spf?.record || dnsAuth.spf?.record,
+      details: dataAuth.spf?.details || dnsAuth.spf?.explanation || `SPF ${dataAuth.spf?.status || 'NONE'}`,
+      ip: dataAuth.spf?.ip,
+      domain: dataAuth.spf?.domain || fromDomainFallback
     },
     dkim: {
-      status: (dnsAuth.dkim?.status || 'NONE').toUpperCase() as any,
-      details: dnsAuth.dkim?.explanation
+      status: (dataAuth.dkim?.status || dnsAuth.dkim?.status || 'NONE').toUpperCase() as any,
+      selector: dataAuth.dkim?.selector,
+      domain: dataAuth.dkim?.domain || fromDomainFallback,
+      details: dataAuth.dkim?.details || dnsAuth.dkim?.explanation || `DKIM ${dataAuth.dkim?.status || 'NONE'}`
     },
     dmarc: {
-      status: (dnsAuth.dmarc?.status || 'NONE').toUpperCase() as any,
-      details: dnsAuth.dmarc?.explanation
+      status: (dataAuth.dmarc?.status || dnsAuth.dmarc?.status || 'NONE').toUpperCase() as any,
+      policy: dataAuth.dmarc?.policy || dnsAuth.dmarc?.policy || 'none',
+      domain: dataAuth.dmarc?.domain || fromDomainFallback,
+      details: dataAuth.dmarc?.details || dnsAuth.dmarc?.explanation || `DMARC ${dataAuth.dmarc?.status || 'NONE'}`
     },
     arc: {
-      status: 'NONE'
+      status: (dataAuth.arc?.status || 'NONE').toUpperCase() as any,
+      details: dataAuth.arc?.details
     }
   };
 
   // Heuristics/Alerts
-  const rawAlerts = Array.isArray(data.alerts) ? data.alerts : [];
+  const rawAlerts = Array.isArray(data.alerts) ? data.alerts : (Array.isArray(data.heuristics) ? data.heuristics : []);
   const heuristics: HeuristicSignal[] = rawAlerts.map((alt: any, idx: number) => ({
     id: alt.id || `heur_${idx}`,
     title: alt.title || 'Security Flag',
@@ -338,17 +412,38 @@ export function mapBackendCaseToAnalysis(
   // Logs
   const logs: ForensicLogEntry[] = Array.isArray(data.logs) ? data.logs : [];
 
+  const effectiveHash = data.sha256_hash || data.sha256 || data.sha256Hash || data.custody_hash || data.custodyHash || (rawContent ? sha256Sync(rawContent) : sha256Sync(JSON.stringify(data)));
+  const calculatedRiskScore = typeof data.threat_score === 'number' 
+    ? data.threat_score 
+    : (typeof data.riskScore === 'number' 
+      ? data.riskScore 
+      : (typeof data.threatScore === 'number' 
+        ? data.threatScore 
+        : (data.overall_risk_score || 0)));
+
+  const rawClassification = (data.classification || data.verdict || data.threatVerdict || data.status || '').toUpperCase();
+  const resolvedVerdict = rawClassification.includes('PHISH') 
+    ? 'PHISHING' 
+    : (rawClassification.includes('FRAUD') 
+      ? 'FRAUD' 
+      : (rawClassification.includes('IMPERSONAT') 
+        ? 'IMPERSONATION' 
+        : (rawClassification.includes('SUSPICIOUS') 
+          ? 'SUSPICIOUS' 
+          : (calculatedRiskScore >= 70 ? 'PHISHING' : calculatedRiskScore >= 40 ? 'SUSPICIOUS' : 'LEGITIMATE'))));
+
   return {
     id: data.id || data.case_id || `case_${Date.now()}`,
     sessionId: data.session_id || data.id || `session_${Date.now()}`,
     trackingId: data.tracking_id || data.id || `track_${Date.now()}`,
-    evidenceId: data.evidence_id,
-    sha256Hash: data.sha256_hash || data.custody_hash,
-    custodyHash: data.custody_hash || data.sha256_hash,
-    evidenceSource: data.evidence_source || data.source,
-    evidenceReceivedAt: data.evidence_received_at || data.received_at,
+    evidenceId: data.evidence_id || data.evidenceId || generateEvidenceId(),
+    sha256: effectiveHash,
+    sha256Hash: effectiveHash,
+    custodyHash: effectiveHash,
+    evidenceSource: data.evidence_source || data.source || 'ingest',
+    evidenceReceivedAt: data.evidence_received_at || data.received_at || new Date().toISOString(),
     hashVerified: data.hash_verified ?? true,
-    name: fileName,
+    name: fileName || subject,
     analyzedAt: data.analyzed_at || new Date().toISOString(),
     headers: {
       subject,
@@ -369,11 +464,13 @@ export function mapBackendCaseToAnalysis(
     heuristics,
     logs,
     graph: data.graph || null,
-    riskScore: typeof data.threat_score === 'number' ? data.threat_score : (data.overall_risk_score || 0),
-    verdict: data.verdict || 'LEGITIMATE',
-    mlConfidence: data.confidence || 0.95,
-    rawEml: rawContent,
-    summary: data.summary || `Forensic analysis complete for ${fileName}`,
+    riskScore: calculatedRiskScore,
+    threatScore: calculatedRiskScore,
+    threatVerdict: resolvedVerdict,
+    verdict: resolvedVerdict,
+    mlConfidence: data.confidence || data.ml_confidence || 0.95,
+    rawEml: rawContent || data.raw_email || data.rawEml,
+    summary: data.summary || data.description || `Forensic analysis complete for ${subject}`,
     why: data.why,
     attributionWhy: data.attribution_why || data.attributionWhy,
     originWhy: data.origin_why || data.originWhy,
@@ -425,6 +522,9 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!inBody && line.trim() === '') {
+      if (Object.keys(headerMap).length === 0 && receivedHeaders.length === 0 && !currentKey) {
+        continue; // Skip leading blank lines before headers
+      }
       inBody = true;
       if (currentKey) {
         if (currentKey.toLowerCase() === 'received') {
@@ -432,6 +532,8 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
         } else {
           headerMap[currentKey] = currentValue;
         }
+        currentKey = '';
+        currentValue = '';
       }
       continue;
     }
@@ -456,13 +558,23 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
     }
   }
 
-  const subject = headerMap['Subject'] || headerMap['subject'] || '(No Subject)';
-  const from = headerMap['From'] || headerMap['from'] || 'unknown@unknown.com';
-  const to = headerMap['To'] || headerMap['to'] || 'recipient@domain.com';
-  const replyTo = headerMap['Reply-To'] || headerMap['reply-to'];
-  const returnPath = headerMap['Return-Path'] || headerMap['return-path'];
-  const date = headerMap['Date'] || headerMap['date'] || new Date().toUTCString();
-  const messageId = headerMap['Message-ID'] || headerMap['Message-Id'] || headerMap['message-id'] || `<${Date.now()}@trace.xmail>`;
+  // Flush any trailing header if EOF reached before blank line
+  if (currentKey) {
+    if (currentKey.toLowerCase() === 'received') {
+      receivedHeaders.push(currentValue);
+    } else {
+      headerMap[currentKey] = currentValue;
+    }
+  }
+
+  const subject = getHeaderCaseInsensitive(headerMap, 'Subject') || '(No Subject)';
+  const rawFrom = getHeaderCaseInsensitive(headerMap, 'From');
+  const from = rawFrom || 'unknown@sender.corp';
+  const to = getHeaderCaseInsensitive(headerMap, 'To') || 'recipient@domain.com';
+  const replyTo = getHeaderCaseInsensitive(headerMap, 'Reply-To') || from;
+  const returnPath = getHeaderCaseInsensitive(headerMap, 'Return-Path') || from;
+  const date = getHeaderCaseInsensitive(headerMap, 'Date') || new Date().toUTCString();
+  const messageId = getHeaderCaseInsensitive(headerMap, 'Message-ID') || getHeaderCaseInsensitive(headerMap, 'Message-Id') || `<${Date.now()}@trace.xmail>`;
 
   // Extract from email
   const fromEmailMatch = from.match(/<([^>]+)>/) || from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
@@ -560,11 +672,15 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
     firstPublicHopInRaw.isPublicGateway = true;
   }
 
-  // Parse SPF / DKIM / DMARC
-  const authHeader = headerMap['Authentication-Results'] || headerMap['authentication-results'] || '';
-  const spfStatus = /spf=pass/i.test(authHeader) ? 'PASS' : /spf=softfail/i.test(authHeader) ? 'SOFTFAIL' : /spf=fail/i.test(authHeader) ? 'FAIL' : 'FAIL';
-  const dkimStatus = /dkim=pass/i.test(authHeader) ? 'PASS' : /dkim=fail/i.test(authHeader) ? 'FAIL' : 'FAIL';
-  const dmarcStatus = /dmarc=pass/i.test(authHeader) ? 'PASS' : /dmarc=reject/i.test(authHeader) ? 'REJECT' : /dmarc=quarantine/i.test(authHeader) ? 'QUARANTINE' : 'FAIL';
+  // Parse SPF / DKIM / DMARC / ARC via comprehensive RFC parser
+  const parsedAuth = parseAuthenticationHeaders(headerMap, {
+    fromDomain: fromEmail ? fromEmail.split('@')[1] : undefined,
+    fromEmail,
+    originIp: hops[0]?.fromIp
+  });
+  const spfStatus = parsedAuth.spf.status;
+  const dkimStatus = parsedAuth.dkim.status;
+  const dmarcStatus = parsedAuth.dmarc.status;
 
   // Check attachments
   const attachments: AttachmentInfo[] = [];
@@ -666,20 +782,26 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
     },
     auth: {
       spf: {
-        status: spfStatus,
-        record: 'v=spf1 ...',
-        details: `SPF evaluated as ${spfStatus}`,
+        status: parsedAuth.spf.status,
+        record: parsedAuth.spf.record || 'v=spf1 ...',
+        details: parsedAuth.spf.details || `SPF evaluated as ${parsedAuth.spf.status}`,
+        ip: parsedAuth.spf.ip,
+        domain: parsedAuth.spf.domain,
       },
       dkim: {
-        status: dkimStatus,
-        details: `DKIM evaluated as ${dkimStatus}`,
+        status: parsedAuth.dkim.status,
+        selector: parsedAuth.dkim.selector,
+        domain: parsedAuth.dkim.domain,
+        details: parsedAuth.dkim.details || `DKIM evaluated as ${parsedAuth.dkim.status}`,
       },
       dmarc: {
-        status: dmarcStatus,
-        details: `DMARC evaluated as ${dmarcStatus}`,
+        status: parsedAuth.dmarc.status,
+        policy: parsedAuth.dmarc.policy,
+        domain: parsedAuth.dmarc.domain,
+        details: parsedAuth.dmarc.details || `DMARC evaluated as ${parsedAuth.dmarc.status}`,
       },
       arc: {
-        status: 'NONE',
+        status: parsedAuth.arc.status,
       },
     },
     hops,

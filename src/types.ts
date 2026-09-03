@@ -152,26 +152,27 @@ export interface AttachmentInfo {
 
 export interface AuthResults {
   spf: {
-    status: 'PASS' | 'FAIL' | 'SOFTFAIL' | 'NEUTRAL' | 'NONE';
+    status: 'PASS' | 'FAIL' | 'SOFTFAIL' | 'NEUTRAL' | 'NONE' | 'TEMPERROR' | 'PERMERROR';
     record?: string;
     ip?: string;
     domain?: string;
     details?: string;
   };
   dkim: {
-    status: 'PASS' | 'FAIL' | 'NONE' | 'INVALID';
+    status: 'PASS' | 'FAIL' | 'NONE' | 'INVALID' | 'NEUTRAL' | 'TEMPERROR' | 'PERMERROR';
     selector?: string;
     domain?: string;
     details?: string;
   };
   dmarc: {
-    status: 'PASS' | 'FAIL' | 'QUARANTINE' | 'REJECT' | 'NONE';
+    status: 'PASS' | 'FAIL' | 'QUARANTINE' | 'REJECT' | 'NONE' | 'TEMPERROR' | 'PERMERROR';
     policy?: string;
     domain?: string;
     details?: string;
   };
   arc?: {
     status: 'PASS' | 'FAIL' | 'NONE';
+    details?: string;
   };
 }
 

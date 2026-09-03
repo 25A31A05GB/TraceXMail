@@ -31,6 +31,7 @@ import {
   Tag
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
+import { sha256Sync } from '../utils/crypto';
 import { EvidenceTagCard } from './EvidenceTagCard';
 import { 
   PrivacyConfig, 
@@ -496,7 +497,7 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
                   </span>
                 </div>
                 <div className="p-2.5 rounded bg-slate-900 border border-slate-800 text-slate-200 break-all select-all">
-                  {analysis.sha256 || analysis.sha256Hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}
+                  {analysis.sha256 || analysis.sha256Hash || analysis.custodyHash || (analysis.rawEml ? sha256Sync(analysis.rawEml) : sha256Sync(analysis.id || JSON.stringify(analysis)))}
                 </div>
                 <div className="flex justify-between text-[11px] text-slate-500 pt-1">
                   <span>Acquisition Engine: TraceXMail RFC 822 Deterministic Parser</span>

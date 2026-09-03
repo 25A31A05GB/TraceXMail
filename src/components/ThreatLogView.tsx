@@ -10,7 +10,10 @@ import {
   Database,
   Cpu,
   Sparkles,
-  Share2
+  Share2,
+  AlertTriangle,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import { EmailAnalysis, ForensicLogEntry } from '../types';
 import { forensicApi } from '../lib/api';
@@ -26,14 +29,39 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
   const [copiedIocs, setCopiedIocs] = useState<boolean>(false);
   const [logsState, setLogsState] = useState<ForensicLogEntry[]>(analysis.logs || []);
   const [isEnrichingVT, setIsEnrichingVT] = useState<boolean>(false);
+  const [vtStatusInfo, setVtStatusInfo] = useState<{
+    configured: boolean;
+    active: boolean;
+    provider: string;
+    message: string;
+  } | null>(null);
   const [vtStatus, setVtStatus] = useState<{
     vt_active?: boolean;
+    is_configured?: boolean;
     scanned_count?: number;
     flagged_count?: number;
+    message?: string;
     last_run?: string;
   } | null>(null);
 
   const tags = ['ALL', 'VT', 'API', 'SEC', 'DNS', 'ML', 'GRAPH', 'ALERT', 'INIT', 'INFO'];
+
+  // Query VirusTotal integration status on mount
+  useEffect(() => {
+    let mounted = true;
+    forensicApi.getVirusTotalStatus()
+      .then((res) => {
+        if (mounted) {
+          setVtStatusInfo(res);
+        }
+      })
+      .catch((err) => {
+        console.warn('Unable to retrieve VirusTotal status:', err);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Keep local log state updated if analysis changes
   useEffect(() => {
@@ -111,19 +139,29 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
 
       setVtStatus({
         vt_active: result.vt_active,
+        is_configured: result.is_configured ?? result.vt_active,
         scanned_count: result.scanned_count,
         flagged_count: result.flagged_count,
+        message: result.message,
         last_run: new Date().toLocaleTimeString(),
       });
+
+      if (result.api_status) {
+        setVtStatusInfo({
+          configured: result.api_status.configured,
+          active: result.api_status.configured,
+          provider: result.api_status.provider,
+          message: result.api_status.message
+        });
+      }
     } catch (err) {
       console.warn('VirusTotal enrichment request warning:', err);
-      // Fallback local VT log entry on error/offline
       const fallbackLog: ForensicLogEntry = {
         id: `vt-err-${Date.now()}`,
         timestamp: new Date().toLocaleTimeString(),
         tag: 'API',
-        message: `[VirusTotal v3] Query executed for extracted IOCs (${analysis.urls.length} URLs, ${analysis.attachments.length} attachments). Multi-engine scan status updated.`,
-        highlight: true,
+        message: `[VirusTotal v3] Query attempt completed. Server returned unconfigured or unreachable status.`,
+        highlight: false,
       };
       setLogsState((prev) => [...prev, fallbackLog]);
     } finally {
@@ -135,7 +173,7 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
     const matchesTag =
       filterTag === 'ALL' ||
       log.tag === filterTag ||
-      (filterTag === 'VT' && (log.tag === 'API' || log.message.includes('VirusTotal')));
+      (filterTag === 'VT' && (log.tag === 'API' || log.tag === 'VT' || log.tag === 'VT_STATUS' || log.tag === 'VT_API' || log.message.includes('VirusTotal')));
     const matchesSearch =
       log.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.timestamp.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -147,6 +185,7 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
   const totalAttachmentsScanned = analysis.attachments?.length || 0;
   const maliciousUrlsCount = analysis.urls?.filter((u) => u.status === 'MALICIOUS').length || 0;
   const maliciousFilesCount = analysis.attachments?.filter((a) => a.status === 'MALICIOUS').length || 0;
+  const isVtActive = vtStatusInfo ? vtStatusInfo.configured : (vtStatus ? vtStatus.vt_active : false);
 
   return (
     <div id="logs-view-container" className="flex-1 p-6 flex flex-col gap-4 overflow-hidden bg-[#0F172A]">
@@ -157,12 +196,19 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
             <Terminal className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-semibold text-white">Forensic Telemetry & VirusTotal Threat Intel Stream</h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-blue-900/60 text-blue-300 border border-blue-700/50 flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-blue-400" />
-                VirusTotal v3 Enriched
-              </span>
+              {isVtActive ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-700/60 flex items-center gap-1">
+                  <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                  VT API v3: ACTIVE
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold bg-amber-950/80 text-amber-300 border border-amber-700/60 flex items-center gap-1">
+                  <ShieldAlert className="w-3 h-3 text-amber-400" />
+                  VT API v3: INACTIVE (UNCONFIGURED)
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 font-mono mt-0.5">
               Live RFC822 parsing, VirusTotal v3 URL/hash reputation, AbuseIPDB scoring, and ML audit stream
@@ -204,19 +250,38 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
         </div>
       </div>
 
+      {/* Unconfigured Notice Banner when VT is inactive */}
+      {!isVtActive && (
+        <div className="bg-amber-950/30 border border-amber-800/60 rounded-xl p-3 flex items-start gap-3 text-xs text-amber-200 font-mono">
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <span className="font-bold text-amber-300">VirusTotal v3 Integration Status: Inactive / Unconfigured.</span>
+            <span className="ml-1 text-amber-200/90">
+              Provide <code className="bg-amber-900/60 px-1 py-0.5 rounded text-amber-100 font-bold">VIRUSTOTAL_API_KEY</code> in your environment settings to enable live multi-engine URL and file hash reputation lookups. Local heuristics and cryptographic hash checks remain fully active.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* VirusTotal Threat Intelligence Summary Bar */}
       <div className="bg-[#182234] border border-slate-700/80 rounded-xl p-3.5 flex flex-wrap items-center justify-between gap-4 shrink-0 shadow-inner">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 flex-wrap">
           <div className="flex items-center gap-2 text-xs text-slate-300 font-mono">
             <Globe className="w-4 h-4 text-cyan-400" />
             <span>URLs Scanned: <strong className="text-white">{totalUrlsScanned}</strong></span>
-            {maliciousUrlsCount > 0 ? (
-              <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 font-semibold">
-                {maliciousUrlsCount} Malicious
-              </span>
+            {isVtActive ? (
+              maliciousUrlsCount > 0 ? (
+                <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 font-semibold">
+                  {maliciousUrlsCount} Malicious
+                </span>
+              ) : (
+                <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                  All Clean
+                </span>
+              )
             ) : (
-              <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                All Clean
+              <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                Dormant (Unconfigured)
               </span>
             )}
           </div>
@@ -224,28 +289,34 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
           <div className="flex items-center gap-2 text-xs text-slate-300 font-mono">
             <FileCode className="w-4 h-4 text-purple-400" />
             <span>Hashes Scanned: <strong className="text-white">{totalAttachmentsScanned}</strong></span>
-            {maliciousFilesCount > 0 ? (
-              <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 font-semibold">
-                {maliciousFilesCount} Flagged
-              </span>
+            {isVtActive ? (
+              maliciousFilesCount > 0 ? (
+                <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300 border border-rose-800 font-semibold">
+                  {maliciousFilesCount} Flagged
+                </span>
+              ) : (
+                <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                  0 Flagged
+                </span>
+              )
             ) : (
-              <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">
-                0 Flagged
+              <span className="ml-1 text-[11px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">
+                Dormant (Unconfigured)
               </span>
             )}
           </div>
 
           {vtStatus && (
             <div className="text-[11px] text-indigo-300 font-mono flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>VT API Refreshed at {vtStatus.last_run}</span>
+              <span className={`w-2 h-2 rounded-full ${vtStatus.vt_active ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+              <span>{vtStatus.vt_active ? `VT API Refreshed at ${vtStatus.last_run}` : `VT Inactive at ${vtStatus.last_run}`}</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-2 text-xs font-mono text-slate-400">
           <Database className="w-3.5 h-3.5 text-slate-500" />
-          <span>API Key: <code className="text-slate-200">VIRUSTOTAL_API_KEY</code></span>
+          <span>Status: <code className={isVtActive ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>{isVtActive ? "CONFIGURED & ACTIVE" : "UNCONFIGURED (VIRUSTOTAL_API_KEY)"}</code></span>
         </div>
       </div>
 
@@ -261,55 +332,87 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1">
-            {analysis.urls?.map((u, i) => (
-              <div
-                key={`u-${i}`}
-                onClick={() => setSearchQuery(u.domain || u.url)}
-                className="bg-slate-900/90 border border-slate-800 hover:border-indigo-500/50 rounded-lg p-2 flex items-center justify-between gap-2 text-xs font-mono transition-colors cursor-pointer"
-              >
-                <div className="truncate flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
-                    <span className="text-slate-200 font-medium truncate">{u.domain || u.url}</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 truncate mt-0.5">{u.defangedUrl || u.url}</div>
-                </div>
-                <div className="text-right shrink-0">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    u.status === 'MALICIOUS' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                  }`}>
-                    {u.status}
-                  </span>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{u.virustotalScore || 'VT Scanned'}</div>
-                </div>
-              </div>
-            ))}
+            {analysis.urls?.map((u, i) => {
+              const vtScore = u.virustotalScore || '';
+              const isInactive = !isVtActive || vtScore.toLowerCase().includes('inactive') || vtScore.toLowerCase().includes('unconfigured') || vtScore.toLowerCase().includes('dormant');
+              const isMal = u.status === 'MALICIOUS' && !isInactive;
+              const isSusp = u.status === 'SUSPICIOUS' && !isInactive;
+              const isClean = u.status === 'CLEAN' && !isInactive;
 
-            {analysis.attachments?.map((att, i) => (
-              <div
-                key={`att-${i}`}
-                onClick={() => setSearchQuery(att.filename || att.sha256)}
-                className="bg-slate-900/90 border border-slate-800 hover:border-purple-500/50 rounded-lg p-2 flex items-center justify-between gap-2 text-xs font-mono transition-colors cursor-pointer"
-              >
-                <div className="truncate flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <FileCode className="w-3 h-3 text-purple-400 shrink-0" />
-                    <span className="text-slate-200 font-medium truncate">{att.filename}</span>
+              return (
+                <div
+                  key={`u-${i}`}
+                  onClick={() => setSearchQuery(u.domain || u.url)}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-indigo-500/50 rounded-lg p-2 flex items-center justify-between gap-2 text-xs font-mono transition-colors cursor-pointer"
+                >
+                  <div className="truncate flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+                      <span className="text-slate-200 font-medium truncate">{u.domain || u.url}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 truncate mt-0.5">{u.defangedUrl || u.url}</div>
                   </div>
-                  <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
-                    SHA256: {att.sha256 ? `${att.sha256.substring(0, 12)}...` : 'N/A'}
+                  <div className="text-right shrink-0">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      isMal 
+                        ? 'bg-rose-950 text-rose-300 border border-rose-800' 
+                        : isSusp
+                        ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                        : isClean
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {isInactive ? 'UNSCANNED' : u.status}
+                    </span>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {isInactive ? 'VT Inactive' : (u.virustotalScore || '0/88 Engines')}
+                    </div>
                   </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
-                    att.status === 'MALICIOUS' ? 'bg-rose-950 text-rose-300 border border-rose-800' : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                  }`}>
-                    {att.status}
-                  </span>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{att.vtDetection || att.size || 'Artifact'}</div>
+              );
+            })}
+
+            {analysis.attachments?.map((att, i) => {
+              const vtDet = att.vtDetection || '';
+              const isInactive = !isVtActive || vtDet.toLowerCase().includes('inactive') || vtDet.toLowerCase().includes('unconfigured') || vtDet.toLowerCase().includes('dormant');
+              const isMal = att.status === 'MALICIOUS' && !isInactive;
+              const isSusp = att.status === 'SUSPICIOUS' && !isInactive;
+              const isClean = att.status === 'CLEAN' && !isInactive;
+
+              return (
+                <div
+                  key={`att-${i}`}
+                  onClick={() => setSearchQuery(att.filename || att.sha256)}
+                  className="bg-slate-900/90 border border-slate-800 hover:border-purple-500/50 rounded-lg p-2 flex items-center justify-between gap-2 text-xs font-mono transition-colors cursor-pointer"
+                >
+                  <div className="truncate flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <FileCode className="w-3 h-3 text-purple-400 shrink-0" />
+                      <span className="text-slate-200 font-medium truncate">{att.filename}</span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                      SHA256: {att.sha256 ? `${att.sha256.substring(0, 12)}...` : 'N/A'}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                      isMal 
+                        ? 'bg-rose-950 text-rose-300 border border-rose-800' 
+                        : isSusp
+                        ? 'bg-amber-950 text-amber-300 border border-amber-800'
+                        : isClean
+                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
+                        : 'bg-slate-800 text-slate-400 border border-slate-700'
+                    }`}>
+                      {isInactive ? 'UNSCANNED' : att.status}
+                    </span>
+                    <div className="text-[10px] text-slate-400 mt-0.5">
+                      {isInactive ? 'VT Inactive' : (att.vtDetection || att.size || 'Artifact')}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -349,7 +452,7 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
       {/* Terminal Display */}
       <div className="flex-1 bg-[#0B1120] border border-slate-800 rounded-xl p-4 font-mono text-xs overflow-y-auto space-y-2 shadow-inner">
         <div className="text-slate-500 pb-2 border-b border-slate-800 text-[11px] flex items-center justify-between">
-          <span>VIRUSTOTAL_TELEMETRY_ENGINE: ACTIVE</span>
+          <span>VIRUSTOTAL_TELEMETRY_ENGINE: {isVtActive ? 'ACTIVE' : 'DORMANT (NO API KEY)'}</span>
           <span>ENTRIES: {filteredLogs.length}</span>
         </div>
 
@@ -357,7 +460,8 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
           let tagColor = 'text-blue-400 bg-blue-950/40 border-blue-500/30';
           if (log.tag === 'DNS') tagColor = 'text-emerald-400 bg-emerald-950/40 border-emerald-500/30';
           if (log.tag === 'SEC') tagColor = 'text-rose-400 bg-rose-950/40 border-rose-500/30';
-          if (log.tag === 'API' || log.tag === 'VT') tagColor = 'text-cyan-400 bg-cyan-950/40 border-cyan-500/30 font-semibold';
+          if (log.tag === 'API' || log.tag === 'VT' || log.tag === 'VT_API') tagColor = 'text-cyan-400 bg-cyan-950/40 border-cyan-500/30 font-semibold';
+          if (log.tag === 'VT_STATUS') tagColor = 'text-amber-400 bg-amber-950/40 border-amber-500/30 font-semibold';
           if (log.tag === 'ML') tagColor = 'text-purple-400 bg-purple-950/40 border-purple-500/30';
           if (log.tag === 'ALERT') tagColor = 'text-rose-400 bg-rose-900/50 border-rose-500/50 font-bold';
           if (log.tag === 'INFO') tagColor = 'text-amber-400 bg-amber-950/40 border-amber-500/30';
@@ -379,8 +483,12 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
         })}
 
         <div className="text-slate-500 pt-3 italic flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span>Connected to TraceXMail VirusTotal enrichment daemon ... telemetry streaming</span>
+          <span className={`w-2 h-2 rounded-full ${isVtActive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+          <span>
+            {isVtActive 
+              ? 'Connected to TraceXMail VirusTotal v3 multi-engine daemon ... telemetry live' 
+              : 'VirusTotal v3 daemon is dormant (waiting for VIRUSTOTAL_API_KEY configuration)'}
+          </span>
         </div>
       </div>
     </div>

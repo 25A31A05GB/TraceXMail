@@ -14,9 +14,9 @@ All figures are reported in milliseconds ($ms$):
 | Processing Pipeline Stage | Mean | Median (P50) | 95th Percentile (P95) | 99th Percentile (P99) | SLA Target | Compliance Status |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1. Header & Envelope Extraction** | 0.00 ms | 0.00 ms | 0.00 ms | 0.00 ms | < 25.0 ms | **PASS** |
-| **2. TF-IDF & Structural Extraction**| 0.06 ms | 0.05 ms | 0.10 ms | 0.27 ms | < 150.0 ms | **PASS** |
-| **3. Centroid Cosine Softmax Inference**| 0.03 ms | 0.03 ms | 0.04 ms | 0.07 ms | < 50.0 ms | **PASS** |
-| **Total Offline End-to-End Analysis** | **0.09 ms** | **0.08 ms** | **0.14 ms** | **0.31 ms** | **< 500.0 ms** | **PASS** |
+| **2. TF-IDF & Structural Extraction**| 0.06 ms | 0.05 ms | 0.09 ms | 0.18 ms | < 150.0 ms | **PASS** |
+| **3. Centroid Cosine Softmax Inference**| 0.02 ms | 0.02 ms | 0.04 ms | 0.05 ms | < 50.0 ms | **PASS** |
+| **Total Offline End-to-End Analysis** | **0.08 ms** | **0.07 ms** | **0.14 ms** | **0.21 ms** | **< 500.0 ms** | **PASS** |
 
 ---
 

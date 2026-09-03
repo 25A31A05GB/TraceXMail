@@ -38,6 +38,7 @@ import {
   Printer
 } from 'lucide-react';
 import { EmailAnalysis, AINarrative } from '../types';
+import { sha256Sync } from '../utils/crypto';
 import { ForensicCaseTwoPanel } from './ForensicCaseTwoPanel';
 import { EvidenceCard, EvidenceTagCard, mapAnalysisToEvidenceCardData } from './EvidenceTagCard';
 import { computeSha256 } from '../utils/crypto';
@@ -424,7 +425,7 @@ export function OverviewView({
   })();
 
   const effectiveEvidenceId = analysis.evidenceId || `EV-${analysis.id.slice(-6).toUpperCase()}`;
-  const effectiveHash = analysis.sha256Hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const effectiveHash = analysis.sha256Hash || analysis.sha256 || analysis.custodyHash || (analysis.rawEml ? sha256Sync(analysis.rawEml) : sha256Sync(analysis.id || JSON.stringify(analysis)));
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);

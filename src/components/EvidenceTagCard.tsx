@@ -1,19 +1,20 @@
 import React, { useRef, useState } from 'react';
 import { EmailAnalysis, EvidenceCardData } from '../types';
 import { Printer, Copy, Check, ExternalLink, X, Tag } from 'lucide-react';
+import { sha256Sync, generateEvidenceId } from '../utils/crypto';
 
 /**
  * Pure mapping helper that converts an EmailAnalysis object to the EvidenceCardData schema.
  */
 export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): EvidenceCardData {
-  const caseId = analysis.id || 'sample-paypal-phish';
+  const caseId = analysis.id || 'case-' + Date.now();
   const evidenceId = analysis.evidenceId || (analysis.id?.toUpperCase()?.startsWith('SAMPLE-') 
     ? `EV-${analysis.id.replace('sample-', '').toUpperCase()}` 
-    : `EV-CASE-${caseId.slice(0, 8)}`);
+    : (analysis.id?.startsWith('case-') ? `EV-${analysis.id.slice(5, 11).toUpperCase()}` : generateEvidenceId()));
     
-  const timestamp = analysis.headers?.date || analysis.analyzedAt || analysis.date || '2024-07-18 13:12 UTC';
+  const timestamp = analysis.headers?.date || analysis.analyzedAt || analysis.date || new Date().toUTCString();
   
-  const fromDisplay = analysis.headers?.from || analysis.from || '"PayPal Security Center" <service@paypal.com>';
+  const fromDisplay = analysis.headers?.from || analysis.from || analysis.headers?.fromEmail || 'unknown@sender.corp';
   const fromEmail = analysis.headers?.fromEmail || analysis.from || '';
   const fromDomain = fromEmail.includes('@') ? fromEmail.split('@')[1].replace(/[<>]/g, '').trim() : '';
   
@@ -25,20 +26,41 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   const replyToDomain = replyTo.includes('@') ? replyTo.split('@')[1].replace(/[<>]/g, '').trim() : '';
   const replyToMismatch = Boolean(replyTo && fromDomain && replyToDomain && !replyToDomain.includes(fromDomain) && !fromDomain.includes(replyToDomain));
 
-  const rawSubject = analysis.headers?.subject || analysis.subject || '[URGENT] Your PayPal Account Has Been Temporarily Restricted';
+  const rawSubject = analysis.headers?.subject || analysis.subject || analysis.name || '(No Subject)';
   const subjectDisplay = rawSubject.startsWith('"') && rawSubject.endsWith('"') ? rawSubject : `"${rawSubject}"`;
 
   // Verdict & Trust score calculations
-  const threatScore = analysis.riskScore ?? (analysis.threatScore ?? (analysis.verdict?.toUpperCase().includes('PHISH') ? 98 : analysis.verdict?.toUpperCase().includes('SUSPICIOUS') ? 65 : 10));
-  const rawVerdict = (analysis.threatVerdict || analysis.verdict || (threatScore >= 75 ? 'PHISH' : threatScore >= 40 ? 'SUSPICIOUS' : 'LEGITIMATE')).toUpperCase();
-  
+  const rawVerdict = (analysis.threatVerdict || analysis.verdict || '').toUpperCase();
+  const isMalicious = rawVerdict.includes('PHISH') || rawVerdict.includes('FRAUD') || rawVerdict.includes('IMPERSONAT') || rawVerdict.includes('MALICIOUS');
+  const isSuspicious = rawVerdict.includes('SUSPICIOUS') || rawVerdict.includes('WARN');
+  const isClean = rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN');
+
+  // Accurately resolve Threat Score
+  let threatScore = 0;
+  if (typeof analysis.threatScore === 'number' && analysis.threatScore >= 0) {
+    threatScore = analysis.threatScore;
+  } else if (typeof analysis.riskScore === 'number' && analysis.riskScore >= 0) {
+    threatScore = analysis.riskScore;
+  } else if (isMalicious) {
+    threatScore = 95;
+  } else if (isSuspicious) {
+    threatScore = 65;
+  } else {
+    threatScore = 8;
+  }
+
+  // Ensure malicious verdicts never evaluate to 0 threat score
+  if (isMalicious && threatScore < 50) {
+    threatScore = 95;
+  }
+
   let stampWord = 'PHISH';
   let stampStatus: 'bad' | 'warn' | 'good' = 'bad';
 
-  if (rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN')) {
+  if (isClean && !isMalicious && !isSuspicious) {
     stampWord = 'LEGITIMATE';
     stampStatus = 'good';
-  } else if (rawVerdict.includes('SUSPICIOUS') || rawVerdict.includes('WARN')) {
+  } else if (isSuspicious && !isMalicious) {
     stampWord = 'SUSPICIOUS';
     stampStatus = 'warn';
   } else if (rawVerdict.includes('FRAUD')) {
@@ -52,9 +74,10 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     stampStatus = 'bad';
   }
 
+  const trustScore = Math.max(0, Math.min(100, 100 - threatScore));
   const trustScoreLabel = stampStatus === 'good' 
-    ? `${Math.min(99, Math.max(70, 100 - threatScore))}/100 TRUST` 
-    : `${Math.max(0, 100 - threatScore)}/100 TRUST`;
+    ? `${trustScore}/100 TRUST` 
+    : `${threatScore}/100 THREAT (${trustScore}/100 TRUST)`;
 
   // Identity Rows
   const identityRows = [
@@ -64,39 +87,38 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   ];
 
   // Auth Checks
-  const spfStatus = (analysis.auth?.spf?.status || analysis.authResults?.spf?.status || 'FAIL').toUpperCase();
-  const dkimStatus = (analysis.auth?.dkim?.status || analysis.authResults?.dkim?.status || 'FAIL').toUpperCase();
-  const dmarcStatus = (analysis.auth?.dmarc?.status || analysis.authResults?.dmarc?.status || 'REJECT').toUpperCase();
+  const spfStatus = (analysis.auth?.spf?.status || analysis.authResults?.spf?.status || (stampStatus === 'good' ? 'PASS' : 'FAIL')).toUpperCase();
+  const dkimStatus = (analysis.auth?.dkim?.status || analysis.authResults?.dkim?.status || (stampStatus === 'good' ? 'PASS' : 'FAIL')).toUpperCase();
+  const dmarcStatus = (analysis.auth?.dmarc?.status || analysis.authResults?.dmarc?.status || (stampStatus === 'good' ? 'PASS' : 'FAIL')).toUpperCase();
 
   const checks = [
     { 
       label: 'SPF', 
       value: spfStatus, 
-      status: spfStatus === 'PASS' ? 'pass' : (spfStatus === 'NEUTRAL' || spfStatus === 'SOFTFAIL') ? 'warn' : 'fail' 
+      status: spfStatus === 'PASS' ? 'pass' : (spfStatus === 'NEUTRAL' || spfStatus === 'SOFTFAIL' || spfStatus === 'NONE') ? 'warn' : 'fail' 
     },
     { 
       label: 'DKIM', 
       value: dkimStatus, 
-      status: dkimStatus === 'PASS' ? 'pass' : 'fail' 
+      status: dkimStatus === 'PASS' ? 'pass' : (dkimStatus === 'NONE' || dkimStatus === 'NEUTRAL') ? 'warn' : 'fail' 
     },
     { 
       label: 'DMARC', 
       value: dmarcStatus, 
-      status: dmarcStatus === 'PASS' ? 'pass' : 'fail' 
+      status: dmarcStatus === 'PASS' ? 'pass' : (dmarcStatus === 'NONE') ? 'warn' : 'fail' 
     }
   ];
 
   // Origin Hop
-  const originHop = analysis.hops?.find(h => h.isOrigin) || analysis.hops?.[0];
+  const originHop = analysis.hops?.find(h => h.isOrigin) || analysis.hops?.find(h => !h.isPrivate && h.fromIp) || analysis.hops?.[0];
   const originIp = originHop?.fromIp || '185.220.101.5';
-  const originCity = originHop?.city || 'Sofia';
-  const originCountry = originHop?.country || 'Bulgaria';
-  const originCountryCode = originHop?.countryCode || 'BG';
-  const originAsn = originHop?.asn || 'AS200548';
-  const originOrg = originHop?.org || originHop?.isp || 'Zettahost';
+  const originCity = originHop?.city || (originHop?.isPrivate ? 'Internal Subnet' : (originHop?.fromIp ? 'Unknown City' : 'Unknown Origin'));
+  const originCountry = originHop?.country || (originHop?.isPrivate ? 'Private Network (RFC 1918)' : (originHop?.fromIp ? 'Unverified Infrastructure' : 'Unknown Country'));
+  const originAsn = originHop?.asn || (originHop?.fromIp ? 'AS-UNKNOWN' : 'AS200548');
+  const originOrg = originHop?.org || originHop?.isp || '';
   const isTor = Boolean(originHop?.is_tor || originHop?.reverseDns?.includes('tor') || (originHop?.abuseScore && originHop.abuseScore > 80));
-  const torRdns = originHop?.reverseDns || 'tor-exit-node.bg.zettahost.net';
-  const abuseScore = originHop?.abuseScore ?? (threatScore > 70 ? 88 : 12);
+  const torRdns = originHop?.reverseDns || (originHop?.fromIp ? `ptr-${originHop.fromIp.replace(/\./g, '-')}.in-addr.arpa` : 'unknown.ptr');
+  const abuseScore = originHop?.abuseScore ?? (threatScore > 70 ? 88 : 0);
   const originLocationStr = `${originCity}, ${originCountry} (${originAsn}${originOrg ? ` · ${originOrg}` : ''})`;
   const mapsUrl = `https://www.google.com/maps?q=${originHop?.lat || 42.6977},${originHop?.lng || 23.3219}`;
 
@@ -105,8 +127,8 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   if (analysis.hops && analysis.hops.length > 0) {
     const hopPieces = analysis.hops.map((h, i) => {
       const ip = h.fromIp || `hop-${i+1}`;
-      const cc = h.countryCode || h.country || 'EXT';
-      const ispShort = h.isp ? `, ${h.isp.split(' ')[0]}` : '';
+      const cc = h.countryCode || (h.isPrivate ? 'LAN' : 'EXT');
+      const ispShort = h.isp ? `, ${h.isp.split(' ')[0]}` : (h.org ? `, ${h.org.split(' ')[0]}` : '');
       return `${ip} (${cc}${ispShort})`;
     });
     chainString = hopPieces.join(' <span class="arrow">→</span> ') + ` · ${analysis.hops.length} hops traced`;
@@ -142,7 +164,7 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
 
   // AI Narrative Excerpt
   const rawNarrative = analysis.ai_narrative?.narrative || analysis.aiNarrative?.narrative || analysis.summary || 
-    'Automated forensic evaluation completed. No automated generative narrative requested.';
+    'Automated forensic evaluation completed.';
   const narrativeExcerpt = rawNarrative.length > 280 ? rawNarrative.slice(0, 275).trim() + '...' : rawNarrative;
   const aiEngine = analysis.ai_narrative?.model ? analysis.ai_narrative.model : 'Heuristic & Cryptographic Engine';
 
@@ -151,8 +173,10 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   if (analysis.urls && analysis.urls.length > 0) {
     analysis.urls.slice(0, 4).forEach(u => {
       const cleanUrl = u.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-      const isMal = u.status === 'MALICIOUS' || (u.virustotalScore && !u.virustotalScore.startsWith('0/'));
-      const isClean = u.status === 'CLEAN' || (u.virustotalScore && u.virustotalScore.startsWith('0/'));
+      const vtScoreStr = (u.virustotalScore || '').toLowerCase();
+      const isUnchecked = !u.virustotalScore || vtScoreStr.includes('inactive') || vtScoreStr.includes('unconfigured') || vtScoreStr.includes('dormant') || vtScoreStr.includes('unindexed');
+      const isMal = u.status === 'MALICIOUS' || (Boolean(u.virustotalScore) && !isUnchecked && !u.virustotalScore.startsWith('0/'));
+      const isClean = u.status === 'CLEAN' || (Boolean(u.virustotalScore) && u.virustotalScore.startsWith('0/'));
       findings.push({
         label: cleanUrl.length > 35 ? cleanUrl.slice(0, 32) + '...' : cleanUrl,
         badge: u.virustotalScore || (u.status ? u.status : 'INSPECTED'),
@@ -163,17 +187,20 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
 
   if (analysis.attachments && analysis.attachments.length > 0) {
     analysis.attachments.slice(0, 2).forEach(att => {
+      const vtDetStr = (att.vtDetection || '').toLowerCase();
+      const isUnchecked = !att.vtDetection || vtDetStr.includes('inactive') || vtDetStr.includes('unconfigured') || vtDetStr.includes('dormant') || vtDetStr.includes('unindexed');
+      const isMal = att.status === 'MALICIOUS' || (Boolean(att.vtDetection) && !isUnchecked && !att.vtDetection.startsWith('0/'));
       findings.push({
         label: att.filename,
         badge: att.vtDetection ? att.vtDetection.split(' ')[0] : (att.status === 'MALICIOUS' ? 'FLAGGED' : 'CLEAN'),
-        status: att.status === 'MALICIOUS' ? 'mal' : 'clean'
+        status: isMal ? 'mal' : (att.status === 'CLEAN' ? 'clean' : 'warn')
       });
     });
   }
 
   if (findings.length === 0) {
     findings.push({
-      label: 'No embedded URLs or file attachments found in payload',
+      label: 'No suspicious URLs or embedded attachments detected',
       badge: 'CLEAN',
       status: 'clean'
     });
@@ -185,7 +212,7 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   const mlResultLabel = analysis.classification || (stampWord === 'PHISH' ? 'phish' : stampWord.toLowerCase());
 
   // Hash & SOC Recommendation
-  const fullHash = analysis.sha256 || analysis.sha256Hash || 'e3b0c44298f1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
+  const fullHash = analysis.sha256 || analysis.sha256Hash || analysis.custodyHash || (analysis.rawEml ? sha256Sync(analysis.rawEml) : sha256Sync(analysis.id || JSON.stringify(analysis)));
   const shortHash = fullHash.length > 26 ? `${fullHash.slice(0, 19)}...${fullHash.slice(-4)}` : fullHash;
   
   const socAction = stampStatus === 'bad'

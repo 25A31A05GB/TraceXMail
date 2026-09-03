@@ -303,7 +303,12 @@ export function extractHopsAndOriginIp(
   let currentValue = '';
 
   for (const line of lines) {
-    if (line.trim() === '' && !currentKey) break;
+    if (line.trim() === '') {
+      if (currentKey || Object.keys(auxiliaryHeaders).length > 0 || receivedHeaders.length > 0) {
+        break; // Boundary between headers and body reached
+      }
+      continue; // Skip any leading empty lines before first header
+    }
 
     if (/^[A-Za-z0-9-_]+:/.test(line)) {
       if (currentKey) {

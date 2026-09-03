@@ -4,6 +4,15 @@ import { resolveAsn } from './asn';
 import { resolveDns } from './dns';
 import { resolveRdap } from './rdap';
 import { resolveDomainIntelligence, extractBaseDomain, analyzeTyposquatting } from './domain';
+import {
+  lookupVirusTotalUrl,
+  lookupVirusTotalFileHash,
+  enrichWithVirusTotal,
+  isVirusTotalConfigured,
+  getVirusTotalStatus,
+  vtUrlLookupCache,
+  vtFileLookupCache
+} from './virustotal';
 import { geoIpCache, asnCache, dnsCache, rdapCache, threatIntelCache } from './cache';
 import { providerRateLimiter } from './rateLimiter';
 import { createProvenanceMetadata, MAXMIND_COPYRIGHT_NOTICE, MAXMIND_LICENSE_NOTICE } from './provenance';
@@ -105,6 +114,7 @@ export async function enrichIpFull(ipAddress: string): Promise<IpEnrichmentResul
 export * from './types';
 export * from './errors';
 export * from './provenance';
+export * from './virustotal';
 export {
   validateAndClassifyIp,
   resolveGeoIp,
@@ -114,6 +124,13 @@ export {
   resolveDomainIntelligence,
   extractBaseDomain,
   analyzeTyposquatting,
+  lookupVirusTotalUrl,
+  lookupVirusTotalFileHash,
+  enrichWithVirusTotal,
+  isVirusTotalConfigured,
+  getVirusTotalStatus,
+  vtUrlLookupCache,
+  vtFileLookupCache,
   geoIpCache,
   asnCache,
   dnsCache,

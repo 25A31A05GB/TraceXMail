@@ -28,6 +28,7 @@ import { forensicApi, CaseItem } from '../lib/api';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
+import { mapBackendCaseToAnalysis } from '../utils/parser';
 
 interface CasesViewProps {
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
@@ -180,7 +181,7 @@ export function CasesView({
 
   const handleInspectCase = (caseItem: any) => {
     // If it's a full EmailAnalysis object
-    if (caseItem.headers && caseItem.verdict) {
+    if (caseItem.headers && caseItem.verdict && caseItem.auth) {
       onSelectAnalysis(caseItem);
       onNavigateToOverview();
     } else if (caseItem.members && caseItem.members.length > 0) {
@@ -188,9 +189,14 @@ export function CasesView({
       setSelectedCaseDetail(caseItem);
       setNotesDraft(caseItem.analyst_notes || caseItem.description || caseItem.notes || '');
     } else {
-      // Find matching sample or default
-      const match = SAMPLE_ANALYSES.find((s) => s.id === caseItem.id) || SAMPLE_ANALYSES[0];
-      onSelectAnalysis(match);
+      // Find matching sample or map the backend case item into a complete EmailAnalysis object
+      const match = SAMPLE_ANALYSES.find((s) => s.id === caseItem.id);
+      if (match) {
+        onSelectAnalysis(match);
+      } else {
+        const mapped = mapBackendCaseToAnalysis(caseItem);
+        onSelectAnalysis(mapped);
+      }
       onNavigateToOverview();
     }
   };
@@ -1151,8 +1157,13 @@ export function CasesView({
                         </span>
                         <button
                           onClick={() => {
-                            const match = SAMPLE_ANALYSES.find((s) => s.id === (m.id || m.email_id)) || SAMPLE_ANALYSES[0];
-                            onSelectAnalysis(match);
+                            const match = SAMPLE_ANALYSES.find((s) => s.id === (m.id || m.email_id));
+                            if (match) {
+                              onSelectAnalysis(match);
+                            } else {
+                              const mapped = mapBackendCaseToAnalysis(m);
+                              onSelectAnalysis(mapped);
+                            }
                             onNavigateToOverview();
                             setSelectedCaseDetail(null);
                           }}

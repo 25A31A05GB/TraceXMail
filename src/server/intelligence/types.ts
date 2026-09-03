@@ -204,3 +204,55 @@ export interface IpEnrichmentResult {
   };
   provenance: ProvenanceMetadata;
 }
+
+export interface VirusTotalAnalysisStats {
+  malicious: number;
+  suspicious: number;
+  harmless: number;
+  undetected: number;
+  timeout?: number;
+}
+
+export interface VirusTotalUrlResult {
+  url: string;
+  urlId: string;
+  lookupStatus: IntelligenceLookupStatus;
+  isConfigured: boolean;
+  isMalicious: boolean;
+  isSuspicious: boolean;
+  positives: number;
+  totalEngines: number;
+  scoreString: string;
+  category: string;
+  reputation?: number;
+  lastAnalysisStats: VirusTotalAnalysisStats;
+  tags: string[];
+  firstSubmissionDate?: string;
+  lastAnalysisDate?: string;
+  retrievedAt: string;
+  cached: boolean;
+  provenance: ProvenanceMetadata;
+}
+
+export interface VirusTotalFileResult {
+  hash: string;
+  hashType: 'sha256' | 'sha1' | 'md5' | 'unknown';
+  lookupStatus: IntelligenceLookupStatus;
+  isConfigured: boolean;
+  isMalicious: boolean;
+  isSuspicious: boolean;
+  positives: number;
+  totalEngines: number;
+  scoreString: string;
+  meaningfulName?: string;
+  typeDescription?: string;
+  sizeBytes?: number;
+  reputation?: number;
+  lastAnalysisStats: VirusTotalAnalysisStats;
+  tags: string[];
+  firstSubmissionDate?: string;
+  lastAnalysisDate?: string;
+  retrievedAt: string;
+  cached: boolean;
+  provenance: ProvenanceMetadata;
+}

@@ -392,12 +392,42 @@ export const forensicApi = {
     return res.data;
   },
 
-  // VirusTotal API Threat Intelligence Enrichment
+  // VirusTotal API Threat Intelligence Integration
+  getVirusTotalStatus: async (): Promise<{
+    configured: boolean;
+    active: boolean;
+    provider: string;
+    endpoint: string;
+    message: string;
+    cacheStats?: { cachedUrls: number; cachedFiles: number };
+  }> => {
+    const res = await apiClient.get('/virustotal/status');
+    return res.data;
+  },
+
+  lookupVirusTotalUrl: async (url: string, forceRefresh = false): Promise<any> => {
+    const res = await apiClient.post('/virustotal/url', { url, force_refresh: forceRefresh });
+    return res.data;
+  },
+
+  lookupVirusTotalFile: async (hash: string, forceRefresh = false): Promise<any> => {
+    const res = await apiClient.post('/virustotal/file', { hash, force_refresh: forceRefresh });
+    return res.data;
+  },
+
   enrichVirusTotal: async (params: { caseId?: string; urls?: any[]; attachments?: any[]; existingLogs?: any[] }): Promise<{
     status: string;
     vt_active: boolean;
+    is_configured?: boolean;
+    message?: string;
     scanned_count: number;
     flagged_count: number;
+    api_status?: {
+      configured: boolean;
+      provider: string;
+      endpoint: string;
+      message: string;
+    };
     urls: any[];
     attachments: any[];
     logs: any[];

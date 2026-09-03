@@ -20,7 +20,7 @@
 ### Q2: "Isn't this just a bunch of if-else regular expressions?"
 **Defensible Answer:**
 > "No. TraceXMail implements a **two-tier hybrid architecture** separating probabilistic NLP from deterministic cryptographic protocol analysis.
-> - **Machine Learning:** The NLP classifier uses sublinear TF-IDF vectorization with bigram expansion and temperature-scaled softmax over 762 real-world records, achieving **100.00% accuracy and 1.000 Weighted F1 on the 154-sample held-out test partition** (and **99.87% ± 0.29% across 5-fold stratified cross-validation**). *(Note: As documented in our Model Card under 'Synthetic Enterprise Bias', this 100% test-set score reflects templated evaluation samples and is not presented as an unbounded production guarantee).*
+> - **Machine Learning:** The NLP classifier uses sublinear TF-IDF vectorization with bigram expansion and temperature-scaled softmax over 762 real-world records, achieving **100.00% accuracy and 1.000 Weighted F1 on the 154-sample held-out test partition** (and **100.00% ± 0.00% across 5-fold stratified cross-validation**). *(Cautionary Note: As documented in our Model Card under 'Synthetic Enterprise Bias', this 100.00% test score reflects evaluation on 154 held-out standardized samples and is not presented as an unbounded production guarantee; live mailboxes require defense-in-depth).*
 > - **Deterministic Protocol Verification:** RFC 7208 (SPF), RFC 6376 (DKIM), and RFC 7489 (DMARC) are not heuristics—they are formal cryptographic specifications. A DKIM 2048-bit RSA signature pass/fail cannot be determined by an ML model; it must be verified mathematically.
 > - **The Composite Threat Score** explicitly fuses these layers without double-counting, allocating 25 points to Cryptographic Authentication, 25 to Domain Intelligence, 20 to Network Infrastructure, 20 to ML Posterior, and 10 to Identity Heuristics."
 
@@ -30,7 +30,8 @@
 **Defensible Answer:**
 > "Our dataset consists of **762 verified unique records** across 5 mutually exclusive forensic classes (`Legitimate`: 440, `Phishing`: 134, `Impersonated`: 88, `Suspicious`: 58, `Fraud-related`: 42).
 > - **Provenance:** Sourced from public security research corpora (Jose Nazario Phishing Corpus), standardized enterprise invoices, Enron email archive subsets, and SEC BEC disclosures.
-> - **Zero Contamination:** Partitioning uses a strict **Stratified 80/20 train/test split (Seed 424242)**. All token vocabularies ($V \le 3,500$) and inverse document frequencies (IDF) are fitted strictly on the 608 training samples and applied out-of-sample to the 154 held-out test records.
+> - **Zero Contamination:** Partitioning uses a strict **Stratified 80/20 train/test split (Seed 424242)**. All token vocabularies ($V \le 3,500$) and inverse document frequencies (IDF) are fitted strictly on the 608 training samples and applied out-of-sample to the 154 held-out test records (88 Legitimate, 27 Phishing, 18 Impersonated, 12 Suspicious, 9 Fraud-related).
+> - **Cautionary Note on Test Set Size:** With 154 held-out samples and small support in edge classes (e.g. 9 Fraud, 12 Suspicious), we explicitly document this sample-size limitation in our Model Card rather than making overgeneralized claims.
 > - **Audit Artifacts:** Our methodology, class distributions, and train/test deduplication hashes are documented in `reports/DATASET_AUDIT.md`, `reports/MODEL_EVALUATION.md`, and `docs/MODEL_CARD.md`."
 
 ---
@@ -104,7 +105,7 @@
 
 | ❌ NEVER Say During the Demo | ✅ What You MUST Say Instead |
 | :--- | :--- |
-| "Our system has 100% accuracy and zero false positives." | "Our classifier achieved 94.8% accuracy and 0.942 weighted F1 across stratified 5-fold cross-validation." |
+| "Our system has 100% accuracy and zero false positives in the real world." | "Our classifier achieved 100.00% accuracy and 1.000 weighted F1 on our 154-sample held-out test partition (and 100.00% ± 0.00% across 5-fold cross-validation), though we emphasize this is measured on a standardized 762-sample corpus and requires caution before claiming unbounded production generalization." |
 | "We track the physical location of the hacker." | "We geolocate the earliest untrusted public MTA or ingress proxy relay across the RFC 1918 trust boundary." |
 | "This attack was launched by APT41 / Russian hackers." | "The ingress relay matches observed commodity proxy infrastructure; we avoid speculative nation-state attribution without multi-source intelligence." |
 | "Our AI engine guarantees this email is safe." | "The email satisfies all cryptographic authentication standards and presents clean ML risk indicators." |
