@@ -1,10 +1,9 @@
-import axios from 'axios';
-
 export interface SlackConfig {
-  webhookUrl: string;
+  botToken: string;
+  channelId: string;
+  minSeverity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'ALL';
+  webhookUrl?: string;
   autoSendAlerts: boolean;
-  minSeverity: 'ALL' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  channel?: string;
   username?: string;
 }
 
@@ -16,25 +15,35 @@ export interface SlackDeliveryLog {
   subject: string;
   severity: string;
   threat_score: number;
-  status: 'DELIVERED' | 'FAILED' | 'SKIPPED_SEVERITY' | 'UNCONFIGURED_WEBHOOK';
+  status: 'DELIVERED' | 'FAILED' | 'SKIPPED_SEVERITY' | 'SKIPPED_DUPLICATE' | 'DISABLED';
   status_code?: number;
   error?: string;
-  webhook_url_masked: string;
-  payload_preview: any;
+  bot_token_masked?: string;
+  channel_id?: string;
+  webhook_url_masked?: string;
+  payload_preview?: any;
 }
 
 let slackConfig: SlackConfig = {
+  botToken: process.env.SLACK_BOT_TOKEN || '',
+  channelId: process.env.SLACK_CHANNEL_ID || '',
+  minSeverity: ((process.env.SLACK_MIN_SEVERITY || 'HIGH').toUpperCase() as any) || 'HIGH',
   webhookUrl: process.env.SLACK_WEBHOOK_URL || '',
   autoSendAlerts: true,
-  minSeverity: 'MEDIUM',
-  channel: '#soc-threat-alerts',
   username: 'TraceXMail SOC Engine'
 };
 
 const deliveryLogs: SlackDeliveryLog[] = [];
+const sentAlertIds = new Set<string>();
 
 export function getSlackConfig(): SlackConfig {
-  return { ...slackConfig };
+  return {
+    ...slackConfig,
+    botToken: process.env.SLACK_BOT_TOKEN || slackConfig.botToken,
+    channelId: process.env.SLACK_CHANNEL_ID || slackConfig.channelId,
+    minSeverity: ((process.env.SLACK_MIN_SEVERITY || slackConfig.minSeverity || 'HIGH').toUpperCase() as any),
+    webhookUrl: process.env.SLACK_WEBHOOK_URL || slackConfig.webhookUrl
+  };
 }
 
 export function updateSlackConfig(updates: Partial<SlackConfig>): SlackConfig {
@@ -42,11 +51,26 @@ export function updateSlackConfig(updates: Partial<SlackConfig>): SlackConfig {
     ...slackConfig,
     ...updates
   };
-  return { ...slackConfig };
+  return getSlackConfig();
 }
 
 export function getSlackDeliveries(): SlackDeliveryLog[] {
   return [...deliveryLogs];
+}
+
+export function clearSentAlertCache(): void {
+  sentAlertIds.clear();
+}
+
+export function maskToken(token: string): string {
+  if (!token) return 'Not Configured';
+  try {
+    const trimmed = token.trim();
+    if (trimmed.length <= 8) return '****';
+    return `${trimmed.slice(0, 5)}...${trimmed.slice(-4)}`;
+  } catch {
+    return '****';
+  }
 }
 
 export function maskWebhookUrl(url: string): string {
@@ -72,7 +96,7 @@ const SEVERITY_LEVELS: Record<string, number> = {
 
 export function shouldSendAlert(severity: string, minSeverity: string): boolean {
   const alertLevel = SEVERITY_LEVELS[severity?.toUpperCase()] ?? 2;
-  const targetLevel = SEVERITY_LEVELS[minSeverity?.toUpperCase()] ?? 2;
+  const targetLevel = SEVERITY_LEVELS[minSeverity?.toUpperCase()] ?? 3; // Default HIGH = 3
   return alertLevel >= targetLevel;
 }
 
@@ -102,383 +126,549 @@ export interface DispatchSlackParams {
   to?: string;
   subject: string;
   fromDomain: string;
-  primaryGeoHop?: {
-    fromIp?: string;
-    city?: string;
-    country?: string;
-    countryCode?: string;
-    asn?: string;
-    org?: string;
-    isPrivate?: boolean;
-    subnetType?: string;
-  };
-  domainIntelligence?: {
-    domain: string;
-    status: string;
-    registrar?: string;
-    creationDate?: string;
-  };
-  spfResult?: { result: string; details?: string };
-  dmarcResult?: { result: string; details?: string };
+  primaryGeoHop?: any;
+  domainIntelligence?: any;
+  spfResult?: any;
+  dmarcResult?: any;
   isTyposquat?: boolean;
   torHop?: any;
+  confidence?: string | number;
+  evidenceId?: string;
+}
+
+export function buildSlackMessagePayload(params: {
+  severity: string;
+  verdict: string;
+  threatScore: number;
+  subject: string;
+  sender: string;
+  category: string;
+  caseId: string;
+  evidenceId: string;
+  description: string;
+  confidence: string;
+  timestamp: string;
+}) {
+  const {
+    severity,
+    verdict,
+    threatScore,
+    subject,
+    sender,
+    category,
+    caseId,
+    evidenceId,
+    description,
+    confidence,
+    timestamp
+  } = params;
+
+  const text = [
+    `🚨 TraceXMail Security Alert`,
+    ``,
+    `Severity: ${severity}`,
+    `Verdict: ${verdict}`,
+    `Threat Score: ${threatScore}`,
+    ``,
+    `Subject: ${subject}`,
+    `Sender: ${sender}`,
+    `Category: ${category}`,
+    ``,
+    `Case: ${caseId}`,
+    `Evidence: ${evidenceId}`,
+    ``,
+    `Description:`,
+    `${description}`,
+    ``,
+    `Confidence: ${confidence}`,
+    ``,
+    `Timestamp: ${timestamp}`
+  ].join('\n');
+
+  const blocks = [
+    {
+      type: 'header',
+      text: {
+        type: 'plain_text',
+        text: '🚨 TraceXMail Security Alert',
+        emoji: true
+      }
+    },
+    {
+      type: 'section',
+      fields: [
+        { type: 'mrkdwn', text: `*Severity:*\n${severity}` },
+        { type: 'mrkdwn', text: `*Verdict:*\n${verdict}` },
+        { type: 'mrkdwn', text: `*Threat Score:*\n${threatScore}` },
+        { type: 'mrkdwn', text: `*Category:*\n${category}` },
+        { type: 'mrkdwn', text: `*Subject:*\n${subject}` },
+        { type: 'mrkdwn', text: `*Sender:*\n\`${sender}\`` },
+        { type: 'mrkdwn', text: `*Case:*\n\`${caseId}\`` },
+        { type: 'mrkdwn', text: `*Evidence:*\n\`${evidenceId}\`` }
+      ]
+    },
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*Description:*\n${description}`
+      }
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `*Confidence:* ${confidence} | *Timestamp:* ${timestamp}`
+        }
+      ]
+    }
+  ];
+
+  return { text, blocks };
 }
 
 export function buildSlackBlockKitPayload(params: DispatchSlackParams) {
   const {
     caseItem,
     alertItem,
-    fileName = 'email_submission.eml',
     threatScore,
     verdict,
     from,
-    to,
     subject,
-    fromDomain,
-    primaryGeoHop,
-    domainIntelligence,
-    spfResult,
-    dmarcResult,
-    isTyposquat,
-    torHop
+    confidence = 'N/A',
+    evidenceId = 'N/A'
   } = params;
 
-  const sev = caseItem.severity?.toUpperCase() || 'HIGH';
-  const emoji = sev === 'CRITICAL' ? '🚨' : sev === 'HIGH' ? '⚠️' : sev === 'MEDIUM' ? '⚡' : '🔍';
-  const alertTitle = alertItem?.title || `${emoji} [${sev}] Threat Detected: ${subject}`;
+  const sev = (caseItem?.severity || alertItem?.severity || 'HIGH').toUpperCase();
+  const description = alertItem?.description || caseItem?.description || 'TraceXMail Security Alert';
 
-  const originIp = primaryGeoHop?.fromIp || '127.0.0.1';
-  const originLoc = primaryGeoHop?.isPrivate 
-    ? `${primaryGeoHop.subnetType || 'RFC 1918 Private LAN'}`
-    : `${primaryGeoHop?.city || 'Public Transit'}, ${primaryGeoHop?.country || 'Global Internet'}`;
-
-  const domainStatus = domainIntelligence?.status ? domainIntelligence.status.toUpperCase() : 'RESOLVED';
-  const authStatus = `SPF: *${spfResult?.result?.toUpperCase() || 'PASS'}* | DMARC: *${dmarcResult?.result?.toUpperCase() || 'PASS'}*`;
-
-  const threatType = isTyposquat 
-    ? '🚨 Lookalike Typosquatting Domain'
-    : torHop 
-    ? '⚠️ Tor Exit Node Routing'
-    : threatScore >= 75 
-    ? '🔥 High-Risk Phishing Lure'
-    : '🛡️ Forensic RFC822 Record';
-
-  return {
-    text: `${emoji} [TraceXMail SOC Alert] ${alertTitle} - Risk Score: ${threatScore}/100`,
-    blocks: [
-      {
-        type: 'header',
-        text: {
-          type: 'plain_text',
-          text: `🛡️ TraceXMail Forensic Threat Alert`,
-          emoji: true
-        }
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*${alertTitle}*\n*Case ID:* \`${caseItem.id}\` | *Severity:* *${sev}* | *Risk Score:* *${threatScore}/100*\n*Verdict:* \`${verdict}\`\n*Category:* ${threatType}`
-        }
-      },
-      {
-        type: 'divider'
-      },
-      {
-        type: 'section',
-        fields: [
-          {
-            type: 'mrkdwn',
-            text: `*Sender Address:*\n\`${from}\``
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Recipient:*\n\`${to || 'SOC Quarantine Mailbox'}\``
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Origin Hop & Geolocation:*\n\`${originIp}\`\n_${originLoc}_`
-          },
-          {
-            type: 'mrkdwn',
-            text: `*Domain & Auth Status:*\n\`${fromDomain}\` (${domainStatus})\n${authStatus}`
-          }
-        ]
-      },
-      ...(caseItem.description ? [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `*Forensic Summary:*\n>${caseItem.description.replace(/\n/g, '\n>')}`
-          }
-        }
-      ] : []),
-      {
-        type: 'context',
-        elements: [
-          {
-            type: 'mrkdwn',
-            text: `🕒 *Analyzed At:* ${new Date().toUTCString()} | *Evidence File:* \`${fileName}\` | *Engine:* \`TraceXMail v2.2\``
-          }
-        ]
-      }
-    ]
-  };
+  return buildSlackMessagePayload({
+    severity: sev,
+    verdict: verdict || (sev === 'CRITICAL' ? 'MALICIOUS / PHISHING' : sev === 'HIGH' ? 'HIGH RISK' : 'SUSPICIOUS'),
+    threatScore: threatScore || 85,
+    subject: subject || caseItem?.title || 'Security Alert',
+    sender: from || 'Unknown Sender',
+    category: alertItem?.category || 'THREAT_DETECTION',
+    caseId: caseItem?.id || 'N/A',
+    evidenceId,
+    description,
+    confidence: String(confidence),
+    timestamp: new Date().toISOString()
+  });
 }
 
-export async function dispatchSlackCaseAlert(params: DispatchSlackParams): Promise<SlackDeliveryLog> {
-  const { caseItem, alertItem, subject, threatScore } = params;
+export async function sendSlackSecurityAlert(
+  alert: {
+    id?: string;
+    case_id?: string;
+    title?: string;
+    description?: string;
+    severity?: string;
+    threat_score?: number;
+    category?: string;
+    sender?: string;
+    subject?: string;
+    timestamp?: string;
+  },
+  extraData?: {
+    caseItem?: any;
+    evidenceId?: string;
+    confidence?: string | number;
+    verdict?: string;
+    from?: string;
+    to?: string;
+    subject?: string;
+    fromDomain?: string;
+    primaryGeoHop?: any;
+    domainIntelligence?: any;
+    spfResult?: any;
+    dmarcResult?: any;
+    isTyposquat?: boolean;
+    torHop?: any;
+    isTestCall?: boolean;
+  }
+): Promise<SlackDeliveryLog | undefined> {
+  const alertId = alert.id || `alt_${Date.now()}`;
+  const caseId = alert.case_id || extraData?.caseItem?.id || 'N/A';
+  const evidenceId = extraData?.evidenceId || extraData?.caseItem?.evidence_id || 'N/A';
+  const severity = (alert.severity || extraData?.caseItem?.severity || 'HIGH').toUpperCase();
+  const threatScore = alert.threat_score ?? extraData?.caseItem?.threat_score ?? 85;
+  const subject = alert.subject || extraData?.subject || extraData?.caseItem?.title || alert.title || 'Security Alert';
+  const sender = alert.sender || extraData?.from || 'Unknown Sender';
+  const category = alert.category || 'THREAT_DETECTION';
+  const description = alert.description || extraData?.caseItem?.description || 'Automated security alert created by TraceXMail.';
+  const timestamp = alert.timestamp || new Date().toISOString();
+
+  let verdict = extraData?.verdict;
+  if (!verdict) {
+    if (severity === 'CRITICAL') verdict = 'MALICIOUS / PHISHING';
+    else if (severity === 'HIGH') verdict = 'HIGH RISK THREAT';
+    else if (severity === 'MEDIUM') verdict = 'SUSPICIOUS';
+    else verdict = 'CLEAN / INFORMATIONAL';
+  }
+
+  let confidenceStr = 'N/A';
+  if (extraData?.confidence !== undefined && extraData.confidence !== null) {
+    confidenceStr = String(extraData.confidence);
+  } else if (extraData?.caseItem?.ml_confidence !== undefined) {
+    const val = extraData.caseItem.ml_confidence;
+    confidenceStr = typeof val === 'number' ? `${(val * 100).toFixed(0)}%` : String(val);
+  } else if (extraData?.caseItem?.phishing_probability !== undefined) {
+    const val = extraData.caseItem.phishing_probability;
+    confidenceStr = typeof val === 'number' ? `${(val * 100).toFixed(0)}%` : String(val);
+  }
+
   const config = getSlackConfig();
-  const severity = caseItem.severity || 'HIGH';
+  const botToken = config.botToken;
+  const channelId = config.channelId;
+  const minSeverity = config.minSeverity;
+  const webhookUrl = config.webhookUrl;
 
   const logId = `slack_log_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-  const payload = buildSlackBlockKitPayload(params);
 
-  // Check if auto-send is enabled and severity satisfies threshold
-  if (!config.autoSendAlerts) {
+  // 1. Check duplicate prevention
+  if (!extraData?.isTestCall && alertId && sentAlertIds.has(alertId)) {
+    console.log(`[Slack] Notification skipped: Duplicate alert ID ${alertId}`);
     const log: SlackDeliveryLog = {
       id: logId,
       timestamp: new Date().toISOString(),
-      case_id: caseItem.id,
-      alert_id: alertItem?.id,
+      case_id: caseId,
+      alert_id: alertId,
+      subject,
+      severity,
+      threat_score: threatScore,
+      status: 'SKIPPED_DUPLICATE',
+      error: `Duplicate alert ID ${alertId}`
+    };
+    return log;
+  }
+
+  if (!extraData?.isTestCall && alertId) {
+    sentAlertIds.add(alertId);
+    if (sentAlertIds.size > 1000) {
+      const first = sentAlertIds.values().next().value;
+      if (first) sentAlertIds.delete(first);
+    }
+  }
+
+  // 2. Check severity threshold
+  if (!extraData?.isTestCall && !shouldSendAlert(severity, minSeverity)) {
+    console.log(`[Slack] Notification skipped: Alert severity ${severity} below minimum threshold ${minSeverity}`);
+    const log: SlackDeliveryLog = {
+      id: logId,
+      timestamp: new Date().toISOString(),
+      case_id: caseId,
+      alert_id: alertId,
       subject,
       severity,
       threat_score: threatScore,
       status: 'SKIPPED_SEVERITY',
-      error: 'Auto-send is disabled in Slack settings',
-      webhook_url_masked: maskWebhookUrl(config.webhookUrl),
-      payload_preview: payload
+      error: `Severity ${severity} below threshold ${minSeverity}`
     };
-    deliveryLogs.unshift(log);
-    if (deliveryLogs.length > 100) deliveryLogs.pop();
     return log;
   }
 
-  if (!shouldSendAlert(severity, config.minSeverity)) {
+  // 3. Check configuration
+  const hasBotConfig = Boolean(botToken && channelId);
+  const hasWebhookConfig = Boolean(webhookUrl && webhookUrl.startsWith('http'));
+
+  if (!hasBotConfig && !hasWebhookConfig) {
+    console.log('[Slack] Disabled: missing SLACK_BOT_TOKEN or SLACK_CHANNEL_ID');
     const log: SlackDeliveryLog = {
       id: logId,
       timestamp: new Date().toISOString(),
-      case_id: caseItem.id,
-      alert_id: alertItem?.id,
+      case_id: caseId,
+      alert_id: alertId,
       subject,
       severity,
       threat_score: threatScore,
-      status: 'SKIPPED_SEVERITY',
-      error: `Severity ${severity} does not meet minimum threshold ${config.minSeverity}`,
-      webhook_url_masked: maskWebhookUrl(config.webhookUrl),
-      payload_preview: payload
+      status: 'DISABLED',
+      error: 'Missing SLACK_BOT_TOKEN or SLACK_CHANNEL_ID'
     };
-    deliveryLogs.unshift(log);
-    if (deliveryLogs.length > 100) deliveryLogs.pop();
     return log;
   }
 
-  // If webhook URL is not configured
-  if (!config.webhookUrl || !config.webhookUrl.trim().startsWith('http')) {
-    const log: SlackDeliveryLog = {
-      id: logId,
-      timestamp: new Date().toISOString(),
-      case_id: caseItem.id,
-      alert_id: alertItem?.id,
-      subject,
-      severity,
-      threat_score: threatScore,
-      status: 'UNCONFIGURED_WEBHOOK',
-      error: 'Slack Webhook URL is not configured. Set SLACK_WEBHOOK_URL or configure in Alerts/Settings.',
-      webhook_url_masked: 'Not Configured',
-      payload_preview: payload
-    };
-    deliveryLogs.unshift(log);
-    if (deliveryLogs.length > 100) deliveryLogs.pop();
-    console.log(`[Slack Dispatch Simulated] Webhook not configured. Alert for case "${caseItem.id}" logged to delivery vault.`);
-    return log;
-  }
+  const { text, blocks } = buildSlackMessagePayload({
+    severity,
+    verdict,
+    threatScore,
+    subject,
+    sender,
+    category,
+    caseId,
+    evidenceId,
+    description,
+    confidence: confidenceStr,
+    timestamp
+  });
 
-  // Send real HTTP POST to Slack Webhook
   try {
-    const response = await axios.post(config.webhookUrl, payload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 8000
-    });
+    let response: Response;
+    let isWebApi = false;
 
-    const log: SlackDeliveryLog = {
-      id: logId,
-      timestamp: new Date().toISOString(),
-      case_id: caseItem.id,
-      alert_id: alertItem?.id,
-      subject,
-      severity,
-      threat_score: threatScore,
-      status: 'DELIVERED',
-      status_code: response.status,
-      webhook_url_masked: maskWebhookUrl(config.webhookUrl),
-      payload_preview: payload
-    };
+    if (hasBotConfig) {
+      isWebApi = true;
+      response = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${botToken}`,
+          'Content-Type': 'application/json; charset=utf-8'
+        },
+        body: JSON.stringify({
+          channel: channelId,
+          text,
+          blocks
+        })
+      });
+    } else {
+      response = await fetch(webhookUrl!, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          text,
+          blocks
+        })
+      });
+    }
 
-    deliveryLogs.unshift(log);
-    if (deliveryLogs.length > 100) deliveryLogs.pop();
-    console.log(`[Slack Dispatch Success] Dispatched alert for case "${caseItem.id}" to Slack (${response.status} OK).`);
-    return log;
+    if (isWebApi) {
+      const data: any = await response.json();
+      if (response.ok && data.ok) {
+        if (alertId) {
+          sentAlertIds.add(alertId);
+          if (sentAlertIds.size > 1000) {
+            const first = sentAlertIds.values().next().value;
+            if (first) sentAlertIds.delete(first);
+          }
+        }
+        console.log('[Slack] Notification sent');
+        const log: SlackDeliveryLog = {
+          id: logId,
+          timestamp: new Date().toISOString(),
+          case_id: caseId,
+          alert_id: alertId,
+          subject,
+          severity,
+          threat_score: threatScore,
+          status: 'DELIVERED',
+          status_code: response.status,
+          bot_token_masked: maskToken(botToken),
+          channel_id: channelId,
+          payload_preview: { text, blocks }
+        };
+        deliveryLogs.unshift(log);
+        if (deliveryLogs.length > 100) deliveryLogs.pop();
+        return log;
+      } else {
+        const reason = data.error || `HTTP ${response.status} ${response.statusText}`;
+        console.log(`[Slack] Notification failed: ${reason}`);
+        const log: SlackDeliveryLog = {
+          id: logId,
+          timestamp: new Date().toISOString(),
+          case_id: caseId,
+          alert_id: alertId,
+          subject,
+          severity,
+          threat_score: threatScore,
+          status: 'FAILED',
+          status_code: response.status,
+          error: reason,
+          bot_token_masked: maskToken(botToken),
+          channel_id: channelId,
+          payload_preview: { text, blocks }
+        };
+        deliveryLogs.unshift(log);
+        if (deliveryLogs.length > 100) deliveryLogs.pop();
+        return log;
+      }
+    } else {
+      if (response.ok) {
+        if (alertId) {
+          sentAlertIds.add(alertId);
+          if (sentAlertIds.size > 1000) {
+            const first = sentAlertIds.values().next().value;
+            if (first) sentAlertIds.delete(first);
+          }
+        }
+        console.log('[Slack] Notification sent');
+        const log: SlackDeliveryLog = {
+          id: logId,
+          timestamp: new Date().toISOString(),
+          case_id: caseId,
+          alert_id: alertId,
+          subject,
+          severity,
+          threat_score: threatScore,
+          status: 'DELIVERED',
+          status_code: response.status,
+          webhook_url_masked: maskWebhookUrl(webhookUrl!),
+          payload_preview: { text, blocks }
+        };
+        deliveryLogs.unshift(log);
+        if (deliveryLogs.length > 100) deliveryLogs.pop();
+        return log;
+      } else {
+        const errBody = await response.text();
+        console.log(`[Slack] Notification failed: ${errBody || response.statusText}`);
+        const log: SlackDeliveryLog = {
+          id: logId,
+          timestamp: new Date().toISOString(),
+          case_id: caseId,
+          alert_id: alertId,
+          subject,
+          severity,
+          threat_score: threatScore,
+          status: 'FAILED',
+          status_code: response.status,
+          error: errBody || response.statusText,
+          webhook_url_masked: maskWebhookUrl(webhookUrl!),
+          payload_preview: { text, blocks }
+        };
+        deliveryLogs.unshift(log);
+        if (deliveryLogs.length > 100) deliveryLogs.pop();
+        return log;
+      }
+    }
   } catch (err: any) {
-    const errorMsg = err.response?.data || err.message || 'Network error delivering to Slack webhook';
-    const statusCode = err.response?.status;
-
+    const reason = err?.message || 'Network exception during Slack request';
+    console.log(`[Slack] Notification failed: ${reason}`);
     const log: SlackDeliveryLog = {
       id: logId,
       timestamp: new Date().toISOString(),
-      case_id: caseItem.id,
-      alert_id: alertItem?.id,
+      case_id: caseId,
+      alert_id: alertId,
       subject,
       severity,
       threat_score: threatScore,
       status: 'FAILED',
-      status_code: statusCode,
-      error: typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg),
-      webhook_url_masked: maskWebhookUrl(config.webhookUrl),
-      payload_preview: payload
+      error: reason,
+      bot_token_masked: maskToken(botToken),
+      channel_id: channelId,
+      payload_preview: { text, blocks }
     };
-
     deliveryLogs.unshift(log);
     if (deliveryLogs.length > 100) deliveryLogs.pop();
-    console.warn(`[Slack Dispatch Failed] Failed to dispatch alert for case "${caseItem.id}" to Slack:`, errorMsg);
     return log;
   }
 }
 
-export async function sendTestSlackAlert(targetWebhookUrl?: string): Promise<{
+export async function dispatchSlackCaseAlert(params: DispatchSlackParams): Promise<SlackDeliveryLog> {
+  const result = await sendSlackSecurityAlert(
+    {
+      id: params.alertItem?.id || `alt_${Date.now()}`,
+      case_id: params.caseItem?.id,
+      title: params.alertItem?.title || params.caseItem?.title,
+      description: params.alertItem?.description || params.caseItem?.description,
+      severity: params.alertItem?.severity || params.caseItem?.severity,
+      threat_score: params.threatScore || params.caseItem?.threat_score,
+      category: params.alertItem?.category || 'THREAT_DETECTION',
+      sender: params.from,
+      subject: params.subject
+    },
+    {
+      caseItem: params.caseItem,
+      evidenceId: params.evidenceId,
+      confidence: params.confidence,
+      verdict: params.verdict,
+      from: params.from,
+      to: params.to,
+      subject: params.subject,
+      fromDomain: params.fromDomain,
+      primaryGeoHop: params.primaryGeoHop,
+      domainIntelligence: params.domainIntelligence,
+      spfResult: params.spfResult,
+      dmarcResult: params.dmarcResult,
+      isTyposquat: params.isTyposquat,
+      torHop: params.torHop
+    }
+  );
+
+  return result || {
+    id: `slack_log_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+    subject: params.subject,
+    severity: params.caseItem?.severity || 'HIGH',
+    threat_score: params.threatScore,
+    status: 'DISABLED',
+    error: 'Slack dispatch skipped'
+  };
+}
+
+export async function sendTestSlackAlert(
+  targetBotToken?: string,
+  targetChannelId?: string,
+  targetWebhookUrl?: string
+): Promise<{
   success: boolean;
   status: string;
   statusCode?: number;
   message: string;
-  log: SlackDeliveryLog;
+  log?: SlackDeliveryLog;
 }> {
-  const urlToUse = targetWebhookUrl?.trim() || slackConfig.webhookUrl;
-
-  const testParams: DispatchSlackParams = {
-    caseItem: {
-      id: `case-test-${Date.now()}`,
-      title: '🚨 [TEST ALERT] Targeted Executive Impersonation (Wire Fraud Lure)',
-      description: 'Synthetic validation test triggered by SOC analyst to verify Slack alert channel dispatch and Block Kit formatting.',
-      severity: 'CRITICAL',
-      threat_score: 95,
-      status: 'OPEN',
-      assigned_user: 'Lead SOC Analyst'
-    },
-    alertItem: {
-      id: `alt_test_${Date.now()}`,
-      title: '🚨 [CRITICAL] Synthetic SOC Alert Dispatch Test',
-      description: 'Verifying end-to-end integration with Slack incoming webhooks.',
-      severity: 'CRITICAL',
-      threat_score: 95,
-      category: 'TEST_DISPATCH'
-    },
-    fileName: 'synthetic_bec_wire_lure.eml',
-    threatScore: 95,
-    verdict: 'MALICIOUS (PHISHING & BEC)',
-    from: '"Chief Financial Officer" <cfo-office@secure-exec-payroll.com>',
-    to: 'finance-desk@enterprise-corp.sec',
+  const testAlert = {
+    id: `alt_test_${Date.now()}`,
+    case_id: `case-test-${Date.now()}`,
+    title: '🚨 TraceXMail Security Alert (Test Diagnostic)',
+    description: 'Synthetic validation test triggered to verify Slack alert channel integration, credentials, and Block Kit formatting.',
+    severity: 'CRITICAL',
+    threat_score: 95,
+    category: 'TEST_DIAGNOSTIC',
+    sender: 'cfo-office@secure-exec-payroll.com',
     subject: 'URGENT: Verify Updated Wire Transfer Instructions for Q3 Settlement',
-    fromDomain: 'secure-exec-payroll.com',
-    primaryGeoHop: {
-      fromIp: '185.220.101.5',
-      city: 'Sofia',
-      country: 'Bulgaria',
-      countryCode: 'BG',
-      asn: 'AS200548',
-      org: 'Zettahost Cyber Ltd',
-      isPrivate: false
-    },
-    domainIntelligence: {
-      domain: 'secure-exec-payroll.com',
-      status: 'active',
-      registrar: 'NameCheap Inc.',
-      creationDate: '2026-08-15'
-    },
-    spfResult: { result: 'FAIL', details: 'IP 185.220.101.5 not authorized by domain SPF record' },
-    dmarcResult: { result: 'FAIL', details: 'DMARC alignment failed: p=reject' },
-    isTyposquat: true,
-    torHop: { fromIp: '185.220.101.5' }
+    timestamp: new Date().toISOString()
   };
 
-  const payload = buildSlackBlockKitPayload(testParams);
-  const logId = `slack_test_${Date.now()}`;
+  const currentBotToken = process.env.SLACK_BOT_TOKEN;
+  const currentChannelId = process.env.SLACK_CHANNEL_ID;
+  const currentWebhook = process.env.SLACK_WEBHOOK_URL;
 
-  if (!urlToUse || !urlToUse.startsWith('http')) {
-    const log: SlackDeliveryLog = {
-      id: logId,
-      timestamp: new Date().toISOString(),
-      case_id: testParams.caseItem.id,
-      alert_id: testParams.alertItem?.id,
-      subject: testParams.subject,
-      severity: 'CRITICAL',
-      threat_score: 95,
-      status: 'UNCONFIGURED_WEBHOOK',
-      error: 'Slack Webhook URL is empty or invalid. Please provide a valid https://hooks.slack.com/... URL.',
-      webhook_url_masked: 'Not Configured',
-      payload_preview: payload
-    };
-    deliveryLogs.unshift(log);
-    return {
-      success: false,
-      status: 'UNCONFIGURED_WEBHOOK',
-      message: 'Slack Webhook URL is not configured. Please paste your Incoming Webhook URL to test.',
-      log
-    };
-  }
+  if (targetBotToken) process.env.SLACK_BOT_TOKEN = targetBotToken.trim();
+  if (targetChannelId) process.env.SLACK_CHANNEL_ID = targetChannelId.trim();
+  if (targetWebhookUrl) process.env.SLACK_WEBHOOK_URL = targetWebhookUrl.trim();
 
   try {
-    const res = await axios.post(urlToUse, payload, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 8000
+    const log = await sendSlackSecurityAlert(testAlert, {
+      confidence: '98%',
+      evidenceId: `EV-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+      verdict: 'MALICIOUS / PHISHING',
+      isTestCall: true
     });
 
-    const log: SlackDeliveryLog = {
-      id: logId,
-      timestamp: new Date().toISOString(),
-      case_id: testParams.caseItem.id,
-      alert_id: testParams.alertItem?.id,
-      subject: testParams.subject,
-      severity: 'CRITICAL',
-      threat_score: 95,
-      status: 'DELIVERED',
-      status_code: res.status,
-      webhook_url_masked: maskWebhookUrl(urlToUse),
-      payload_preview: payload
-    };
-    deliveryLogs.unshift(log);
+    if (log && log.status === 'DELIVERED') {
+      return {
+        success: true,
+        status: 'DELIVERED',
+        statusCode: log.status_code || 200,
+        message: 'Test notification sent',
+        log
+      };
+    } else if (log && log.status === 'DISABLED') {
+      return {
+        success: false,
+        status: 'DISABLED',
+        message: '[Slack] Disabled: missing SLACK_BOT_TOKEN or SLACK_CHANNEL_ID',
+        log
+      };
+    } else {
+      return {
+        success: false,
+        status: log?.status || 'FAILED',
+        statusCode: log?.status_code,
+        message: `Slack test notification failed: ${log?.error || 'Unknown error'}`,
+        log
+      };
+    }
+  } finally {
+    if (currentBotToken !== undefined) process.env.SLACK_BOT_TOKEN = currentBotToken;
+    else delete process.env.SLACK_BOT_TOKEN;
 
-    return {
-      success: true,
-      status: 'DELIVERED',
-      statusCode: res.status,
-      message: 'Test notification successfully delivered to Slack channel!',
-      log
-    };
-  } catch (err: any) {
-    const errorMsg = err.response?.data || err.message || 'Error delivering to Slack';
-    const log: SlackDeliveryLog = {
-      id: logId,
-      timestamp: new Date().toISOString(),
-      case_id: testParams.caseItem.id,
-      alert_id: testParams.alertItem?.id,
-      subject: testParams.subject,
-      severity: 'CRITICAL',
-      threat_score: 95,
-      status: 'FAILED',
-      status_code: err.response?.status,
-      error: typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg),
-      webhook_url_masked: maskWebhookUrl(urlToUse),
-      payload_preview: payload
-    };
-    deliveryLogs.unshift(log);
+    if (currentChannelId !== undefined) process.env.SLACK_CHANNEL_ID = currentChannelId;
+    else delete process.env.SLACK_CHANNEL_ID;
 
-    return {
-      success: false,
-      status: 'FAILED',
-      statusCode: err.response?.status,
-      message: `Failed to deliver test alert to Slack: ${typeof errorMsg === 'string' ? errorMsg : JSON.stringify(errorMsg)}`,
-      log
-    };
+    if (currentWebhook !== undefined) process.env.SLACK_WEBHOOK_URL = currentWebhook;
+    else delete process.env.SLACK_WEBHOOK_URL;
   }
 }

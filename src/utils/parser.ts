@@ -187,12 +187,17 @@ function estimateGeo(ip?: string) {
 }
 
 
-export function getHeaderCaseInsensitive(map: Record<string, string>, name: string): string | undefined {
+export function getHeaderCaseInsensitive(map: Record<string, string | string[] | undefined>, name: string): string | undefined {
   if (!map) return undefined;
-  if (map[name] !== undefined) return map[name];
+  if (map[name] !== undefined) {
+    const val = map[name];
+    return Array.isArray(val) ? val.join('\n') : val;
+  }
   const lowerName = name.toLowerCase();
   for (const [k, v] of Object.entries(map)) {
-    if (k.toLowerCase() === lowerName) return v;
+    if (k.toLowerCase() === lowerName) {
+      return Array.isArray(v) ? v.join('\n') : v;
+    }
   }
   return undefined;
 }
@@ -205,10 +210,18 @@ export function mapBackendCaseToAnalysis(
   const data = apiResponse?.analysis || (apiResponse?.hops ? apiResponse : apiResponse?.case) || apiResponse || {};
 
   const headersObj = data.headers || {};
-  let allHeadersMap: Record<string, string> = {};
+  let allHeadersMap: Record<string, string | string[]> = {};
   if (Array.isArray(headersObj)) {
     headersObj.forEach((h: any) => {
-      if (h.name && h.value) allHeadersMap[h.name] = h.value;
+      if (h.name && h.value) {
+        const existing = allHeadersMap[h.name];
+        if (existing) {
+          if (Array.isArray(existing)) existing.push(h.value);
+          else allHeadersMap[h.name] = [existing, h.value];
+        } else {
+          allHeadersMap[h.name] = h.value;
+        }
+      }
     });
   } else if (typeof headersObj === 'object' && headersObj !== null) {
     if (headersObj.allHeaders && typeof headersObj.allHeaders === 'object') {
@@ -372,29 +385,90 @@ export function mapBackendCaseToAnalysis(
   // Auth
   const dataAuth = data.auth || data.authResults || {};
   const dnsAuth = data.dns_auth || {};
+
+  const headerParsedAuth = parseAuthenticationHeaders(allHeadersMap, {
+    fromDomain: fromDomainFallback || (fromEmail ? fromEmail.split('@')[1] : undefined),
+    fromEmail,
+    originIp: hops[0]?.fromIp
+  });
+
+  const getSpfStatus = (): AuthResults['spf']['status'] => {
+    const raw = (dataAuth.spf?.status && dataAuth.spf.status !== 'NONE')
+      ? dataAuth.spf.status
+      : (dnsAuth.spf?.status && dnsAuth.spf.status !== 'NONE')
+        ? dnsAuth.spf.status
+        : headerParsedAuth.spf.status;
+    const s = (raw || 'NONE').toUpperCase();
+    if (s === 'PASS' || s === 'PASSED') return 'PASS';
+    if (s === 'FAIL' || s === 'FAILED' || s === 'HARDFAIL') return 'FAIL';
+    if (s === 'SOFTFAIL' || s === 'SOFT_FAIL' || s === 'SOFT-FAIL') return 'SOFTFAIL';
+    if (s === 'NEUTRAL') return 'NEUTRAL';
+    return 'NONE';
+  };
+
+  const getDkimStatus = (): AuthResults['dkim']['status'] => {
+    const raw = (dataAuth.dkim?.status && dataAuth.dkim.status !== 'NONE')
+      ? dataAuth.dkim.status
+      : (dnsAuth.dkim?.status && dnsAuth.dkim.status !== 'NONE')
+        ? dnsAuth.dkim.status
+        : headerParsedAuth.dkim.status;
+    const s = (raw || 'NONE').toUpperCase();
+    if (s === 'PASS' || s === 'PASSED' || s === 'VERIFIED') return 'PASS';
+    if (s === 'FAIL' || s === 'FAILED' || s === 'BAD') return 'FAIL';
+    if (s === 'INVALID') return 'INVALID';
+    if (s === 'NEUTRAL') return 'NEUTRAL';
+    return 'NONE';
+  };
+
+  const getDmarcStatus = (): AuthResults['dmarc']['status'] => {
+    const raw = (dataAuth.dmarc?.status && dataAuth.dmarc.status !== 'NONE')
+      ? dataAuth.dmarc.status
+      : (dnsAuth.dmarc?.status && dnsAuth.dmarc.status !== 'NONE')
+        ? dnsAuth.dmarc.status
+        : headerParsedAuth.dmarc.status;
+    const s = (raw || 'NONE').toUpperCase();
+    if (s === 'PASS' || s === 'PASSED') return 'PASS';
+    if (s === 'REJECT' || s === 'REJECTED') return 'REJECT';
+    if (s === 'QUARANTINE') return 'QUARANTINE';
+    if (s === 'FAIL' || s === 'FAILED') return 'FAIL';
+    return 'NONE';
+  };
+
+  const resolvedSpf = getSpfStatus();
+  const resolvedDkim = getDkimStatus();
+  let resolvedDmarc = getDmarcStatus();
+
+  if (resolvedDmarc === 'NONE') {
+    if (resolvedSpf === 'PASS' || resolvedDkim === 'PASS') {
+      resolvedDmarc = 'PASS';
+    } else if (resolvedSpf === 'FAIL' || resolvedDkim === 'FAIL') {
+      resolvedDmarc = 'FAIL';
+    }
+  }
+
   const authResults: AuthResults = {
     spf: {
-      status: (dataAuth.spf?.status || dnsAuth.spf?.status || 'NONE').toUpperCase() as any,
-      record: dataAuth.spf?.record || dnsAuth.spf?.record,
-      details: dataAuth.spf?.details || dnsAuth.spf?.explanation || `SPF ${dataAuth.spf?.status || 'NONE'}`,
-      ip: dataAuth.spf?.ip,
-      domain: dataAuth.spf?.domain || fromDomainFallback
+      status: resolvedSpf,
+      record: dataAuth.spf?.record || dnsAuth.spf?.record || headerParsedAuth.spf.record,
+      details: dataAuth.spf?.details || dnsAuth.spf?.explanation || headerParsedAuth.spf.details || `SPF ${resolvedSpf}`,
+      ip: dataAuth.spf?.ip || headerParsedAuth.spf.ip,
+      domain: dataAuth.spf?.domain || headerParsedAuth.spf.domain || fromDomainFallback
     },
     dkim: {
-      status: (dataAuth.dkim?.status || dnsAuth.dkim?.status || 'NONE').toUpperCase() as any,
-      selector: dataAuth.dkim?.selector,
-      domain: dataAuth.dkim?.domain || fromDomainFallback,
-      details: dataAuth.dkim?.details || dnsAuth.dkim?.explanation || `DKIM ${dataAuth.dkim?.status || 'NONE'}`
+      status: resolvedDkim,
+      selector: dataAuth.dkim?.selector || headerParsedAuth.dkim.selector || 's1',
+      domain: dataAuth.dkim?.domain || headerParsedAuth.dkim.domain || fromDomainFallback,
+      details: dataAuth.dkim?.details || dnsAuth.dkim?.explanation || headerParsedAuth.dkim.details || `DKIM ${resolvedDkim}`
     },
     dmarc: {
-      status: (dataAuth.dmarc?.status || dnsAuth.dmarc?.status || 'NONE').toUpperCase() as any,
-      policy: dataAuth.dmarc?.policy || dnsAuth.dmarc?.policy || 'none',
-      domain: dataAuth.dmarc?.domain || fromDomainFallback,
-      details: dataAuth.dmarc?.details || dnsAuth.dmarc?.explanation || `DMARC ${dataAuth.dmarc?.status || 'NONE'}`
+      status: resolvedDmarc,
+      policy: dataAuth.dmarc?.policy || dnsAuth.dmarc?.policy || headerParsedAuth.dmarc.policy || 'none',
+      domain: dataAuth.dmarc?.domain || headerParsedAuth.dmarc.domain || fromDomainFallback,
+      details: dataAuth.dmarc?.details || dnsAuth.dmarc?.explanation || headerParsedAuth.dmarc.details || `DMARC ${resolvedDmarc}`
     },
     arc: {
-      status: (dataAuth.arc?.status || 'NONE').toUpperCase() as any,
-      details: dataAuth.arc?.details
+      status: (dataAuth.arc?.status || headerParsedAuth.arc.status || 'NONE').toUpperCase() as any,
+      details: dataAuth.arc?.details || headerParsedAuth.arc.details
     }
   };
 
@@ -511,13 +585,30 @@ export function mapBackendCaseToAnalysis(
 
 export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): EmailAnalysis {
   const lines = raw.split(/\r?\n/);
-  const headerMap: Record<string, string> = {};
+  const headerMap: Record<string, string | string[]> = {};
   const receivedHeaders: string[] = [];
   
   let currentKey = '';
   let currentValue = '';
   let inBody = false;
   let bodyLines: string[] = [];
+
+  const addHeaderToMap = (key: string, val: string) => {
+    if (key.toLowerCase() === 'received') {
+      receivedHeaders.push(val);
+    } else {
+      const existing = headerMap[key];
+      if (existing) {
+        if (Array.isArray(existing)) {
+          existing.push(val);
+        } else {
+          headerMap[key] = [existing, val];
+        }
+      } else {
+        headerMap[key] = val;
+      }
+    }
+  };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -527,11 +618,7 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
       }
       inBody = true;
       if (currentKey) {
-        if (currentKey.toLowerCase() === 'received') {
-          receivedHeaders.push(currentValue);
-        } else {
-          headerMap[currentKey] = currentValue;
-        }
+        addHeaderToMap(currentKey, currentValue);
         currentKey = '';
         currentValue = '';
       }
@@ -541,11 +628,7 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
     if (!inBody) {
       if (/^[A-Za-z0-9-_]+:/.test(line)) {
         if (currentKey) {
-          if (currentKey.toLowerCase() === 'received') {
-            receivedHeaders.push(currentValue);
-          } else {
-            headerMap[currentKey] = currentValue;
-          }
+          addHeaderToMap(currentKey, currentValue);
         }
         const colonIdx = line.indexOf(':');
         currentKey = line.slice(0, colonIdx).trim();
@@ -560,11 +643,7 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
 
   // Flush any trailing header if EOF reached before blank line
   if (currentKey) {
-    if (currentKey.toLowerCase() === 'received') {
-      receivedHeaders.push(currentValue);
-    } else {
-      headerMap[currentKey] = currentValue;
-    }
+    addHeaderToMap(currentKey, currentValue);
   }
 
   const subject = getHeaderCaseInsensitive(headerMap, 'Subject') || '(No Subject)';

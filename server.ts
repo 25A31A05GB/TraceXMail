@@ -42,7 +42,9 @@ import {
   getSlackDeliveries,
   dispatchSlackCaseAlert,
   sendTestSlackAlert,
-  maskWebhookUrl
+  sendSlackSecurityAlert,
+  maskWebhookUrl,
+  maskToken
 } from './src/server/slackService';
 import {
   getSupabaseClient,
@@ -333,6 +335,34 @@ let alertsStore = [...INITIAL_ALERTS];
 
 // Global WebSocket broadcaster
 let broadcastWebSocketEvent: (eventData: any) => void = () => {};
+
+// Central Alert Broadcaster (WebSocket + Real-Time Slack Security Alerts)
+function broadcastAlert(alert: any, extraData?: any) {
+  if (!alert) return;
+
+  // 1. Ensure alert is stored in-memory
+  if (!alertsStore.some(a => a.id === alert.id)) {
+    alertsStore.unshift(alert);
+  }
+
+  // 2. Broadcast via WebSocket feed
+  try {
+    if (typeof broadcastWebSocketEvent === 'function') {
+      broadcastWebSocketEvent(alert);
+      if (extraData?.caseItem) {
+        broadcastWebSocketEvent({ type: 'ALERT', alert, case: extraData.caseItem });
+        broadcastWebSocketEvent({ type: 'CASE_CREATED', case: extraData.caseItem, alert });
+      }
+    }
+  } catch (err: any) {
+    console.warn('[WebSocket Broadcast Warning]', err?.message);
+  }
+
+  // 3. Dispatch real-time Slack alert (completely non-blocking)
+  sendSlackSecurityAlert(alert, extraData).catch(err => {
+    console.warn('[Slack Auto-Dispatch Exception]', err?.message);
+  });
+}
 
 // Notice definitions for IP telemetry disclosures
 const maxmindCopyrightNotice = 'Database and Contents Copyright (c) 2026 MaxMind, Inc.';
@@ -870,24 +900,12 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     subject: subject
   };
 
-  alertsStore.unshift(newAlert);
-
-  // 3. Broadcast real-time WebSocket alert and case creation events
-  try {
-    broadcastWebSocketEvent(newAlert);
-    broadcastWebSocketEvent({ type: 'ALERT', alert: newAlert, case: newCaseItem });
-    broadcastWebSocketEvent({ type: 'CASE_CREATED', case: newCaseItem, alert: newAlert });
-  } catch (err: any) {
-    console.warn('[WebSocket Broadcast Exception]', err?.message);
-  }
-
-  // 4. Send rich Block Kit alert to Slack webhook
-  dispatchSlackCaseAlert({
+  // 3. Broadcast real-time alert via WebSockets + Slack Security Alerts
+  broadcastAlert(newAlert, {
     caseItem: newCaseItem,
-    alertItem: newAlert,
+    evidenceId,
+    confidence: (phishingProbability * 100).toFixed(0) + '%',
     fileName,
-    threatScore,
-    verdict,
     from,
     to,
     subject,
@@ -898,7 +916,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     dmarcResult: dmarcStatus,
     isTyposquat,
     torHop
-  }).catch(err => console.warn('[Slack Auto-Dispatch Exception]', err?.message));
+  });
 
   return { case: newCaseItem, analysis: emailAnalysis, alert: newAlert };
 }
@@ -1996,49 +2014,56 @@ Link: https://verify-auth-portal.net/login`;
   });
 
   // Slack Integration API
-  app.get('/api/slack/status', (_req, res) => {
+  const handleSlackStatus = (_req: express.Request, res: express.Response) => {
     const config = getSlackConfig();
     const deliveries = getSlackDeliveries();
+    const hasBot = Boolean(config.botToken && config.channelId);
+    const hasWebhook = Boolean(config.webhookUrl && config.webhookUrl.startsWith('http'));
+
     res.json({
       status: 'ok',
-      configured: Boolean(config.webhookUrl && config.webhookUrl.startsWith('http')),
-      webhook_url_masked: maskWebhookUrl(config.webhookUrl),
-      auto_send: config.autoSendAlerts,
+      configured: hasBot || hasWebhook,
+      bot_token_configured: Boolean(config.botToken),
+      bot_token_masked: maskToken(config.botToken),
+      channel_id: config.channelId || null,
+      webhook_url_masked: maskWebhookUrl(config.webhookUrl || ''),
       min_severity: config.minSeverity,
-      channel: config.channel,
-      username: config.username,
       total_deliveries: deliveries.length,
       recent_deliveries: deliveries.slice(0, 15)
     });
-  });
+  };
+
+  app.get('/api/slack/status', handleSlackStatus);
+  app.get('/api/alerts/slack/status', handleSlackStatus);
 
   app.post('/api/slack/config', (req, res) => {
-    const { webhook_url, auto_send, min_severity, channel, username } = req.body || {};
+    const { bot_token, channel_id, webhook_url, min_severity } = req.body || {};
     const updated = updateSlackConfig({
+      ...(bot_token !== undefined && { botToken: String(bot_token).trim() }),
+      ...(channel_id !== undefined && { channelId: String(channel_id).trim() }),
       ...(webhook_url !== undefined && { webhookUrl: String(webhook_url).trim() }),
-      ...(auto_send !== undefined && { autoSendAlerts: Boolean(auto_send) }),
-      ...(min_severity !== undefined && { minSeverity: min_severity }),
-      ...(channel !== undefined && { channel: String(channel).trim() }),
-      ...(username !== undefined && { username: String(username).trim() })
+      ...(min_severity !== undefined && { minSeverity: min_severity })
     });
     res.json({
       status: 'success',
       config: {
-        configured: Boolean(updated.webhookUrl && updated.webhookUrl.startsWith('http')),
-        webhook_url_masked: maskWebhookUrl(updated.webhookUrl),
-        auto_send: updated.autoSendAlerts,
-        min_severity: updated.minSeverity,
-        channel: updated.channel,
-        username: updated.username
+        configured: Boolean((updated.botToken && updated.channelId) || (updated.webhookUrl && updated.webhookUrl.startsWith('http'))),
+        bot_token_masked: maskToken(updated.botToken),
+        channel_id: updated.channelId || null,
+        webhook_url_masked: maskWebhookUrl(updated.webhookUrl || ''),
+        min_severity: updated.minSeverity
       }
     });
   });
 
-  app.post('/api/slack/test', async (req, res) => {
-    const { webhook_url } = req.body || {};
-    const result = await sendTestSlackAlert(webhook_url);
-    res.status(result.success ? 200 : (result.statusCode || 400)).json(result);
-  });
+  const handleSlackTest = async (req: express.Request, res: express.Response) => {
+    const { bot_token, channel_id, webhook_url } = req.body || {};
+    const result = await sendTestSlackAlert(bot_token, channel_id, webhook_url);
+    res.status(result.success ? 200 : (result.statusCode || 200)).json(result);
+  };
+
+  app.post('/api/slack/test', handleSlackTest);
+  app.post('/api/alerts/slack/test', handleSlackTest);
 
   app.get('/api/slack/deliveries', (_req, res) => {
     res.json(getSlackDeliveries());
@@ -2219,14 +2244,8 @@ Link: https://verify-auth-portal.net/login`;
       threat_score: 88,
       category
     };
-    alertsStore.unshift(newAlert);
 
-    // Broadcast to WebSocket clients
-    activeSockets.forEach(ws => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(newAlert));
-      }
-    });
+    broadcastAlert(newAlert);
 
     res.status(201).json({ status: 'success', alert: newAlert, broadcast_count: activeSockets.size });
   });

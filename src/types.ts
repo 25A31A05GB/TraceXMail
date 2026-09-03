@@ -280,7 +280,7 @@ export interface EmailAnalysis {
     userAgent?: string;
     xMailer?: string;
     priority?: string;
-    allHeaders: Record<string, string>;
+    allHeaders: Record<string, string | string[]>;
   };
   auth: AuthResults;
   hops: EmailHop[];
