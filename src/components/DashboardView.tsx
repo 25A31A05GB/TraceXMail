@@ -26,6 +26,10 @@ import {
   Share2,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Minimize2,
+  Maximize2,
   Network
 } from 'lucide-react';
 import {
@@ -275,6 +279,23 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
   const [selectedGeoCategory, setSelectedGeoCategory] = useState<'ALL' | 'BEC' | 'HARVESTING' | 'MALWARE' | 'EXPLOIT'>('ALL');
   const [selectedRegion, setSelectedRegion] = useState<RegionThreat | null>(REGIONAL_THREATS_DATA[0]);
   const [selectedAnalysisId, setSelectedAnalysisId] = useState<string>(SAMPLE_ANALYSES[0]?.id || 'sample-paypal-phish');
+  const [isMinimized, setIsMinimized] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('tracexmail_dashboard_minimized') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleMinimize = () => {
+    setIsMinimized(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('tracexmail_dashboard_minimized', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const activeFocusAnalysis = useMemo(() => {
     return SAMPLE_ANALYSES.find(a => a.id === selectedAnalysisId) || SAMPLE_ANALYSES[0];
@@ -389,50 +410,328 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
       {/* Top Banner / Breadcrumb */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
-            <Activity className="w-6 h-6 text-blue-400" />
-            Security Operations Dashboard
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
+              <Activity className="w-6 h-6 text-blue-400" />
+              Security Operations Dashboard
+            </h1>
+            {isMinimized && (
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                Minimized HUD
+              </span>
+            )}
+          </div>
           <p className="text-xs text-slate-400 font-mono mt-1">
             Real-time multi-tenant threat intelligence, BEC anomaly scoring, and forensic telemetry.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={toggleMinimize}
+            id="btn-toggle-minimize-dashboard"
+            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border flex items-center gap-2 cursor-pointer transition-colors shadow-sm ${
+              isMinimized
+                ? 'bg-blue-600 hover:bg-blue-500 text-white border-blue-500'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
+            }`}
+            title={isMinimized ? "Expand full dashboard with deep graphs & telemetry" : "Minimize dashboard into compact overview hub"}
+          >
+            {isMinimized ? (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                <span>Expand Dashboard</span>
+              </>
+            ) : (
+              <>
+                <Minimize2 className="w-3.5 h-3.5 text-blue-400" />
+                <span>Minimize Dashboard</span>
+              </>
+            )}
+          </button>
           <button
             onClick={fetchDashboardData}
             disabled={loading}
             className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 flex items-center gap-2 cursor-pointer transition-colors"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Telemetry
+            <span>Refresh Telemetry</span>
           </button>
         </div>
       </div>
 
-      {/* Health & Tenant Status Bar */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
-          <div>
-            <div className="text-xs font-bold text-slate-200">
-              {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
+      {/* When Minimized: Compact Executive Summary & Direct Action Hub */}
+      {isMinimized ? (
+        <div className="space-y-5 animate-in fade-in duration-200">
+          {/* Health & Tenant Status Bar */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
+              <div>
+                <div className="text-xs font-bold text-slate-200">
+                  {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono">
+                  Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
+                </div>
+              </div>
             </div>
-            <div className="text-[11px] text-slate-400 font-mono">
-              Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                Alembic: 001_initial_schema
+              </span>
+              <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
+                FastAPI + CORS Ready
+              </span>
             </div>
           </div>
+
+          {/* Compact KPI Row */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div 
+              onClick={() => onNavigateToTab?.('cases')}
+              className="bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-3.5 cursor-pointer transition-all group"
+            >
+              <div className="flex items-center justify-between text-slate-400 mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Active Cases</span>
+                <ShieldAlert className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">
+                {stats?.summary?.total_cases || 6}
+              </div>
+              <div className="text-[10px] text-rose-400/90 font-mono mt-0.5 flex items-center justify-between">
+                <span>2 Critical BEC</span>
+                <span className="text-blue-400 group-hover:translate-x-0.5 transition-transform">View →</span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => onNavigateToTab?.('campaigns')}
+              className="bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-3.5 cursor-pointer transition-all group"
+            >
+              <div className="flex items-center justify-between text-slate-400 mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Campaigns</span>
+                <Layers className="w-4 h-4 text-purple-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">
+                {stats?.summary?.active_campaigns || 3}
+              </div>
+              <div className="text-[10px] text-purple-400/90 font-mono mt-0.5 flex items-center justify-between">
+                <span>Threat Clusters</span>
+                <span className="text-blue-400 group-hover:translate-x-0.5 transition-transform">View →</span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => onNavigateToTab?.('ingest')}
+              className="bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-3.5 cursor-pointer transition-all group"
+            >
+              <div className="flex items-center justify-between text-slate-400 mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Ingested RFC 822</span>
+                <Database className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">
+                {stats?.summary?.total_emails_ingested || 14}
+              </div>
+              <div className="text-[10px] text-blue-400 font-mono mt-0.5 flex items-center justify-between">
+                <span>Ingest Pipeline</span>
+                <span className="text-blue-400 group-hover:translate-x-0.5 transition-transform">Run →</span>
+              </div>
+            </div>
+
+            <div 
+              onClick={() => onNavigateToTab?.('overview')}
+              className="bg-slate-900/90 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-3.5 cursor-pointer transition-all group"
+            >
+              <div className="flex items-center justify-between text-slate-400 mb-1">
+                <span className="text-[11px] font-semibold uppercase tracking-wider">Avg Threat Score</span>
+                <ShieldCheck className="w-4 h-4 text-amber-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="text-xl font-bold text-white font-mono">
+                76.4<span className="text-xs text-slate-500 font-normal"> / 100</span>
+              </div>
+              <div className="text-[10px] text-amber-400/90 font-mono mt-0.5 flex items-center justify-between">
+                <span>High Malicious Ratio</span>
+                <span className="text-blue-400 group-hover:translate-x-0.5 transition-transform">Overview →</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Direct Navigation Hub */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
+            <div className="text-xs font-bold text-slate-200 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span>Quick Forensic Actions</span>
+              <span className="text-[10px] text-slate-400 font-mono">Click any module to jump</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <button
+                onClick={() => onNavigateToTab?.('ingest')}
+                className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-cyan-500/50 hover:bg-slate-900/80 text-left transition-all group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-md bg-cyan-950/60 border border-cyan-800/60 flex items-center justify-center mb-2">
+                  <Database className="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-xs font-bold text-slate-200">Email Ingestion</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Parse RFC822 EML</div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToTab?.('overview')}
+                className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-blue-500/50 hover:bg-slate-900/80 text-left transition-all group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-md bg-blue-950/60 border border-blue-800/60 flex items-center justify-center mb-2">
+                  <Activity className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-xs font-bold text-slate-200">Message Overview</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Forensic evidence card</div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToTab?.('cases')}
+                className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900/80 text-left transition-all group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-md bg-indigo-950/60 border border-indigo-800/60 flex items-center justify-center mb-2">
+                  <ShieldAlert className="w-3.5 h-3.5 text-indigo-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-xs font-bold text-slate-200">Incident Cases</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Quarantine &amp; audit</div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToTab?.('alerts')}
+                className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-rose-500/50 hover:bg-slate-900/80 text-left transition-all group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-md bg-rose-950/60 border border-rose-800/60 flex items-center justify-center mb-2">
+                  <Radio className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-xs font-bold text-slate-200">Live Alerts</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">WebSocket feeds</div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToTab?.('map')}
+                className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-emerald-500/50 hover:bg-slate-900/80 text-left transition-all group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-md bg-emerald-950/60 border border-emerald-800/60 flex items-center justify-center mb-2">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-xs font-bold text-slate-200">Geographic Map</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Hop GeoIP &amp; ASN</div>
+              </button>
+
+              <button
+                onClick={() => onNavigateToTab?.('graph')}
+                className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-purple-500/50 hover:bg-slate-900/80 text-left transition-all group cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-md bg-purple-950/60 border border-purple-800/60 flex items-center justify-center mb-2">
+                  <Share2 className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+                </div>
+                <div className="text-xs font-bold text-slate-200">Relationship Graph</div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Entity &amp; IOC nexus</div>
+              </button>
+            </div>
+          </div>
+
+          {/* Minimized Recent Incidents Queue */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  Active Forensic Incidents (Quick Access)
+                </span>
+              </div>
+              <button
+                onClick={() => onNavigateToTab?.('cases')}
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+              >
+                View All Cases →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {SAMPLE_ANALYSES.slice(0, 4).map((sample) => (
+                <div
+                  key={sample.id}
+                  onClick={() => {
+                    onSelectAnalysis?.(sample);
+                    onNavigateToTab?.('overview');
+                  }}
+                  className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-blue-500/60 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${
+                        sample.threatVerdict === 'MALICIOUS'
+                          ? 'bg-rose-950/80 border-rose-700 text-rose-300'
+                          : sample.threatVerdict === 'SUSPICIOUS'
+                          ? 'bg-amber-950/80 border-amber-700 text-amber-300'
+                          : 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
+                      }`}>
+                        {sample.threatVerdict}
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-500">{sample.id}</span>
+                    </div>
+                    <div className="text-xs font-semibold text-slate-200 truncate group-hover:text-blue-300 transition-colors">
+                      {sample.subject}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
+                      {sample.from}
+                    </div>
+                  </div>
+                  <div className="shrink-0 flex items-center gap-1 text-[11px] font-semibold text-blue-400 group-hover:translate-x-1 transition-transform">
+                    <span>Inspect</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Expand Full Dashboard Callout Banner */}
+          <div className="p-4 rounded-xl bg-blue-950/30 border border-blue-800/40 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+                <BarChart3 className="w-4 h-4 text-blue-400" />
+              </div>
+              <div className="text-xs text-slate-300">
+                <span className="font-semibold text-white">Full Analytics Mode Available:</span> View 30-day interactive area charts, global threat scatter plots, and telemetry matrices.
+              </div>
+            </div>
+            <button
+              onClick={toggleMinimize}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-md cursor-pointer transition-colors flex items-center gap-2 shrink-0"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+              <span>Expand Full Dashboard</span>
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-2 font-mono text-xs">
-          <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
-            Alembic: 001_initial_schema
-          </span>
-          <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
-            FastAPI + CORS Ready
-          </span>
-        </div>
-      </div>
+      ) : (
+        <div className="space-y-6 animate-in fade-in duration-200">
+          {/* Health & Tenant Status Bar */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
+              <div>
+                <div className="text-xs font-bold text-slate-200">
+                  {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
+                </div>
+                <div className="text-[11px] text-slate-400 font-mono">
+                  Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 font-mono text-xs">
+              <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                Alembic: 001_initial_schema
+              </span>
+              <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
+                FastAPI + CORS Ready
+              </span>
+            </div>
+          </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1534,5 +1833,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
         </div>
       </div>
     </div>
+  )}
+</div>
   );
 }

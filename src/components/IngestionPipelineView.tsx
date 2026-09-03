@@ -142,6 +142,15 @@ export function IngestionPipelineView({
             </p>
           </div>
         </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={onNavigateToOverview}
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold rounded-xl border border-slate-700 flex items-center gap-2 transition-all cursor-pointer shadow-sm"
+          >
+            <span>View Message Overview</span>
+            <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+          </button>
+        </div>
       </div>
 
       {/* Processing Stepper (Visible during active ingestion) */}
