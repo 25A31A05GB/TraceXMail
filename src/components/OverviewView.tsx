@@ -578,6 +578,28 @@ export function OverviewView({
               </div>
             </div>
           )}
+
+          {/* FastAPI High-Performance Engine Telemetry Pill */}
+          {analysis.performanceMetrics && (
+            <div className="mt-3 p-2.5 rounded bg-blue-950/40 border border-blue-500/40 flex flex-wrap items-center justify-between gap-2 text-xs text-blue-300 font-mono">
+              <div className="flex items-center gap-2">
+                <Cpu className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span className="font-semibold text-white">Engine:</span>
+                <span className="text-cyan-300">{analysis.performanceMetrics.engine}</span>
+                {analysis.isFastApiAccelerated && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-600/60 text-emerald-400 text-[10px] font-bold tracking-wider">
+                    FASTAPI ACCELERATED
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-slate-300">
+                <span>Latency: <strong className="text-emerald-400">{analysis.performanceMetrics.executionTimeMs.toFixed(2)} ms</strong></span>
+                <span>Headers: <strong className="text-cyan-400">{analysis.performanceMetrics.headerCount}</strong></span>
+                <span>Hops: <strong className="text-cyan-400">{analysis.performanceMetrics.hopCount}</strong></span>
+                <span>URLs: <strong className="text-cyan-400">{analysis.performanceMetrics.urlCount}</strong></span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AI Case Summary (Groq AI Reasoner Narrative Synthesis) */}

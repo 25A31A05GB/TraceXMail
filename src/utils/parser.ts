@@ -421,7 +421,9 @@ export function mapBackendCaseToAnalysis(
         'backend/data/maxmind/GeoLite2-ASN-Blocks-IPv4.csv'
       ]
     } : undefined),
-    isOfflineFallback: false
+    isOfflineFallback: false,
+    isFastApiAccelerated: data.isFastApiAccelerated ?? data.is_fastapi_accelerated ?? false,
+    performanceMetrics: data.performanceMetrics || data.performance_metrics
   };
 }
 
@@ -776,4 +778,63 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
     isOfflineFallback: false
   };
 }
+
+/**
+ * Offloads email header parsing and regex extraction to the high-performance Python FastAPI service.
+ * Automatically falls back to the client parser if the service is unreachable.
+ */
+export async function parseRawEmlViaFastApi(raw: string, filename = 'custom_analysis.eml'): Promise<EmailAnalysis> {
+  try {
+    const res = await fetch('/api/fastapi/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw_content: raw, filename })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.analysis) {
+        const analysis: EmailAnalysis = data.analysis;
+        analysis.isFastApiAccelerated = true;
+        analysis.isOfflineFallback = false;
+        if (!analysis.sha256Hash) {
+          analysis.sha256Hash = sha256Sync(raw);
+          analysis.custodyHash = analysis.sha256Hash;
+        }
+        if (!analysis.evidenceId) {
+          analysis.evidenceId = generateEvidenceId();
+        }
+        return analysis;
+      }
+    }
+  } catch (err) {
+    console.warn('[Parser] FastAPI service offload unavailable, using client fallback:', err);
+  }
+
+  // Graceful fallback to client parser
+  const fallback = parseRawEml(raw, filename);
+  fallback.isFastApiAccelerated = false;
+  fallback.isOfflineFallback = true;
+  return fallback;
+}
+
+/**
+ * Offloads arbitrary text regex extraction to the FastAPI engine.
+ */
+export async function extractRegexViaFastApi(text: string): Promise<any> {
+  try {
+    const res = await fetch('/api/fastapi/extract-regex', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('[Parser] FastAPI extract-regex unavailable:', e);
+  }
+  return null;
+}
+
 

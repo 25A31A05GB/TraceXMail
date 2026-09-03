@@ -309,5 +309,14 @@ export interface EmailAnalysis {
   ai_narrative?: AINarrative | null;
   graph?: any;
   isOfflineFallback?: boolean;
+  isFastApiAccelerated?: boolean;
+  performanceMetrics?: {
+    engine?: string;
+    executionTimeMs?: number;
+    headerCount?: number;
+    hopCount?: number;
+    urlCount?: number;
+    attachmentCount?: number;
+  };
 }
 

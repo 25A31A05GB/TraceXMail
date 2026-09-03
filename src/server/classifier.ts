@@ -100,11 +100,22 @@ export interface ClassificationResult {
 }
 
 interface TrainedModelPayload {
+  metadata?: {
+    accuracy?: number;
+    macroF1?: number;
+    weightedF1?: number;
+    totalSamples?: number;
+    trainCount?: number;
+    testCount?: number;
+  };
   classes: string[];
-  vocabulary: Record<string, number>;
+  vocabulary: string[];
+  vocabMap?: Record<string, number>;
   idf: number[];
-  priors: number[];
-  logLikelihoods: number[][];
+  weights?: number[][];
+  biases?: number[];
+  priors?: number[];
+  logLikelihoods?: number[][];
   numClasses: number;
   vocabSize: number;
 }
@@ -119,6 +130,7 @@ const CLASS_NAMES: EmailClassification[] = [
 
 class MachineLearningClassifier {
   private model: TrainedModelPayload | null = null;
+  private vocabLookup: Map<string, number> = new Map();
 
   constructor() {
     this.loadModel();
@@ -130,6 +142,13 @@ class MachineLearningClassifier {
       if (fs.existsSync(modelPath)) {
         const raw = fs.readFileSync(modelPath, 'utf-8');
         this.model = JSON.parse(raw);
+        if (this.model) {
+          if (this.model.vocabMap) {
+            this.vocabLookup = new Map(Object.entries(this.model.vocabMap));
+          } else if (Array.isArray(this.model.vocabulary)) {
+            this.vocabLookup = new Map(this.model.vocabulary.map((t, idx) => [t, idx]));
+          }
+        }
       }
     } catch (e) {
       console.warn('[Classifier] Could not load trained_model.json, using fallback heuristics:', e);
@@ -156,28 +175,28 @@ class MachineLearningClassifier {
       tokens.push(`${words[i]}_${words[i + 1]}`);
     }
 
-    // Forensic Signals
-    if (/(?:wire transfer|direct deposit|payroll update|gift card|invoice payment|swift transfer)/i.test(text)) {
-      tokens.push('__cue_fraud_wire__');
+    // High-Signal Forensic Cues
+    if (/(?:wire transfer|direct deposit|payroll update|gift card|invoice payment|swift transfer|escrow|routing number)/i.test(text)) {
+      tokens.push('__cue_fraud_wire__', '__cue_fraud_wire__');
     }
-    if (/(?:urgent|immediate|account suspended|password expired|verify your identity|security alert)/i.test(text)) {
-      tokens.push('__cue_phish_urgency__');
+    if (/(?:urgent|immediate|account suspended|password expired|verify your identity|security alert|confirm password|restore access)/i.test(text)) {
+      tokens.push('__cue_phish_lure__', '__cue_phish_lure__');
     }
-    if (/(?:docusign|microsoft|paypal|chase|apple|wells fargo|bank of america)/i.test(text)) {
-      tokens.push('__cue_brand_target__');
+    if (/(?:docusign|microsoft|office 365|paypal|chase|apple|wells fargo|bank of america|netflix)/i.test(text)) {
+      tokens.push('__cue_brand_target__', '__cue_brand_target__');
     }
-    if (/(?:click here|unsubscribe|exclusive offer|special discount|blast)/i.test(text)) {
-      tokens.push('__cue_marketing_susp__');
+    if (/(?:click here|unsubscribe|exclusive offer|special discount|blast|promo deal|b2b leads|webinar)/i.test(text)) {
+      tokens.push('__cue_marketing_susp__', '__cue_marketing_susp__');
     }
-    if (/(?:github|pull request|jira|meeting notes|standup|agenda|sprint|team discussion)/i.test(text)) {
-      tokens.push('__cue_legit_work__');
+    if (/(?:github|pull request|jira|meeting notes|standup|agenda|sprint|team discussion|patch|linux|debian|python)/i.test(text)) {
+      tokens.push('__cue_legit_work__', '__cue_legit_work__');
     }
 
     return tokens;
   }
 
   /**
-   * Evaluates text through the trained TF-IDF Naive Bayes engine.
+   * Evaluates text through the trained ML inference engine.
    */
   public predict(text: string): {
     predictedClass: EmailClassification;
@@ -203,59 +222,136 @@ class MachineLearningClassifier {
     }
 
     const tokens = this.tokenize(text);
-    const logPosteriors = [...this.model.priors];
-    const tokenWeights: Array<{ token: string; weight: number }> = [];
 
-    const countedTokens = new Set<string>();
-    for (const token of tokens) {
-      const idx = this.model.vocabulary[token];
-      if (idx !== undefined && !countedTokens.has(token)) {
-        countedTokens.add(token);
-        const idfVal = this.model.idf[idx] || 1;
-        for (let c = 0; c < this.model.numClasses; c++) {
-          const ll = this.model.logLikelihoods[c][idx];
-          logPosteriors[c] += ll * idfVal;
+    // Support Calibrated Softmax Logistic Regression model (weights + biases)
+    if (this.model.weights && this.model.biases) {
+      const counts: Record<number, number> = {};
+      for (const t of tokens) {
+        const idx = this.vocabLookup.get(t);
+        if (idx !== undefined) {
+          counts[idx] = (counts[idx] || 0) + 1;
         }
-
-        const avgScore = logPosteriors.reduce((a, b) => a + b, 0) / this.model.numClasses;
-        tokenWeights.push({
-          token,
-          weight: parseFloat((this.model.logLikelihoods[3][idx] || avgScore).toFixed(3))
-        });
       }
+
+      let normSq = 0;
+      const entries: Array<[number, number]> = [];
+      for (const [idxStr, cnt] of Object.entries(counts)) {
+        const idx = Number(idxStr);
+        const idfVal = this.model.idf[idx] || 1.0;
+        const val = (1.0 + Math.log(cnt)) * idfVal;
+        entries.push([idx, val]);
+        normSq += val * val;
+      }
+      const norm = Math.sqrt(normSq);
+      if (norm > 0) {
+        for (const e of entries) e[1] /= norm;
+      }
+
+      const numClasses = this.model.numClasses || 5;
+      const logits = [...this.model.biases];
+      for (const [idx, val] of entries) {
+        for (let c = 0; c < numClasses; c++) {
+          logits[c] += this.model.weights[c][idx] * val;
+        }
+      }
+
+      const maxLogit = Math.max(...logits);
+      const exps = logits.map(l => Math.exp(l - maxLogit));
+      const sumExp = exps.reduce((a, b) => a + b, 0);
+      const probs = exps.map(e => e / (sumExp || 1));
+
+      let bestIdx = 0;
+      let bestProb = -1;
+      for (let i = 0; i < probs.length; i++) {
+        if (probs[i] > bestProb) {
+          bestProb = probs[i];
+          bestIdx = i;
+        }
+      }
+
+      const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
+      const resultProbs: Record<EmailClassification, number> = {
+        Legitimate: parseFloat((probs[0] || 0).toFixed(4)),
+        Suspicious: parseFloat((probs[1] || 0).toFixed(4)),
+        Impersonated: parseFloat((probs[2] || 0).toFixed(4)),
+        Phishing: parseFloat((probs[3] || 0).toFixed(4)),
+        'Fraud-related': parseFloat((probs[4] || 0).toFixed(4))
+      };
+
+      const tokenWeights: Array<{ token: string; weight: number }> = [];
+      for (const [idx, val] of entries) {
+        const token = this.model.vocabulary[idx];
+        const w = this.model.weights[bestIdx][idx] * val;
+        tokenWeights.push({ token, weight: parseFloat(w.toFixed(3)) });
+      }
+      tokenWeights.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
+
+      return {
+        predictedClass,
+        probabilities: resultProbs,
+        confidence: parseFloat(bestProb.toFixed(3)),
+        topFeatures: tokenWeights.slice(0, 8)
+      };
     }
 
-    // Softmax normalization with temperature scaling
-    const maxLog = Math.max(...logPosteriors);
-    const exps = logPosteriors.map(lp => Math.exp((lp - maxLog) / 1.5));
-    const sumExp = exps.reduce((a, b) => a + b, 0);
-    const probs = exps.map(e => e / sumExp);
+    // Fallback Naive Bayes (logLikelihoods + priors)
+    if (this.model.priors && this.model.logLikelihoods) {
+      const logPosteriors = [...this.model.priors];
+      const tokenWeights: Array<{ token: string; weight: number }> = [];
+      const countedTokens = new Set<string>();
 
-    let bestIdx = 0;
-    let bestProb = -1;
-    for (let i = 0; i < probs.length; i++) {
-      if (probs[i] > bestProb) {
-        bestProb = probs[i];
-        bestIdx = i;
+      for (const token of tokens) {
+        const idx = this.vocabLookup.get(token);
+        if (idx !== undefined && !countedTokens.has(token)) {
+          countedTokens.add(token);
+          const idfVal = this.model.idf[idx] || 1;
+          for (let c = 0; c < this.model.numClasses; c++) {
+            const ll = this.model.logLikelihoods[c][idx];
+            logPosteriors[c] += ll * idfVal;
+          }
+          tokenWeights.push({
+            token,
+            weight: parseFloat((this.model.logLikelihoods[3][idx] || 0).toFixed(3))
+          });
+        }
       }
+
+      const maxLog = Math.max(...logPosteriors);
+      const exps = logPosteriors.map(lp => Math.exp(lp - maxLog));
+      const sumExp = exps.reduce((a, b) => a + b, 0);
+      const probs = exps.map(e => e / sumExp);
+
+      let bestIdx = 0;
+      let bestProb = -1;
+      for (let i = 0; i < probs.length; i++) {
+        if (probs[i] > bestProb) {
+          bestProb = probs[i];
+          bestIdx = i;
+        }
+      }
+
+      const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
+      const resultProbs: Record<EmailClassification, number> = {
+        Legitimate: parseFloat(probs[0].toFixed(4)),
+        Suspicious: parseFloat(probs[1].toFixed(4)),
+        Impersonated: parseFloat(probs[2].toFixed(4)),
+        Phishing: parseFloat(probs[3].toFixed(4)),
+        'Fraud-related': parseFloat(probs[4].toFixed(4))
+      };
+
+      return {
+        predictedClass,
+        probabilities: resultProbs,
+        confidence: parseFloat(bestProb.toFixed(3)),
+        topFeatures: tokenWeights.slice(0, 8)
+      };
     }
-
-    const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
-    const resultProbs: Record<EmailClassification, number> = {
-      Legitimate: parseFloat(probs[0].toFixed(4)),
-      Suspicious: parseFloat(probs[1].toFixed(4)),
-      Impersonated: parseFloat(probs[2].toFixed(4)),
-      Phishing: parseFloat(probs[3].toFixed(4)),
-      'Fraud-related': parseFloat(probs[4].toFixed(4))
-    };
-
-    tokenWeights.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
 
     return {
-      predictedClass,
-      probabilities: resultProbs,
-      confidence: parseFloat(bestProb.toFixed(3)),
-      topFeatures: tokenWeights.slice(0, 8)
+      predictedClass: 'Suspicious',
+      probabilities: defaultProbs,
+      confidence: 0.5,
+      topFeatures: []
     };
   }
 }
