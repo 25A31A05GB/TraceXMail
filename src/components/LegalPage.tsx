@@ -95,63 +95,51 @@ function PrivacyContent() {
         </p>
       </Section>
 
-      <Section title="2. Gmail and Google Data We Access">
+      <Section title="2. Email Ingestion & Gmail Integration Status [Feature Not Enabled in This Release]">
+        <div className="p-3 bg-slate-900/60 border border-amber-500/30 rounded text-xs text-amber-300 mb-3">
+          <strong>Notice:</strong> Direct Gmail and Google OAuth mailbox synchronization is currently <em>not enabled in this release</em>. TraceXMail currently ingests and analyzes email artifacts solely through direct RFC 822 EML file uploads, raw headers, and user-provided forensic artifacts.
+        </div>
         <p>
-          When you choose to connect a Gmail account, TraceXMail requests
-          permission through Google OAuth. TraceXMail may access Gmail
-          messages and related metadata necessary to perform email security
-          analysis.
+          In future releases with Google OAuth integration enabled, TraceXMail will request
+          permission through standard Google OAuth consent scopes strictly to access email headers,
+          sender and recipient information, message dates, subjects, and security-relevant metadata.
         </p>
         <p>
-          This may include email headers, sender and recipient information,
-          message dates, subjects, message content, attachments or attachment
-          metadata, links, and other technical information contained in an
-          email that is relevant to security analysis.
-        </p>
-        <p>
-          TraceXMail does not obtain access to your Gmail account without your
-          authorization through Google's OAuth consent process.
+          TraceXMail will not obtain access to any external mailbox without explicit user authorization through the appropriate OAuth consent process.
         </p>
       </Section>
 
-      <Section title="3. Why We Access Gmail Data">
+      <Section title="3. Purpose of Forensic Email Processing">
         <p>
-          Gmail data is accessed solely to provide TraceXMail's email
+          Email data is processed solely to provide TraceXMail's email
           security, forensic investigation, threat detection, and analysis
           features.
         </p>
         <p>
-          Analysis may include identifying suspicious senders, authentication
-          anomalies, malicious links, indicators of compromise, phishing
-          characteristics, suspicious infrastructure, and other security
-          signals.
+          Analysis includes identifying suspicious senders, authentication
+          anomalies (SPF/DKIM/DMARC/ARC), malicious links, indicators of compromise, phishing
+          characteristics, and suspicious infrastructure.
         </p>
       </Section>
 
-      <Section title="4. How Gmail Data Is Used">
+      <Section title="4. How Ingested Data Is Handled">
         <p>
-          Data obtained through Gmail is used to process and analyze email
+          Data submitted for analysis is used to process and evaluate email
           security events, generate threat assessments, display investigation
-          results, and provide related security functionality requested by
-          the user.
+          results, and provide related forensic reporting.
         </p>
         <p>
-          Google user data is not sold for advertising purposes. TraceXMail
-          does not use Gmail content obtained through Google OAuth to build
-          advertising profiles or sell such information to advertisers.
+          User data is never sold for advertising purposes. TraceXMail
+          does not build advertising profiles or sell forensic telemetry to third-party data brokers.
         </p>
       </Section>
 
-      <Section title="5. Disconnecting Gmail">
+      <Section title="5. External Mailbox Connections [Feature Not Enabled in This Release]">
         <p>
-          You may disconnect your Gmail account at any time using the Gmail
-          connection controls provided by the application. You may also revoke
-          TraceXMail's access through your Google Account security settings.
+          Because direct Gmail and external mailbox OAuth connectors are not active in this release, no persistent background mailbox connections are maintained.
         </p>
         <p>
-          After access is revoked or the connection is disconnected,
-          TraceXMail will no longer use the OAuth connection to retrieve new
-          Gmail data.
+          In future updates supporting active mailbox connections, users will maintain complete controls to disconnect accounts or revoke tokens at any time through standard application and identity provider security settings.
         </p>
       </Section>
 
@@ -225,17 +213,17 @@ function TermsContent() {
         </p>
       </Section>
 
-      <Section title="3. Gmail and Google Authorization">
+      <Section title="3. External Integrations & Authorization [Feature Not Enabled in This Release]">
+        <div className="p-3 bg-slate-900/60 border border-amber-500/30 rounded text-xs text-amber-300 mb-3">
+          <strong>Notice:</strong> Direct Gmail and Google OAuth authorization flows are <em>not enabled in this release</em>. All forensic analysis is conducted on user-submitted RFC 822 EML files and headers.
+        </div>
         <p>
-          Connecting Gmail requires authorization through Google's OAuth
-          authorization process. By connecting an account, you authorize
-          TraceXMail to access the Gmail information permitted by the OAuth
-          scopes presented during authorization.
+          In future updates enabling direct mailbox integration, connecting third-party mailboxes will require explicit authorization through the provider's OAuth
+          authorization process.
         </p>
         <p>
-          You are responsible for ensuring that you have the authority to
-          connect and analyze the Gmail account and messages you submit or
-          make available to TraceXMail.
+          Users are responsible for ensuring that they possess legitimate forensic authority to
+          submit and inspect any email artifacts, headers, or messages processed within TraceXMail.
         </p>
       </Section>
 

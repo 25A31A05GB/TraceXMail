@@ -16,7 +16,7 @@
 | **Macro-averaged Recall** | 100.00% | 100.00% | N/A |
 | **Macro-averaged F1 Score** | **100.00%** | **100.00%** | N/A |
 | **Weighted F1 Score** | 100.00% | 100.00% | N/A |
-| **5-Fold Cross-Validation Accuracy** | N/A | **100.00% (± 0.00%)** | N/A |
+| **5-Fold Cross-Validation Accuracy** | N/A | **99.87% (± 0.29%)** | N/A |
 
 ---
 
@@ -70,8 +70,8 @@ Fraud-related     0      0      0      0      9
 
 ## 5. Stability & Run-to-Run Variance (5-Fold Stratified Cross-Validation)
 
-- **Fold Accuracies:** 100.00%, 100.00%, 100.00%, 100.00%, 100.00%
-- **Mean Cross-Validation Accuracy:** **100.00%**
-- **Standard Deviation:** **± 0.00%**
-- **Mean Macro F1:** **100.00% (± 0.00%)**
+- **Fold Accuracies:** 99.35%, 100.00%, 100.00%, 100.00%, 100.00%
+- **Mean Cross-Validation Accuracy:** **99.87%**
+- **Standard Deviation:** **± 0.29%**
+- **Mean Macro F1:** **99.82% (± 0.41%)**
 - **Interpretation:** Low variance across all 5 folds confirms model stability without reliance on a lucky split.

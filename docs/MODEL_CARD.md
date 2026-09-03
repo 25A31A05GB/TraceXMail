@@ -64,6 +64,8 @@
 - **Macro Precision:** **100.00%**
 - **Macro Recall:** **100.00%**
 
+> **Cautionary Generalization Note:** The 100.00% accuracy metric reflects evaluation on a standardized 154-sample held-out test partition with templated enterprise structures. This score should not be presented as a production-generalization guarantee for unbounded, noisy enterprise email environments. Production triage should always account for the *Synthetic Enterprise Bias* limitation detailed in Section 7.
+
 ### 5-Fold Stratified Cross-Validation Stability
 - **Mean Accuracy:** **99.87%**
 - **Accuracy Standard Deviation:** **± 0.30%**

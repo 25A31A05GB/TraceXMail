@@ -20,7 +20,7 @@
 ### Q2: "Isn't this just a bunch of if-else regular expressions?"
 **Defensible Answer:**
 > "No. TraceXMail implements a **two-tier hybrid architecture** separating probabilistic NLP from deterministic cryptographic protocol analysis.
-> - **Machine Learning:** The NLP classifier uses sublinear TF-IDF vectorization with bigram expansion and temperature-scaled softmax over 762 real-world records, validated across 5-fold cross-validation with **94.8% accuracy and 0.942 Weighted F1**.
+> - **Machine Learning:** The NLP classifier uses sublinear TF-IDF vectorization with bigram expansion and temperature-scaled softmax over 762 real-world records, achieving **100.00% accuracy and 1.000 Weighted F1 on the 154-sample held-out test partition** (and **99.87% ± 0.29% across 5-fold stratified cross-validation**). *(Note: As documented in our Model Card under 'Synthetic Enterprise Bias', this 100% test-set score reflects templated evaluation samples and is not presented as an unbounded production guarantee).*
 > - **Deterministic Protocol Verification:** RFC 7208 (SPF), RFC 6376 (DKIM), and RFC 7489 (DMARC) are not heuristics—they are formal cryptographic specifications. A DKIM 2048-bit RSA signature pass/fail cannot be determined by an ML model; it must be verified mathematically.
 > - **The Composite Threat Score** explicitly fuses these layers without double-counting, allocating 25 points to Cryptographic Authentication, 25 to Domain Intelligence, 20 to Network Infrastructure, 20 to ML Posterior, and 10 to Identity Heuristics."
 
@@ -28,10 +28,10 @@
 
 ### Q3: "What is your dataset, how was it collected, and is there train/test contamination?"
 **Defensible Answer:**
-> "Our dataset consists of **762 verified unique records** across 5 mutually exclusive forensic classes (`Legitimate`: 245, `Phishing`: 220, `Suspicious`: 132, `Fraud-related`: 105, `Impersonated`: 60).
+> "Our dataset consists of **762 verified unique records** across 5 mutually exclusive forensic classes (`Legitimate`: 440, `Phishing`: 134, `Impersonated`: 88, `Suspicious`: 58, `Fraud-related`: 42).
 > - **Provenance:** Sourced from public security research corpora (Jose Nazario Phishing Corpus), standardized enterprise invoices, Enron email archive subsets, and SEC BEC disclosures.
 > - **Zero Contamination:** Partitioning uses a strict **Stratified 80/20 train/test split (Seed 424242)**. All token vocabularies ($V \le 3,500$) and inverse document frequencies (IDF) are fitted strictly on the 608 training samples and applied out-of-sample to the 154 held-out test records.
-> - **Audit Artifacts:** Our methodology, class distributions, and train/test deduplication hashes are documented in `reports/DATASET_AUDIT.md` and `docs/DATASET_CARD.md`."
+> - **Audit Artifacts:** Our methodology, class distributions, and train/test deduplication hashes are documented in `reports/DATASET_AUDIT.md`, `reports/MODEL_EVALUATION.md`, and `docs/MODEL_CARD.md`."
 
 ---
 

@@ -25,10 +25,10 @@ export function generateForensicMarkdownReport(
   enforceMasking: boolean = false
 ): string {
   const originHop = analysis.hops?.find(h => !h.isPrivate) || analysis.hops?.[0];
-  const originIp = originHop?.fromIp ? (enforceMasking ? maskIp(originHop.fromIp, originHop.isPrivate, privacyConfig.maskingMode) : originHop.fromIp) : '185.220.101.5';
-  const displayFrom = enforceMasking ? maskEmail(analysis.from || analysis.headers?.from, privacyConfig.maskingMode) : (analysis.from || analysis.headers?.from);
-  const displayTo = enforceMasking ? maskEmail(analysis.to || analysis.headers?.to, privacyConfig.maskingMode) : (analysis.to || analysis.headers?.to);
-  const displaySubject = enforceMasking ? maskText(analysis.name || analysis.subject || analysis.headers?.subject, privacyConfig.maskingMode) : (analysis.name || analysis.subject || analysis.headers?.subject);
+  const originIp = originHop?.fromIp ? (enforceMasking ? maskIp(originHop.fromIp, originHop.isPrivate, privacyConfig.maskingMode) : originHop.fromIp) : 'UNKNOWN';
+  const displayFrom = enforceMasking ? maskEmail(analysis.from || analysis.headers?.from, privacyConfig.maskingMode) : (analysis.from || analysis.headers?.from || 'UNKNOWN');
+  const displayTo = enforceMasking ? maskEmail(analysis.to || analysis.headers?.to, privacyConfig.maskingMode) : (analysis.to || analysis.headers?.to || 'UNKNOWN');
+  const displaySubject = enforceMasking ? maskText(analysis.name || analysis.subject || analysis.headers?.subject, privacyConfig.maskingMode) : (analysis.name || analysis.subject || analysis.headers?.subject || 'NO SUBJECT');
   const purgeInfo = getRetentionPurgeDate(privacyConfig.retentionPolicy, analysis.analyzedAt);
 
   const hopsTable = (analysis.hops || []).map((h, i) => {
@@ -49,7 +49,7 @@ export function generateForensicMarkdownReport(
 **Case / Evidence ID:** \`${analysis.id || 'EVD-UNKNOWN'}\`  
 **Tracking Session:** \`${analysis.sessionId || 'SESSION-LIVE'}\`  
 **Analyzed At (UTC):** \`${analysis.analyzedAt || new Date().toUTCString()}\`  
-**Threat Score:** **${analysis.threatScore ?? analysis.riskScore ?? 85}/100** | **Classification:** \`${analysis.verdict || analysis.threatVerdict || 'PHISHING'}\`  
+**Threat Score:** **${analysis.threatScore ?? analysis.riskScore ?? 0}/100** | **Classification:** \`${analysis.verdict || analysis.threatVerdict || 'UNKNOWN'}\`  
 **Data Privacy & Masking Mode:** \`${enforceMasking ? `ENFORCED (${privacyConfig.maskingMode})` : 'UNMASKED RAW TELEMETRY'}\`  
 **Compliance Standard:** \`${privacyConfig.complianceStandard}\`  
 **Audit Purge Scheduled:** \`${purgeInfo.date}\`

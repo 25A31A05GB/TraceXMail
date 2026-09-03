@@ -33,6 +33,7 @@ interface ThreatTimelineViewProps {
   analysis: EmailAnalysis;
   onSelectAnalysis?: (analysis: EmailAnalysis) => void;
   onNavigateToOverview?: () => void;
+  showDemoCases?: boolean;
 }
 
 export interface TimelineIncident {
@@ -66,6 +67,7 @@ export function ThreatTimelineView({
   analysis,
   onSelectAnalysis,
   onNavigateToOverview,
+  showDemoCases = false
 }: ThreatTimelineViewProps) {
   const [loading, setLoading] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -155,48 +157,50 @@ export function ThreatTimelineView({
     list.push(currentIncident);
     seenIds.add(analysis.id);
 
-    // 2. Add matching samples from SAMPLE_ANALYSES
-    SAMPLE_ANALYSES.forEach((sample) => {
-      if (seenIds.has(sample.id)) return;
+    // 2. Add matching samples from SAMPLE_ANALYSES (only if demo fixtures enabled)
+    if (showDemoCases) {
+      SAMPLE_ANALYSES.forEach((sample) => {
+        if (seenIds.has(sample.id)) return;
 
-      const sEmail = sample.headers.fromEmail || sample.headers.from;
-      const sDomain = sEmail.includes('@') ? sEmail.split('@')[1].toLowerCase() : sEmail.toLowerCase();
-      const sReturnDomain = sample.headers.returnPath ? (sample.headers.returnPath.match(/@([a-zA-Z0-9.-]+)/) || [])[1] : '';
+        const sEmail = sample.headers.fromEmail || sample.headers.from;
+        const sDomain = sEmail.includes('@') ? sEmail.split('@')[1].toLowerCase() : sEmail.toLowerCase();
+        const sReturnDomain = sample.headers.returnPath ? (sample.headers.returnPath.match(/@([a-zA-Z0-9.-]+)/) || [])[1] : '';
 
-      const matchesDomain = sDomain.includes(currentDomain) || currentDomain.includes(sDomain) || 
-                            (currentReturnPathDomain && sReturnDomain && sReturnDomain.includes(currentReturnPathDomain));
-      const matchesIp = sample.hops.some(h => h.fromIp === currentOriginIp);
+        const matchesDomain = sDomain.includes(currentDomain) || currentDomain.includes(sDomain) || 
+                              (currentReturnPathDomain && sReturnDomain && sReturnDomain.includes(currentReturnPathDomain));
+        const matchesIp = sample.hops.some(h => h.fromIp === currentOriginIp);
 
-      if (matchesDomain || matchesIp || sample.headers.fromEmail === currentSenderEmail) {
-        seenIds.add(sample.id);
-        list.push({
-          id: sample.id,
-          date: sample.analyzedAt || sample.headers.date,
-          timestampMs: new Date(sample.headers.date || Date.now()).getTime() - 86400000 * 4,
-          caseId: sample.sessionId || `CASE-${sample.id.slice(0, 8)}`,
-          subject: sample.headers.subject,
-          sender: sample.headers.from,
-          senderEmail: sEmail,
-          returnPath: sample.headers.returnPath,
-          replyTo: sample.headers.replyTo,
-          originIp: sample.hops[0]?.fromIp || '185.220.101.5',
-          asn: sample.hops[0]?.asn || 'Unmapped ASN',
-          asnOrg: sample.hops[0]?.org || 'Unmapped Provider',
-          location: sample.hops[0]?.city ? `${sample.hops[0].city}, ${sample.hops[0].countryCode || ''}` : 'Relay Location: Unresolved',
-          verdict: sample.verdict,
-          threatScore: sample.riskScore,
-          spfStatus: (sample.auth.spf.status as any) || 'FAIL',
-          dkimStatus: (sample.auth.dkim.status as any) || 'FAIL',
-          dmarcStatus: (sample.auth.dmarc.status as any) || 'REJECT',
-          campaignName: 'Historical Campaign Investigation',
-          attackVector: sample.verdict === 'MALICIOUS PHISH' ? 'Credential Phishing' : 'Standard Delivery',
-          iocs: sample.urls.map(u => u.domain),
-          heuristics: sample.heuristics.map(h => h.title),
-          isCurrentAnalysis: false,
-          rawSampleRef: sample
-        });
-      }
-    });
+        if (matchesDomain || matchesIp || sample.headers.fromEmail === currentSenderEmail) {
+          seenIds.add(sample.id);
+          list.push({
+            id: sample.id,
+            date: sample.analyzedAt || sample.headers.date,
+            timestampMs: new Date(sample.headers.date || Date.now()).getTime() - 86400000 * 4,
+            caseId: sample.sessionId || `CASE-${sample.id.slice(0, 8)}`,
+            subject: sample.headers.subject,
+            sender: sample.headers.from,
+            senderEmail: sEmail,
+            returnPath: sample.headers.returnPath,
+            replyTo: sample.headers.replyTo,
+            originIp: sample.hops[0]?.fromIp || '185.220.101.5',
+            asn: sample.hops[0]?.asn || 'Unmapped ASN',
+            asnOrg: sample.hops[0]?.org || 'Unmapped Provider',
+            location: sample.hops[0]?.city ? `${sample.hops[0].city}, ${sample.hops[0].countryCode || ''}` : 'Relay Location: Unresolved',
+            verdict: sample.verdict,
+            threatScore: sample.riskScore,
+            spfStatus: (sample.auth.spf.status as any) || 'FAIL',
+            dkimStatus: (sample.auth.dkim.status as any) || 'FAIL',
+            dmarcStatus: (sample.auth.dmarc.status as any) || 'REJECT',
+            campaignName: 'Historical Campaign Investigation',
+            attackVector: sample.verdict === 'MALICIOUS PHISH' ? 'Credential Phishing' : 'Standard Delivery',
+            iocs: sample.urls.map(u => u.domain),
+            heuristics: sample.heuristics.map(h => h.title),
+            isCurrentAnalysis: false,
+            rawSampleRef: sample
+          });
+        }
+      });
+    }
 
     // 3. Add entries from backend temporal analysis API if present
     backendTimelineEvents.forEach((bEvent, idx) => {

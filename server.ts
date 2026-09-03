@@ -38,6 +38,7 @@ import {
   sendTestSlackAlert,
   maskWebhookUrl
 } from './src/server/slackService';
+import { enrichWithVirusTotal } from './src/server/virustotalService';
 import {
   getSupabaseClient,
   logAuditAction,
@@ -654,7 +655,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
         defangedUrl: `hxxps://${fromDomain.replace(/\./g, '[.]')}/`,
         domain: fromDomain,
         status: isTyposquat ? 'MALICIOUS' : 'CLEAN',
-        virustotalScore: isTyposquat ? '19/88 Engines' : '0/88 Engines',
+        virustotalScore: undefined,
         category: isTyposquat ? 'Credential Harvesting' : 'Legitimate Domain'
       }
     ],
@@ -869,25 +870,75 @@ async function startServer() {
   app.get('/api/v1/stats', handleStatsResponse);
 
   // Cases Management with RBAC:
+  // - Reads from Supabase when configured (filtered by organization_id & is_demo), falling back to in-memory casesStore
   // - PII-unmasked case reads: admin/analyst only; read_only always gets mask_pii=true forced
   // - Supports exclude_demo / real_only query filters
-  app.get('/api/cases', (req, res) => {
+  app.get('/api/cases', async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
     const isReadOnly = user?.role === 'read_only';
     const shouldMask = isReadOnly || req.query.mask_pii === 'true';
     const excludeDemo = req.query.exclude_demo === 'true' || req.query.real_only === 'true';
+    const orgId = (req.query.organization_id as string) || user?.organizationId;
 
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        let query = supabase.from('cases').select('*').order('created_at', { ascending: false });
+        if (orgId) {
+          query = query.eq('organization_id', orgId);
+        }
+        if (excludeDemo) {
+          query = query.eq('is_demo', false);
+        }
+
+        const { data, error } = await query;
+        if (!error && Array.isArray(data) && data.length > 0) {
+          const formatted = data.map((c: any) => ({
+            ...c,
+            tags: Array.isArray(c.tags) ? c.tags : (typeof c.tags === 'string' ? JSON.parse(c.tags || '[]') : ['Custom']),
+            is_demo: Boolean(c.is_demo)
+          }));
+          const results = shouldMask ? formatted.map((c: any) => maskCasePii(c)) : formatted;
+          return res.json(results);
+        }
+      } catch (dbErr) {
+        console.warn('[Supabase] Failed reading cases from DB, falling back to in-memory store:', dbErr);
+      }
+    }
+
+    // In-memory fallback
     let list = excludeDemo ? casesStore.filter(c => !c.is_demo) : casesStore;
+    if (orgId && orgId !== 'org_primary_soc') {
+      list = list.filter(c => !c.organization_id || c.organization_id === orgId);
+    }
     const results = shouldMask ? list.map(c => maskCasePii(c)) : list;
     res.json(results);
   });
 
-  app.get('/api/cases/:caseId', (req, res) => {
+  app.get('/api/cases/:caseId', async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
     const isReadOnly = user?.role === 'read_only';
     const shouldMask = isReadOnly || req.query.mask_pii === 'true';
+    const caseId = req.params.caseId;
 
-    const found = casesStore.find(c => c.id === req.params.caseId);
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
+        if (!error && data) {
+          const formatted = {
+            ...data,
+            tags: Array.isArray(data.tags) ? data.tags : (typeof data.tags === 'string' ? JSON.parse(data.tags || '[]') : ['Custom']),
+            is_demo: Boolean(data.is_demo)
+          };
+          return res.json(shouldMask ? maskCasePii(formatted) : formatted);
+        }
+      } catch (dbErr) {
+        console.warn('[Supabase] Error fetching single case from DB, falling back:', dbErr);
+      }
+    }
+
+    const found = casesStore.find(c => c.id === caseId);
     if (!found) {
       return res.status(404).json({ error: 'Case not found' });
     }
@@ -1898,23 +1949,30 @@ Link: https://verify-auth-portal.net/login`;
     res.json({ status: resultLog.status, log: resultLog });
   });
 
-  // VirusTotal Enrichment
-  app.post('/api/virustotal/enrich', (req, res) => {
-    const { urls = [], attachments = [] } = req.body;
-    res.json({
-      status: 'success',
-      vt_active: true,
-      scanned_count: urls.length + attachments.length + 1,
-      flagged_count: 2,
-      urls: urls.map((u: any) => ({ ...u, status: 'MALICIOUS', virustotalScore: '28/88 Engines' })),
-      attachments: attachments.map((a: any) => ({ ...a, status: 'MALICIOUS', vtDetection: '42/72 Engines' })),
-      logs: [
-        { id: `vt-${Date.now()}`, timestamp: new Date().toISOString(), tag: 'VT_API', message: 'VirusTotal API live hash query completed with positive flags.' }
-      ],
-      new_vt_logs: [
-        { id: `vt-new-${Date.now()}`, timestamp: new Date().toISOString(), tag: 'VT_ENRICH', message: 'Enriched threat intelligence graph with VirusTotal payload indicators.' }
-      ]
-    });
+  // VirusTotal v3 Live Enrichment with TTL Caching & Graceful Fallback
+  app.post('/api/virustotal/enrich', async (req, res) => {
+    try {
+      const { urls = [], attachments = [], existing_logs = [] } = req.body;
+      const result = await enrichWithVirusTotal({
+        urls,
+        attachments,
+        existingLogs: existing_logs
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error('[VirusTotal Enrich Error]', err);
+      res.status(500).json({
+        status: 'error',
+        vt_active: false,
+        message: err?.message || 'Internal VirusTotal enrichment service failure',
+        scanned_count: 0,
+        flagged_count: 0,
+        urls: req.body?.urls || [],
+        attachments: req.body?.attachments || [],
+        logs: req.body?.existing_logs || [],
+        new_vt_logs: []
+      });
+    }
   });
 
   // Serve static files in production / Vite in dev

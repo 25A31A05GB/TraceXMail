@@ -43,6 +43,23 @@ export default function App() {
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState<boolean>(false);
   const [privacyConfig, setPrivacyConfig] = useState<PrivacyConfig>(() => loadPrivacyConfig());
   const [casesRefreshSignal, setCasesRefreshSignal] = useState<number>(0);
+  const [showDemoCases, setShowDemoCases] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('tracexmail_show_demo_cases') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleDemoCases = () => {
+    setShowDemoCases(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('tracexmail_show_demo_cases', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   const handleUpdatePrivacyConfig = (newCfg: PrivacyConfig) => {
     setPrivacyConfig(newCfg);
@@ -94,6 +111,8 @@ export default function App() {
           onOpenReportModal={() => setIsReportModalOpen(true)}
           onOpenPrivacyModal={() => setIsPrivacyModalOpen(true)}
           privacyConfig={privacyConfig}
+          showDemoCases={showDemoCases}
+          onToggleDemoCases={handleToggleDemoCases}
         />
 
         {/* View Switcher Container */}
@@ -111,6 +130,8 @@ export default function App() {
               onNavigateToOverview={() => setActiveTab('overview')}
               onOpenNewModal={() => setIsNewModalOpen(true)}
               refreshSignal={casesRefreshSignal}
+              showDemoCases={showDemoCases}
+              onToggleDemoCases={handleToggleDemoCases}
             />
           )}
 
@@ -122,6 +143,9 @@ export default function App() {
             <SearchView
               onSelectAnalysis={setCurrentAnalysis}
               onNavigateToOverview={() => setActiveTab('overview')}
+              showDemoCases={showDemoCases}
+              currentAnalysis={currentAnalysis}
+              onToggleDemoCases={handleToggleDemoCases}
             />
           )}
 
@@ -152,6 +176,7 @@ export default function App() {
               analysis={currentAnalysis}
               onSelectAnalysis={setCurrentAnalysis}
               onNavigateToOverview={() => setActiveTab('overview')}
+              showDemoCases={showDemoCases}
             />
           )}
 

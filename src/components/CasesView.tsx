@@ -21,7 +21,8 @@ import {
   Check,
   Tag,
   Download,
-  Share2
+  Share2,
+  FlaskConical
 } from 'lucide-react';
 import { forensicApi, CaseItem } from '../lib/api';
 import { EmailAnalysis } from '../types';
@@ -33,9 +34,18 @@ interface CasesViewProps {
   onNavigateToOverview: () => void;
   onOpenNewModal: () => void;
   refreshSignal?: number;
+  showDemoCases?: boolean;
+  onToggleDemoCases?: () => void;
 }
 
-export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewModal, refreshSignal }: CasesViewProps) {
+export function CasesView({ 
+  onSelectAnalysis, 
+  onNavigateToOverview, 
+  onOpenNewModal, 
+  refreshSignal,
+  showDemoCases = false,
+  onToggleDemoCases
+}: CasesViewProps) {
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -140,7 +150,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
     setLoading(true);
     setFetchError(null);
     try {
-      const data = await forensicApi.getCases();
+      const data = await forensicApi.getCases({ exclude_demo: !showDemoCases });
       if (Array.isArray(data)) {
         setCases(data);
       } else {
@@ -149,16 +159,16 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
     } catch (err: any) {
       console.warn('Error fetching cases from backend:', err);
       setFetchError(err?.message || 'Failed to connect to backend server');
-      setCases(SAMPLE_ANALYSES);
+      setCases(showDemoCases ? SAMPLE_ANALYSES : []);
     } finally {
       setLoading(false);
     }
   };
 
-  // Trigger refetch on mount, explicit refresh signal, or new WebSocket alert activity
+  // Trigger refetch on mount, explicit refresh signal, showDemoCases toggle, or new WebSocket alert activity
   useEffect(() => {
     fetchCases();
-  }, [alerts, lastCreatedCaseId, refreshSignal]);
+  }, [alerts, lastCreatedCaseId, refreshSignal, showDemoCases]);
 
   // Periodic safety net polling interval (15s)
   useEffect(() => {
@@ -488,7 +498,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
       )}
 
       {/* Filters Bar */}
-      <div className="flex flex-col md:flex-row items-center gap-3 bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-3.5 rounded-xl">
         <div className="relative flex-1 w-full">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -500,7 +510,22 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+          {onToggleDemoCases && (
+            <button
+              onClick={onToggleDemoCases}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-mono transition-colors cursor-pointer ${
+                showDemoCases
+                  ? 'bg-amber-950/70 border-amber-600/80 text-amber-300'
+                  : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+              }`}
+              title="Toggle inclusion of synthetic demo corpus fixtures"
+            >
+              <FlaskConical className={`w-3.5 h-3.5 ${showDemoCases ? 'text-amber-400' : 'text-slate-500'}`} />
+              <span>Demo Fixtures: <strong>{showDemoCases ? 'ON' : 'OFF'}</strong></span>
+            </button>
+          )}
+
           <Filter className="w-4 h-4 text-slate-400" />
           <select
             value={sourceFilter}
@@ -509,7 +534,7 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
           >
             <option value="ALL">All Sources</option>
             <option value="REAL">Ingested Analyses (Live)</option>
-            <option value="DEMO">Demo / Seed Corpus</option>
+            {showDemoCases && <option value="DEMO">Demo / Seed Corpus</option>}
           </select>
           <select
             value={severityFilter}
@@ -544,9 +569,36 @@ export function CasesView({ onSelectAnalysis, onNavigateToOverview, onOpenNewMod
             <tbody className="divide-y divide-slate-800/80 text-slate-300">
               {filteredCases.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
-                    <AlertCircle className="w-6 h-6 mx-auto mb-2 opacity-50" />
-                    No forensic cases match your search criteria.
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <div className="max-w-md mx-auto space-y-3">
+                      <AlertCircle className="w-8 h-8 mx-auto text-slate-500" />
+                      <div className="text-sm font-semibold text-slate-300">
+                        {showDemoCases ? 'No matching forensic cases found' : 'No analyst cases ingested yet'}
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {showDemoCases
+                          ? 'Try adjusting your search query or severity filter.'
+                          : 'Live cases view currently excludes demo fixtures. Upload an RFC 822 EML file to begin live ingestion, or toggle Demo Fixtures ON.'}
+                      </p>
+                      <div className="flex items-center justify-center gap-3 pt-2">
+                        <button
+                          onClick={onOpenNewModal}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Ingest Email
+                        </button>
+                        {!showDemoCases && onToggleDemoCases && (
+                          <button
+                            onClick={onToggleDemoCases}
+                            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <FlaskConical className="w-3.5 h-3.5 text-amber-400" />
+                            Show Demo Data
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (

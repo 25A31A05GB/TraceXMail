@@ -490,7 +490,7 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
       defangedUrl: defangUrl(u),
       domain,
       status,
-      virustotalScore: isSuspicious ? '19/88 Engines' : isKnownLegit ? '0/88 Engines' : '2/88 Engines',
+      virustotalScore: undefined,
       category: isSuspicious ? 'Credential Interception' : isKnownLegit ? 'Legitimate Domain' : 'Uncategorized Link',
     };
   });
@@ -579,7 +579,7 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
       sha256: '7b9c1f5e8d2a4c6b8a0e9f1d3c5b7a9e2f4a6c8b0d1e3f5a7b9c1d3e5f7a9b1c',
       md5: '4f2d7c9a1b3e5f7a9b1c3d5e7f9a1b3c',
       status: isExe ? 'MALICIOUS' : 'SUSPICIOUS',
-      vtDetection: isExe ? '49/72 Engines (Executable Payload)' : '4/72 Engines',
+      vtDetection: undefined,
     });
   }
 

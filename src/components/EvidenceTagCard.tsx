@@ -111,72 +111,71 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     });
     chainString = hopPieces.join(' <span class="arrow">→</span> ') + ` · ${analysis.hops.length} hops traced`;
   } else {
-    chainString = `185.220.101.5 (BG) <span class="arrow">→</span> 89.144.20.12 (DE, Hetzner) <span class="arrow">→</span> 172.217.194.27 (US, Google) · 3 hops traced`;
+    chainString = 'No relay hops recorded in message headers';
   }
 
   // Domain Intel
   const domIntel = analysis.domain_intelligence || analysis.domainIntelligence;
-  const fakeDomain = domIntel?.domain || (returnPathDomain || (fromDomain.includes('paypal') ? 'paypal-account-security-update.com' : fromDomain || 'paypal-account-security-update.com'));
-  const domainAge = domIntel?.domain_age_days 
+  const targetDomain = domIntel?.domain || fromDomain || returnPathDomain || 'UNKNOWN';
+  const domainAge = domIntel?.domain_age_days !== undefined
     ? `${domIntel.domain_age_days} days old` 
-    : (domIntel?.created_date ? `${domIntel.created_date} — 14 days old` : '15/10/2023 — 14 days old');
-  const registrar = domIntel?.registrar || domIntel?.rdap?.registrar || 'NameCheap, Inc.';
-  const isTyposquat = Boolean(domIntel?.is_typosquat || domIntel?.typosquatting?.is_typosquat || fromDomain.includes('paypal') || fakeDomain.includes('update') || fakeDomain.includes('security'));
-  const typosquatTarget = domIntel?.typosquat_matched_brand || domIntel?.typosquatting?.target_brand || (fromDomain.includes('paypal') ? 'paypal.com' : 'authentic domain');
+    : (domIntel?.created_date ? domIntel.created_date : 'UNKNOWN');
+  const registrar = domIntel?.registrar || domIntel?.rdap?.registrar || 'UNKNOWN / NOT RESOLVED';
+  const isTyposquat = Boolean(domIntel?.is_typosquat || domIntel?.typosquatting?.is_typosquat);
+  const typosquatTarget = domIntel?.typosquat_matched_brand || domIntel?.typosquatting?.target_brand || null;
 
   const domainFlags: Array<{ text: string; level: 'red' | 'amber' | 'green' }> = [];
-  if (isTyposquat) {
-    domainFlags.push({ text: `TYPOSQUAT: ${typosquatTarget}`, level: 'red' });
+  if (isTyposquat && typosquatTarget) {
+    domainFlags.push({ text: `LOOKALIKE BRAND: ${typosquatTarget}`, level: 'red' });
   }
-  if (!domIntel?.dns?.mx_records?.length && !domIntel?.dns?.mx?.length) {
+  if (domIntel?.dns?.mx_records !== undefined && domIntel.dns.mx_records.length === 0) {
     domainFlags.push({ text: 'NO MX RECORD', level: 'amber' });
   }
-  if (!domIntel?.dns?.spf_qualifier) {
-    domainFlags.push({ text: 'NO SPF', level: 'amber' });
+  if (domIntel?.dns?.spf === null || domIntel?.dns?.spf === '') {
+    domainFlags.push({ text: 'NO SPF RECORD', level: 'amber' });
   }
-  if (domainFlags.length === 0) {
-    domainFlags.push({ text: 'VERIFIED DOMAIN', level: 'green' });
+  if (domainFlags.length === 0 && domIntel?.domain) {
+    domainFlags.push({ text: 'DOMAIN ENRICHED', level: 'green' });
+  } else if (!domIntel?.domain) {
+    domainFlags.push({ text: 'DOMAIN UNRESOLVED', level: 'amber' });
   }
 
   // AI Narrative Excerpt
   const rawNarrative = analysis.ai_narrative?.narrative || analysis.aiNarrative?.narrative || analysis.summary || 
-    'Automated synthesis flags a credential-harvesting campaign impersonating PayPal Security, relayed through an active Tor exit node in Bulgaria. SPF and DKIM both fail against PayPal\'s own DMARC reject policy, and the embedded link points to a domain registered only two weeks ago.';
+    'Automated forensic evaluation completed. No automated generative narrative requested.';
   const narrativeExcerpt = rawNarrative.length > 280 ? rawNarrative.slice(0, 275).trim() + '...' : rawNarrative;
-  const aiEngine = analysis.ai_narrative?.model ? `Groq · ${analysis.ai_narrative.model}` : 'Groq · Llama-3.3-70B';
+  const aiEngine = analysis.ai_narrative?.model ? analysis.ai_narrative.model : 'Heuristic & Cryptographic Engine';
 
   // Findings: URLs & Attachments
   const findings: Array<{ label: string; badge: string; status: 'mal' | 'clean' | 'warn' }> = [];
   if (analysis.urls && analysis.urls.length > 0) {
-    analysis.urls.slice(0, 3).forEach(u => {
+    analysis.urls.slice(0, 4).forEach(u => {
       const cleanUrl = u.url.replace(/^https?:\/\//, '').replace(/\/$/, '');
       const isMal = u.status === 'MALICIOUS' || (u.virustotalScore && !u.virustotalScore.startsWith('0/'));
       const isClean = u.status === 'CLEAN' || (u.virustotalScore && u.virustotalScore.startsWith('0/'));
       findings.push({
-        label: cleanUrl,
-        badge: u.virustotalScore?.replace(' Engines', '') || (isMal ? '24/88' : '0/88'),
+        label: cleanUrl.length > 35 ? cleanUrl.slice(0, 32) + '...' : cleanUrl,
+        badge: u.virustotalScore || (u.status ? u.status : 'INSPECTED'),
         status: isMal ? 'mal' : isClean ? 'clean' : 'warn'
       });
     });
-  } else {
-    findings.push(
-      { label: 'paypal-account-security-update.com/signin', badge: '24/88', status: 'mal' },
-      { label: 'bit.ly/3gX992PaypalSec', badge: '18/88', status: 'mal' },
-      { label: 'paypal.com/us/smarthelp (decoy)', badge: '0/88', status: 'clean' }
-    );
   }
 
   if (analysis.attachments && analysis.attachments.length > 0) {
-    const att = analysis.attachments[0];
-    findings.push({
-      label: att.filename,
-      badge: att.vtDetection ? att.vtDetection.split(' ')[0] : (att.status === 'MALICIOUS' ? '38/72' : '0/72'),
-      status: att.status === 'MALICIOUS' ? 'mal' : 'clean'
+    analysis.attachments.slice(0, 2).forEach(att => {
+      findings.push({
+        label: att.filename,
+        badge: att.vtDetection ? att.vtDetection.split(' ')[0] : (att.status === 'MALICIOUS' ? 'FLAGGED' : 'CLEAN'),
+        status: att.status === 'MALICIOUS' ? 'mal' : 'clean'
+      });
     });
-  } else if (findings.length < 4) {
+  }
+
+  if (findings.length === 0) {
     findings.push({
-      label: 'Statement_Restriction_Notice.html',
-      badge: '38/72',
-      status: 'mal'
+      label: 'No embedded URLs or file attachments found in payload',
+      badge: 'CLEAN',
+      status: 'clean'
     });
   }
 
@@ -225,8 +224,8 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     entity: {
       sectionTitle: 'DOMAIN INTELLIGENCE',
       rows: [
-        { k: 'FAKE DOMAIN', v: fakeDomain, status: isTyposquat ? 'bad' : '' },
-        { k: 'REGISTERED', v: domainAge, status: 'warn' },
+        { k: 'DOMAIN', v: targetDomain, status: isTyposquat ? 'bad' : '' },
+        { k: 'REGISTERED', v: domainAge, status: domainAge === 'UNKNOWN' ? '' : 'warn' },
         { k: 'REGISTRAR', v: registrar, status: '' }
       ],
       flags: domainFlags
@@ -234,11 +233,11 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     aiSummary: {
       text: narrativeExcerpt,
       engine: aiEngine,
-      fullUrl: 'https://tracexmail.vercel.app'
+      fullUrl: '#'
     },
     findings,
     score: {
-      label: 'Random Forest classifier',
+      label: '5-Class Nearest Centroid Classifier',
       percent: mlPercentNum,
       resultText: mlPercentText,
       resultLabel: mlResultLabel,
@@ -278,71 +277,65 @@ export function EvidenceTagCard({
 
   // Compute final case card data from analysis or direct data prop
   const cardData: EvidenceCardData = directData || (analysis ? mapAnalysisToEvidenceCardData(analysis) : {
-    caseId: 'sample-paypal-phish',
-    evidenceId: 'EV-PHISH',
-    timestamp: '2024-07-18 13:12 UTC',
-    verdict: { text: 'PHISH', status: 'bad', scoreLabel: '0/100 TRUST' },
-    subject: '"[URGENT] Your PayPal Account Has Been Temporarily Restricted"',
+    caseId: 'NO-CASE-SELECTED',
+    evidenceId: 'EVD-PENDING',
+    timestamp: new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC',
+    verdict: { text: 'PENDING', status: 'good', scoreLabel: 'N/A' },
+    subject: 'No Email Evidence Loaded',
     identityRows: [
-      { k: 'FROM', v: '"PayPal Security Center" <service@paypal.com>', status: '' },
-      { k: 'RETURN-PATH', v: 'service@paypal-account-security-update.com', status: 'bad' },
-      { k: 'REPLY-TO', v: 'verification-support@secure-pp-auth.net', status: 'bad' }
+      { k: 'FROM', v: 'Awaiting Ingestion', status: '' },
+      { k: 'RETURN-PATH', v: 'Awaiting Ingestion', status: '' },
+      { k: 'REPLY-TO', v: 'Awaiting Ingestion', status: '' }
     ],
     checks: [
-      { label: 'SPF', value: 'FAIL', status: 'fail' },
-      { label: 'DKIM', value: 'FAIL', status: 'fail' },
-      { label: 'DMARC', value: 'REJECT', status: 'fail' }
+      { label: 'SPF', value: 'UNKNOWN', status: 'pass' },
+      { label: 'DKIM', value: 'UNKNOWN', status: 'pass' },
+      { label: 'DMARC', value: 'UNKNOWN', status: 'pass' }
     ],
     origin: {
       sectionTitle: 'ORIGIN & RELAY',
-      ip: '185.220.101.5',
-      ipStatus: 'bad',
-      location: 'Sofia, Bulgaria (AS200548 · Zettahost)',
-      mapsUrl: 'https://www.google.com/maps?q=42.6977,23.3219',
+      ip: 'UNKNOWN',
+      ipStatus: 'good',
+      location: 'Unresolved Infrastructure',
+      mapsUrl: '#',
       extraRows: [
-        { k: 'TOR EXIT', v: 'ACTIVE — tor-exit-node.bg.zettahost.net', status: 'bad' },
-        { k: 'ABUSEIPDB', v: '88 / 100 blacklisted', status: 'bad' }
+        { k: 'ENRICHMENT', v: 'Awaiting RFC 822 EML ingestion', status: '' }
       ]
     },
     relay: {
-      chain: '185.220.101.5 (BG) <span class="arrow">→</span> 89.144.20.12 (DE, Hetzner) <span class="arrow">→</span> 172.217.194.27 (US, Google) · 3 hops traced'
+      chain: 'No relay hops recorded in message headers'
     },
     entity: {
       sectionTitle: 'DOMAIN INTELLIGENCE',
       rows: [
-        { k: 'FAKE DOMAIN', v: 'paypal-account-security-update.com', status: '' },
-        { k: 'REGISTERED', v: '15/10/2023 — 14 days old', status: 'warn' },
-        { k: 'REGISTRAR', v: 'NameCheap, Inc.', status: '' }
+        { k: 'DOMAIN', v: 'UNKNOWN', status: '' },
+        { k: 'REGISTERED', v: 'UNKNOWN', status: '' },
+        { k: 'REGISTRAR', v: 'UNKNOWN', status: '' }
       ],
       flags: [
-        { text: 'TYPOSQUAT: paypal.com', level: 'red' },
-        { text: 'NO MX RECORD', level: 'amber' },
-        { text: 'NO SPF', level: 'amber' }
+        { text: 'AWAITING INGESTION', level: 'amber' }
       ]
     },
     aiSummary: {
-      text: 'Automated synthesis flags a credential-harvesting campaign impersonating PayPal Security, relayed through an active Tor exit node in Bulgaria. SPF and DKIM both fail against PayPal\'s own DMARC reject policy, and the embedded link points to a domain registered only two weeks ago.',
-      engine: 'Groq · Llama-3.3-70B'
+      text: 'No active email analysis loaded. Select a case from Case Management or upload an RFC 822 EML file to inspect forensic telemetry.',
+      engine: 'TraceXMail Forensic Core'
     },
     findings: [
-      { label: 'paypal-account-security-update.com/signin', badge: '24/88', status: 'mal' },
-      { label: 'bit.ly/3gX992PaypalSec', badge: '18/88', status: 'mal' },
-      { label: 'paypal.com/us/smarthelp (decoy)', badge: '0/88', status: 'clean' },
-      { label: 'Statement_Restriction_Notice.html', badge: '38/72', status: 'mal' }
+      { label: 'No artifacts loaded', badge: 'PENDING', status: 'clean' }
     ],
     score: {
-      label: 'Random Forest classifier',
-      percent: 98.4,
-      resultText: '98.4%',
-      resultLabel: 'phish',
-      good: false
+      label: '5-Class Nearest Centroid Classifier',
+      percent: 0,
+      resultText: '0.0%',
+      resultLabel: 'pending',
+      good: true
     },
     footer: {
       hashLabel: 'SHA-256',
-      hash: 'e3b0c44298f1c149afb...b855',
+      hash: 'N/A',
       actionLabel: 'SOC action:',
-      action: 'BLOCK SENDER & PURGE INBOX',
-      actionGood: false
+      action: 'AWAITING INGESTION',
+      actionGood: true
     }
   });
 

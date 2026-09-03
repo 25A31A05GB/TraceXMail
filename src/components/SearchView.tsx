@@ -11,7 +11,8 @@ import {
   Clock, 
   ArrowRight,
   Sparkles,
-  Database
+  Database,
+  FlaskConical
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
@@ -19,16 +20,40 @@ import { SAMPLE_ANALYSES } from '../data/samples';
 interface SearchViewProps {
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
   onNavigateToOverview: () => void;
+  showDemoCases?: boolean;
+  currentAnalysis?: EmailAnalysis;
+  onToggleDemoCases?: () => void;
 }
 
-export function SearchView({ onSelectAnalysis, onNavigateToOverview }: SearchViewProps) {
+export function SearchView({ 
+  onSelectAnalysis, 
+  onNavigateToOverview, 
+  showDemoCases = false,
+  currentAnalysis,
+  onToggleDemoCases 
+}: SearchViewProps) {
   const [query, setQuery] = useState('');
   const [verdictFilter, setVerdictFilter] = useState('ALL');
   const [authFilter, setAuthFilter] = useState('ALL');
 
+  const dataset = useMemo(() => {
+    const list: EmailAnalysis[] = [];
+    if (currentAnalysis && (!(currentAnalysis as any).is_demo || showDemoCases)) {
+      list.push(currentAnalysis);
+    }
+    if (showDemoCases) {
+      SAMPLE_ANALYSES.forEach(s => {
+        if (!list.some(item => item.id === s.id)) {
+          list.push(s);
+        }
+      });
+    }
+    return list;
+  }, [showDemoCases, currentAnalysis]);
+
   const filteredResults = useMemo(() => {
     const q = query.toLowerCase().trim();
-    return SAMPLE_ANALYSES.filter(analysis => {
+    return dataset.filter(analysis => {
       // Verdict check
       if (verdictFilter !== 'ALL') {
         if (analysis.threatVerdict !== verdictFilter) return false;
@@ -55,7 +80,7 @@ export function SearchView({ onSelectAnalysis, onNavigateToOverview }: SearchVie
 
       return matchSubject || matchFrom || matchTo || matchMessageId || matchIps || matchUrls || matchBody;
     });
-  }, [query, verdictFilter, authFilter]);
+  }, [dataset, query, verdictFilter, authFilter]);
 
   const handleSelect = (analysis: EmailAnalysis) => {
     onSelectAnalysis(analysis);
@@ -129,6 +154,20 @@ export function SearchView({ onSelectAnalysis, onNavigateToOverview }: SearchVie
               {a === 'ALL' ? 'All Records' : a === 'PASS' ? 'Passed Auth' : 'Failed Auth'}
             </button>
           ))}
+
+          {onToggleDemoCases && (
+            <button
+              onClick={onToggleDemoCases}
+              className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg border text-xs font-mono transition-colors ${
+                showDemoCases
+                  ? 'bg-amber-950/70 border-amber-600/80 text-amber-300'
+                  : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-400'
+              }`}
+            >
+              <FlaskConical className={`w-3 h-3 ${showDemoCases ? 'text-amber-400' : 'text-slate-500'}`} />
+              <span>Demo Fixtures: <strong>{showDemoCases ? 'ON' : 'OFF'}</strong></span>
+            </button>
+          )}
         </div>
       </div>
 

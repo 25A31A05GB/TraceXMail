@@ -180,23 +180,23 @@
   "cross_validation_stability": {
     "k_folds": 5,
     "fold_accuracies": [
-      1.0,
+      0.9935,
       1.0,
       1.0,
       1.0,
       1.0
     ],
-    "mean_accuracy": 1.0,
-    "std_accuracy": 0.0,
+    "mean_accuracy": 0.9987,
+    "std_accuracy": 0.0029,
     "fold_macro_f1s": [
-      1.0,
+      0.9908,
       1.0,
       1.0,
       1.0,
       1.0
     ],
-    "mean_macro_f1": 1.0,
-    "std_macro_f1": 0.0
+    "mean_macro_f1": 0.9982,
+    "std_macro_f1": 0.0041
   },
   "impersonation_investigation": {
     "root_cause": "Pure text TF-IDF relies on linguistic tokens (verify, account, security, urgent) which heavily overlap with generic phishing attacks. Without structural identity features (display-name vs sending domain mismatch, lookalike domain patterns, Reply-To redirection), brand impersonation lures are dominated by phishing training centroids.",

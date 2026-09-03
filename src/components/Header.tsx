@@ -11,7 +11,8 @@ import {
   ExternalLink,
   Shield,
   Scale,
-  EyeOff
+  EyeOff,
+  FlaskConical
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
@@ -24,6 +25,8 @@ interface HeaderProps {
   onOpenReportModal: () => void;
   onOpenPrivacyModal?: () => void;
   privacyConfig?: PrivacyConfig;
+  showDemoCases?: boolean;
+  onToggleDemoCases?: () => void;
 }
 
 export function Header({
@@ -32,7 +35,9 @@ export function Header({
   onOpenNewModal,
   onOpenReportModal,
   onOpenPrivacyModal,
-  privacyConfig
+  privacyConfig,
+  showDemoCases = false,
+  onToggleDemoCases
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
@@ -126,6 +131,21 @@ export function Header({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2.5">
+        {onToggleDemoCases && (
+          <button
+            onClick={onToggleDemoCases}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+              showDemoCases
+                ? 'bg-amber-950/70 border-amber-600/80 text-amber-300'
+                : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-400'
+            }`}
+            title={showDemoCases ? 'Demo Cases Active (Click to switch to Real Cases Only)' : 'Real Cases Only (Click to show Demo Fixtures)'}
+          >
+            <FlaskConical className={`w-3.5 h-3.5 ${showDemoCases ? 'text-amber-400' : 'text-slate-500'}`} />
+            <span>Demo Data: <strong className={showDemoCases ? 'text-amber-200 font-bold' : 'text-slate-300 font-semibold'}>{showDemoCases ? 'ON' : 'OFF'}</strong></span>
+          </button>
+        )}
+
         {onOpenPrivacyModal && (
           <button
             onClick={onOpenPrivacyModal}

@@ -218,8 +218,12 @@ export const forensicApi = {
   },
 
   // Cases Management
-  getCases: async (): Promise<CaseItem[]> => {
-    const res = await apiClient.get<CaseItem[]>('/cases');
+  getCases: async (params?: { exclude_demo?: boolean; real_only?: boolean; mask_pii?: boolean; organization_id?: string }): Promise<CaseItem[]> => {
+    const queryParams = {
+      exclude_demo: params?.exclude_demo !== undefined ? params.exclude_demo : true,
+      ...params
+    };
+    const res = await apiClient.get<CaseItem[]>('/cases', { params: queryParams });
     return res.data;
   },
 
