@@ -38,6 +38,7 @@ import {
   Printer
 } from 'lucide-react';
 import { EmailAnalysis, AINarrative } from '../types';
+import { ForensicCaseTwoPanel } from './ForensicCaseTwoPanel';
 import { EvidenceCard, EvidenceTagCard, mapAnalysisToEvidenceCardData } from './EvidenceTagCard';
 import { computeSha256 } from '../utils/crypto';
 import { classifyIp } from '../utils/parser';
@@ -236,6 +237,8 @@ interface OverviewViewProps {
   onNavigateToHeaders: () => void;
   onNavigateToTimeline?: () => void;
   onNavigateToGraph?: () => void;
+  onOpenNewModal?: () => void;
+  onOpenReportModal?: () => void;
 }
 
 export function OverviewView({
@@ -245,6 +248,8 @@ export function OverviewView({
   onNavigateToHeaders,
   onNavigateToTimeline,
   onNavigateToGraph,
+  onOpenNewModal,
+  onOpenReportModal,
 }: OverviewViewProps) {
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
@@ -490,64 +495,112 @@ export function OverviewView({
   const evidenceCardData = mapAnalysisToEvidenceCardData(analysis);
 
   return (
-    <div id="overview-dashboard" className="flex-1 p-4 md:p-6 grid grid-cols-12 gap-6 overflow-y-auto bg-[#0F172A] text-slate-100">
+    <div id="overview-dashboard" className="flex-1 p-4 md:p-6 overflow-y-auto bg-[#0B0C0F] text-slate-100 font-mono">
       {/* Top Bar Header & Action Controls */}
-      <div className="col-span-12 flex flex-wrap items-center justify-between gap-4 bg-[#1E293B] px-4 py-3 rounded-lg border border-slate-700 shadow-sm">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex flex-col gap-3 bg-[#16181D] border border-[#2A2D34] p-3.5 rounded-lg mb-6 shadow-sm">
+        {/* Row 1: Mode Switcher + Case Status */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">Investigation Case:</span>
-            <span className="text-sm font-mono font-bold text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/80">
-              {analysis.id || effectiveEvidenceId}
-            </span>
+            <button
+              onClick={() => setOverviewMode('card')}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors cursor-pointer ${
+                overviewMode === 'card'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm'
+                  : 'bg-[#1D2027] hover:bg-[#2A2D34] text-neutral-400 border border-[#2A2D34]'
+              }`}
+            >
+              Evidence tag · index card
+            </button>
+            <button
+              onClick={() => setOverviewMode('workspace')}
+              className={`px-3 py-1.5 rounded text-xs font-mono font-semibold transition-colors cursor-pointer ${
+                overviewMode === 'workspace'
+                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/50 shadow-sm'
+                  : 'bg-[#1D2027] hover:bg-[#2A2D34] text-neutral-400 border border-[#2A2D34]'
+              }`}
+            >
+              Full SOC console
+            </button>
           </div>
-          <span className="text-slate-600 hidden sm:inline">|</span>
-          <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-mono">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Cryptographically Preserved</span>
+
+          <div className="flex items-center gap-2 text-xs text-neutral-400">
+            <span className="text-neutral-600 hidden sm:inline">|</span>
+            <span>Case: <strong className="text-neutral-200 font-mono">{analysis.id || effectiveEvidenceId}</strong></span>
+            <span className="text-emerald-400 flex items-center gap-1.5 font-medium ml-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse inline-block" />
+              Preserved
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setIsEvidenceTagOpen(true)}
-            className="px-2.5 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs text-amber-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Expand Fullscreen Physical Forensic Evidence Tag Card"
-          >
-            <Tag className="w-3.5 h-3.5 text-amber-400" />
-            <span>Fullscreen Card</span>
-          </button>
-          {onNavigateToTimeline && (
+        {/* Row 2: Nav/Audit Controls (Left) & Export/Action Buttons (Right) */}
+        <div className="flex items-center justify-between gap-3 flex-wrap pt-2.5 border-t border-[#2A2D34]/80">
+          <div className="flex items-center gap-2 flex-wrap">
+            {onNavigateToTimeline && (
+              <button
+                onClick={onNavigateToTimeline}
+                className="px-3 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-neutral-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="View chronological threat timeline"
+              >
+                <Clock className="w-3.5 h-3.5 text-neutral-400" />
+                <span>Threat timeline</span>
+              </button>
+            )}
             <button
-              onClick={onNavigateToTimeline}
-              className="px-2.5 py-1.5 rounded bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-xs text-indigo-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="View chronological investigation timeline for this sender/domain"
+              onClick={handleReverifyVault}
+              disabled={reverifying}
+              className="px-3 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-neutral-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              title="Trigger live cryptographic SHA-256 re-verification"
             >
-              <Clock className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Threat Timeline</span>
+              <RefreshCw className={`w-3.5 h-3.5 text-neutral-400 ${reverifying ? 'animate-spin' : ''}`} />
+              <span>{reverifying ? 'Re-verifying...' : 'Audit hash'}</span>
             </button>
-          )}
-          <button
-            onClick={handleReverifyVault}
-            disabled={reverifying}
-            className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs text-slate-200 font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-            title="Trigger live cryptographic SHA-256 re-verification"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${reverifying ? 'animate-spin' : ''}`} />
-            <span>{reverifying ? 'Re-Verifying...' : 'Audit Hash'}</span>
-          </button>
-          <button
-            onClick={handleDownloadRawEml}
-            className="px-2.5 py-1.5 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs text-blue-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Download original, unaltered RFC 822 .eml bytes"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Raw .EML</span>
-          </button>
+            <button
+              onClick={handleDownloadRawEml}
+              className="px-3 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-neutral-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Download original, unaltered RFC 822 .eml bytes"
+            >
+              <Download className="w-3.5 h-3.5 text-neutral-400" />
+              <span>Raw .EML</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {onOpenReportModal && (
+              <button
+                onClick={onOpenReportModal}
+                className="px-3 py-1.5 rounded bg-cyan-950/60 hover:bg-cyan-900/60 border border-cyan-700/80 text-xs text-cyan-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              >
+                <FileCheck2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Export forensic report</span>
+              </button>
+            )}
+            {onOpenNewModal && (
+              <button
+                onClick={onOpenNewModal}
+                className="px-3 py-1.5 rounded bg-cyan-600 hover:bg-cyan-500 border border-cyan-500 text-xs text-white font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+              >
+                <span>+ New analysis</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Left Columns: Evidence Vault, Auth status cards, Geo Origin panel, Metadata & Links */}
-      <div className="col-span-12 xl:col-span-7 2xl:col-span-8 space-y-6">
+      {/* Main View Rendering */}
+      {overviewMode === 'card' ? (
+        <ForensicCaseTwoPanel
+          analysis={analysis}
+          evidenceCardData={evidenceCardData}
+          effectiveHash={effectiveHash}
+          onNavigateToMap={onNavigateToMap}
+          onNavigateToGraph={onNavigateToGraph}
+          onNavigateToLogs={onNavigateToLogs}
+        />
+      ) : (
+        <div className="grid grid-cols-12 gap-6">
+          {/* Left Columns: Evidence Vault, Auth status cards, Geo Origin panel, Metadata & Links */}
+          <div className="col-span-12 xl:col-span-7 2xl:col-span-8 space-y-6">
         {/* Evidence Vault & Chain of Custody Immutable Ledger Banner */}
         <div className="bg-[#1E293B] border border-blue-500/30 rounded-lg p-4 shadow-sm relative overflow-hidden bg-gradient-to-r from-[#1E293B] via-slate-900 to-slate-900">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
@@ -1545,6 +1598,8 @@ export function OverviewView({
         </div>
       </div>
     </div>
+  </div>
+)}
 
       {/* Standalone Evidence Tag Flashcard Modal */}
       {isEvidenceTagOpen && (

@@ -133,6 +133,8 @@ export default function App() {
               onNavigateToHeaders={() => setActiveTab('headers')}
               onNavigateToTimeline={() => setActiveTab('timeline')}
               onNavigateToGraph={() => setActiveTab('graph')}
+              onOpenNewModal={() => setIsNewModalOpen(true)}
+              onOpenReportModal={() => setIsReportModalOpen(true)}
             />
           )}
 

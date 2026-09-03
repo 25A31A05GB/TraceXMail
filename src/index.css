@@ -110,35 +110,48 @@
 
 .evidence-card .row {
   display: grid;
-  grid-template-columns: 105px 1fr;
-  gap: 4px 10px;
+  grid-template-columns: 110px 1fr;
+  gap: 6px 12px;
   font-size: 13px;
   padding: 4px 0;
   border-bottom: 1px dotted rgba(42, 45, 52, 0.9);
-  align-items: baseline;
+  align-items: start;
 }
-.evidence-card .row .k { color: #8C94A0; font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }
-.evidence-card .row .v { color: #F1EFEA; word-break: break-word; font-size: 14px; font-weight: 500; }
-.evidence-card .v { font-size: 14px; }
+.evidence-card .row .k { 
+  color: #8C94A0; 
+  font-size: 11.5px; 
+  font-weight: 600; 
+  letter-spacing: 0.04em; 
+  text-transform: uppercase;
+}
+.evidence-card .row .v { 
+  color: #F1EFEA; 
+  word-break: break-all; 
+  overflow-wrap: break-word; 
+  font-size: 13.5px; 
+  font-weight: 500; 
+}
+.evidence-card .v { font-size: 13.5px; word-break: break-all; }
 .evidence-card .v.bad { color: #F87171; font-weight: 700; }
 .evidence-card .v.warn { color: #FBBF24; font-weight: 700; }
 .evidence-card .v.good { color: #34D399; font-weight: 700; }
 
-.evidence-card .row-link .v { display: flex; justify-content: space-between; align-items: center; flex: 1; gap: 8px; }
+.evidence-card .row-link .v { display: flex; justify-content: space-between; align-items: center; flex: 1; gap: 8px; flex-wrap: wrap; }
 
 .evidence-card .section-label {
   font-size: 11px;
   letter-spacing: 0.08em;
   font-weight: 700;
   color: #94A3B8;
-  margin-top: 12px;
-  margin-bottom: 6px;
+  margin-top: 14px;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(42, 45, 52, 0.95);
   display: flex;
   align-items: center;
   gap: 8px;
   text-transform: uppercase;
 }
-.evidence-card .section-label::after { content: ""; flex: 1; height: 1px; background: rgba(42, 45, 52, 0.95); }
 
 .evidence-card .chips { display: flex; gap: 8px; margin-bottom: 2px; }
 .evidence-card .chip { flex: 1; border: 1px solid var(--line); background: var(--surface2); padding: 5px 6px; text-align: center; border-radius: 4px; }
