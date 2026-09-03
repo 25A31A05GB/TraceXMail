@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://tracexmail-l6c7.onrender.com/api/:path*"
+    }
+  ]
+}
