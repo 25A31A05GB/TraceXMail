@@ -1,0 +1,35 @@
+Delivered-To: recipient@enterprise-corp.internal
+Received: by 10.200.1.10 with SMTP id mx-gateway-internal for <recipient@enterprise-corp.internal>;
+        Tue, 01 Sep 2026 14:22:05 -0700 (PDT)
+Received: from mail-relay.stripe.com (mail-relay.stripe.com [54.187.174.169])
+        by mx.enterprise-corp.internal (Enterprise Postfix) with ESMTPS id 4W0f8d0y21z
+        for <recipient@enterprise-corp.internal>;
+        Tue, 01 Sep 2026 14:22:03 -0700 (PDT)
+Authentication-Results: mx.enterprise-corp.internal;
+        dkim=pass (2048-bit key; unprotected) header.d=stripe.com header.i=@stripe.com header.b="K8zF2a=";
+        spf=pass (mx.enterprise-corp.internal: domain of bounces+241@stripe.com designates 54.187.174.169 as permitted sender) smtp.mailfrom=bounces+241@stripe.com;
+        dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=stripe.com
+From: "Stripe Billing" <invoices@stripe.com>
+To: Accounts Payable <accounts@enterprise-corp.internal>
+Subject: Invoice #INV-2026-8841 from Stripe Cloud Services
+Date: Tue, 01 Sep 2026 14:22:01 -0700
+Message-ID: <stripe_invoice_20260901_8841@billing.stripe.com>
+Return-Path: <bounces+241@stripe.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Dear Customer,
+
+Your monthly invoice for Stripe Infrastructure Services is now available.
+
+Invoice Number: INV-2026-8841
+Billing Period: August 1, 2026 - August 31, 2026
+Amount Due: $1,420.00 USD
+Payment Status: Automatically charged to corporate Visa ending in 4108
+
+You can download your detailed itemized statement anytime from your Stripe Dashboard:
+https://dashboard.stripe.com/invoices/inv_2026_8841
+
+Thank you for your business.
+Stripe Finance Operations Team
+354 Oyster Point Blvd, South San Francisco, CA 94080

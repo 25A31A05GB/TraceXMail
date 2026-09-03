@@ -1,17 +1,27 @@
 /**
- * TraceXMail 5-Class ML TF-IDF Classifier & Forensic Evaluation Engine
- * Trained on Nazario Phishing Corpora, SpamAssassin Ham Benchmarks, and Real Threat Corpora.
+ * TraceXMail 5-Class ML Centroid-Cosine Classifier & Forensic Scoring Engine
  *
- * Classes:
- * 0: Legitimate
- * 1: Suspicious
- * 2: Impersonated
- * 3: Phishing
- * 4: Fraud-related
+ * Implements:
+ * 1. Runtime inference matching the trained Centroid Cosine model with temperature Softmax calibration.
+ * 2. 5-Class probability distribution: Legitimate, Suspicious, Impersonated, Phishing, Fraud-related.
+ * 3. Strict schema validation & fail-loudly model state checking.
+ * 4. Transparent, non-double-counted Threat Score (0-100) with explainable component breakdown:
+ *    - Authentication (max 25 pts)
+ *    - Domain Intelligence (max 25 pts)
+ *    - Infrastructure & Routing (max 20 pts)
+ *    - ML Content Probability (max 20 pts)
+ *    - Linguistic & Rule-Based Heuristics (max 10 pts)
+ * 5. Honest commodity attribution (no fabricated APT threat actors; evidence != physical attacker location).
  */
 
 import fs from 'fs';
 import path from 'path';
+import {
+  extractForensicTokens,
+  evaluateStructuralIdentity,
+  loadBrandDefinitions,
+  isPunycodeOrHomoglyph
+} from './structuralFeatures.js';
 
 export type EmailClassification =
   | 'Legitimate'
@@ -26,16 +36,26 @@ export interface ClassifierInput {
   to?: string;
   subject: string;
   bodyText?: string;
+  text?: string;
   replyTo?: string;
   returnPath?: string;
+  auth?: {
+    spf?: { status?: string; details?: string };
+    dkim?: { status?: string; details?: string };
+    dmarc?: { status?: string; details?: string; policy?: string };
+    arc?: { status?: string; details?: string };
+  };
   hops?: Array<{
     fromIp?: string;
     isPrivate?: boolean;
     isTor?: boolean;
+    is_tor?: boolean;
     isBlacklisted?: boolean;
     abuseScore?: number;
     asn?: string;
     org?: string;
+    city?: string;
+    country?: string;
   }>;
   domainIntelligence?: {
     status?: string;
@@ -53,6 +73,7 @@ export interface ClassifierInput {
       target_brand?: string;
       technique?: string;
     };
+    mx_missing?: boolean;
   };
 }
 
@@ -66,12 +87,25 @@ export interface FeatureWeight {
   description: string;
 }
 
+export interface ThreatScoreBreakdown {
+  total: number;
+  maxScore: 100;
+  components: {
+    authentication: { score: number; max: 25; reasons: string[] };
+    domainRisk: { score: number; max: 25; reasons: string[] };
+    infrastructureRisk: { score: number; max: 20; reasons: string[] };
+    mlClassification: { score: number; max: 20; reasons: string[] };
+    heuristics: { score: number; max: 10; reasons: string[] };
+  };
+}
+
 export interface ClassificationResult {
   classification: EmailClassification;
   predictedClass: EmailClassification;
   probabilities: Record<EmailClassification, number>;
   confidence: number;
   threatScore: number;
+  threatScoreBreakdown: ThreatScoreBreakdown;
   phishingProbability: number;
   mlConfidence: number;
   verdict: 'MALICIOUS PHISH' | 'SUSPICIOUS' | 'LEGITIMATE' | 'IMPERSONATED' | 'FRAUD-RELATED';
@@ -96,31 +130,40 @@ export interface ClassificationResult {
     actor: string;
     confidence: 'HIGH' | 'MEDIUM' | 'LOW';
     reason: string;
+    disclaimer: string;
   };
 }
 
-interface TrainedModelPayload {
+export interface TrainedModelPayload {
+  schemaVersion?: string;
+  featureSchemaVersion?: string;
   metadata?: {
-    accuracy?: number;
-    macroF1?: number;
-    weightedF1?: number;
+    modelName: string;
+    algorithm: string;
+    trainedAt?: string;
+    trainingCorpora?: string[];
     totalSamples?: number;
     trainCount?: number;
     testCount?: number;
+    classes: EmailClassification[];
+    vocabularySize: number;
+    testAccuracy: number;
+    macroF1: number;
+    weightedF1?: number;
+    baselineAccuracy?: number;
+    perClassMetrics?: Record<EmailClassification, { precision: number; recall: number; f1: number; support: number }>;
+    confusionMatrix?: number[][];
   };
-  classes: string[];
+  featureSchema?: string[];
   vocabulary: string[];
-  vocabMap?: Record<string, number>;
-  idf: number[];
-  weights?: number[][];
-  biases?: number[];
-  priors?: number[];
-  logLikelihoods?: number[][];
-  numClasses: number;
-  vocabSize: number;
+  vocabMap: Record<string, number>;
+  idf: Record<string, number>;
+  centroids: number[][];
+  priors: number[];
+  temperature: number;
 }
 
-const CLASS_NAMES: EmailClassification[] = [
+export const CLASS_NAMES: EmailClassification[] = [
   'Legitimate',
   'Suspicious',
   'Impersonated',
@@ -128,77 +171,104 @@ const CLASS_NAMES: EmailClassification[] = [
   'Fraud-related'
 ];
 
-class MachineLearningClassifier {
+export class MachineLearningClassifier {
   private model: TrainedModelPayload | null = null;
-  private vocabLookup: Map<string, number> = new Map();
+  private modelStatus: 'OPERATIONAL' | 'MISSING_ARTIFACT' | 'CORRUPTED_SCHEMA' = 'MISSING_ARTIFACT';
+  private loadError: string | null = null;
 
   constructor() {
     this.loadModel();
   }
 
-  private loadModel() {
+  public loadModel(): boolean {
     try {
       const modelPath = path.join(process.cwd(), 'data/datasets/trained_model.json');
-      if (fs.existsSync(modelPath)) {
-        const raw = fs.readFileSync(modelPath, 'utf-8');
-        this.model = JSON.parse(raw);
-        if (this.model) {
-          if (this.model.vocabMap) {
-            this.vocabLookup = new Map(Object.entries(this.model.vocabMap));
-          } else if (Array.isArray(this.model.vocabulary)) {
-            this.vocabLookup = new Map(this.model.vocabulary.map((t, idx) => [t, idx]));
-          }
-        }
+      if (!fs.existsSync(modelPath)) {
+        this.modelStatus = 'MISSING_ARTIFACT';
+        this.loadError = `Model artifact missing at: ${modelPath}`;
+        console.warn(`[Classifier] ${this.loadError}`);
+        return false;
       }
-    } catch (e) {
-      console.warn('[Classifier] Could not load trained_model.json, using fallback heuristics:', e);
+
+      const raw = fs.readFileSync(modelPath, 'utf-8');
+      const parsed: TrainedModelPayload = JSON.parse(raw);
+
+      // Strict Schema Validation
+      if (!parsed.vocabulary || !Array.isArray(parsed.vocabulary) || parsed.vocabulary.length === 0) {
+        throw new Error('Invalid model artifact: missing or empty vocabulary array');
+      }
+      if (!parsed.vocabMap || typeof parsed.vocabMap !== 'object') {
+        throw new Error('Invalid model artifact: missing vocabMap lookup table');
+      }
+      if (!parsed.centroids || !Array.isArray(parsed.centroids) || parsed.centroids.length !== 5) {
+        throw new Error(`Invalid model artifact: centroids array must have length 5 for 5 classes, received ${parsed.centroids?.length}`);
+      }
+      if (!parsed.idf || typeof parsed.idf !== 'object') {
+        throw new Error('Invalid model artifact: missing idf weights map');
+      }
+
+      this.model = parsed;
+      this.modelStatus = 'OPERATIONAL';
+      this.loadError = null;
+      console.log(`[Classifier] Successfully loaded ML model: ${this.model.metadata?.modelName || '5-Class Centroid Model'} (Schema: ${this.model.schemaVersion || '2.3.0'}, Vocab: ${this.model.vocabulary.length})`);
+      return true;
+    } catch (e: any) {
       this.model = null;
+      this.modelStatus = 'CORRUPTED_SCHEMA';
+      this.loadError = e?.message || 'Failed to parse model artifact';
+      console.error('[Classifier] Critical error during model artifact loading:', this.loadError);
+      return false;
     }
   }
 
-  /**
-   * Tokenizes text and appends forensic signal cues.
-   */
-  public tokenize(text: string): string[] {
-    const lower = text.toLowerCase();
-    const words = lower.match(/[a-z0-9_]{2,}/g) || [];
-    const tokens: string[] = [];
-
-    for (const w of words) {
-      if (w.length >= 2 && w.length <= 25) {
-        tokens.push(w);
-      }
-    }
-
-    // Bi-grams
-    for (let i = 0; i < words.length - 1; i++) {
-      tokens.push(`${words[i]}_${words[i + 1]}`);
-    }
-
-    // High-Signal Forensic Cues
-    if (/(?:wire transfer|direct deposit|payroll update|gift card|invoice payment|swift transfer|escrow|routing number)/i.test(text)) {
-      tokens.push('__cue_fraud_wire__', '__cue_fraud_wire__');
-    }
-    if (/(?:urgent|immediate|account suspended|password expired|verify your identity|security alert|confirm password|restore access)/i.test(text)) {
-      tokens.push('__cue_phish_lure__', '__cue_phish_lure__');
-    }
-    if (/(?:docusign|microsoft|office 365|paypal|chase|apple|wells fargo|bank of america|netflix)/i.test(text)) {
-      tokens.push('__cue_brand_target__', '__cue_brand_target__');
-    }
-    if (/(?:click here|unsubscribe|exclusive offer|special discount|blast|promo deal|b2b leads|webinar)/i.test(text)) {
-      tokens.push('__cue_marketing_susp__', '__cue_marketing_susp__');
-    }
-    if (/(?:github|pull request|jira|meeting notes|standup|agenda|sprint|team discussion|patch|linux|debian|python)/i.test(text)) {
-      tokens.push('__cue_legit_work__', '__cue_legit_work__');
-    }
-
-    return tokens;
+  public getStatus() {
+    return {
+      status: this.modelStatus,
+      error: this.loadError,
+      isOperational: this.modelStatus === 'OPERATIONAL',
+      modelName: this.model?.metadata?.modelName || null,
+      schemaVersion: this.model?.schemaVersion || null,
+      featureSchemaVersion: this.model?.featureSchemaVersion || null,
+      classes: this.model?.metadata?.classes || CLASS_NAMES,
+      vocabularySize: this.model?.vocabulary?.length || 0,
+      metadata: this.model?.metadata || null,
+      temperature: this.model?.temperature || 12.0
+    };
   }
 
   /**
-   * Evaluates text through the trained ML inference engine.
+   * Tokenizes text and extracts forensic features matching training pipeline.
    */
-  public predict(text: string): {
+  public tokenize(input: {
+    subject: string;
+    from?: string;
+    fromDomain?: string;
+    bodyText?: string;
+    text?: string;
+    replyTo?: string;
+    returnPath?: string;
+    auth?: ClassifierInput['auth'];
+    domainIntelligence?: ClassifierInput['domainIntelligence'];
+    hops?: ClassifierInput['hops'];
+  }): string[] {
+    return extractForensicTokens(input);
+  }
+
+  /**
+   * Evaluates text through the trained Centroid Cosine ML engine.
+   */
+  public predict(input: {
+    subject: string;
+    from?: string;
+    fromDomain?: string;
+    bodyText?: string;
+    text?: string;
+    replyTo?: string;
+    returnPath?: string;
+    auth?: ClassifierInput['auth'];
+    domainIntelligence?: ClassifierInput['domainIntelligence'];
+    hops?: ClassifierInput['hops'];
+  }): {
     predictedClass: EmailClassification;
     probabilities: Record<EmailClassification, number>;
     confidence: number;
@@ -212,7 +282,7 @@ class MachineLearningClassifier {
       'Fraud-related': 0.2
     };
 
-    if (!this.model) {
+    if (!this.model || !this.model.vocabMap || !this.model.centroids) {
       return {
         predictedClass: 'Suspicious',
         probabilities: defaultProbs,
@@ -221,296 +291,311 @@ class MachineLearningClassifier {
       };
     }
 
-    const tokens = this.tokenize(text);
-
-    // Support Calibrated Softmax Logistic Regression model (weights + biases)
-    if (this.model.weights && this.model.biases) {
-      const counts: Record<number, number> = {};
-      for (const t of tokens) {
-        const idx = this.vocabLookup.get(t);
-        if (idx !== undefined) {
-          counts[idx] = (counts[idx] || 0) + 1;
-        }
+    const tokens = this.tokenize(input);
+    const counts: Record<string, number> = {};
+    for (const t of tokens) {
+      if (this.model.vocabMap[t] !== undefined) {
+        counts[t] = (counts[t] || 0) + 1;
       }
-
-      let normSq = 0;
-      const entries: Array<[number, number]> = [];
-      for (const [idxStr, cnt] of Object.entries(counts)) {
-        const idx = Number(idxStr);
-        const idfVal = this.model.idf[idx] || 1.0;
-        const val = (1.0 + Math.log(cnt)) * idfVal;
-        entries.push([idx, val]);
-        normSq += val * val;
-      }
-      const norm = Math.sqrt(normSq);
-      if (norm > 0) {
-        for (const e of entries) e[1] /= norm;
-      }
-
-      const numClasses = this.model.numClasses || 5;
-      const logits = [...this.model.biases];
-      for (const [idx, val] of entries) {
-        for (let c = 0; c < numClasses; c++) {
-          logits[c] += this.model.weights[c][idx] * val;
-        }
-      }
-
-      const maxLogit = Math.max(...logits);
-      const exps = logits.map(l => Math.exp(l - maxLogit));
-      const sumExp = exps.reduce((a, b) => a + b, 0);
-      const probs = exps.map(e => e / (sumExp || 1));
-
-      let bestIdx = 0;
-      let bestProb = -1;
-      for (let i = 0; i < probs.length; i++) {
-        if (probs[i] > bestProb) {
-          bestProb = probs[i];
-          bestIdx = i;
-        }
-      }
-
-      const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
-      const resultProbs: Record<EmailClassification, number> = {
-        Legitimate: parseFloat((probs[0] || 0).toFixed(4)),
-        Suspicious: parseFloat((probs[1] || 0).toFixed(4)),
-        Impersonated: parseFloat((probs[2] || 0).toFixed(4)),
-        Phishing: parseFloat((probs[3] || 0).toFixed(4)),
-        'Fraud-related': parseFloat((probs[4] || 0).toFixed(4))
-      };
-
-      const tokenWeights: Array<{ token: string; weight: number }> = [];
-      for (const [idx, val] of entries) {
-        const token = this.model.vocabulary[idx];
-        const w = this.model.weights[bestIdx][idx] * val;
-        tokenWeights.push({ token, weight: parseFloat(w.toFixed(3)) });
-      }
-      tokenWeights.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
-
-      return {
-        predictedClass,
-        probabilities: resultProbs,
-        confidence: parseFloat(bestProb.toFixed(3)),
-        topFeatures: tokenWeights.slice(0, 8)
-      };
     }
 
-    // Fallback Naive Bayes (logLikelihoods + priors)
-    if (this.model.priors && this.model.logLikelihoods) {
-      const logPosteriors = [...this.model.priors];
-      const tokenWeights: Array<{ token: string; weight: number }> = [];
-      const countedTokens = new Set<string>();
-
-      for (const token of tokens) {
-        const idx = this.vocabLookup.get(token);
-        if (idx !== undefined && !countedTokens.has(token)) {
-          countedTokens.add(token);
-          const idfVal = this.model.idf[idx] || 1;
-          for (let c = 0; c < this.model.numClasses; c++) {
-            const ll = this.model.logLikelihoods[c][idx];
-            logPosteriors[c] += ll * idfVal;
-          }
-          tokenWeights.push({
-            token,
-            weight: parseFloat((this.model.logLikelihoods[3][idx] || 0).toFixed(3))
-          });
-        }
-      }
-
-      const maxLog = Math.max(...logPosteriors);
-      const exps = logPosteriors.map(lp => Math.exp(lp - maxLog));
-      const sumExp = exps.reduce((a, b) => a + b, 0);
-      const probs = exps.map(e => e / sumExp);
-
-      let bestIdx = 0;
-      let bestProb = -1;
-      for (let i = 0; i < probs.length; i++) {
-        if (probs[i] > bestProb) {
-          bestProb = probs[i];
-          bestIdx = i;
-        }
-      }
-
-      const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
-      const resultProbs: Record<EmailClassification, number> = {
-        Legitimate: parseFloat(probs[0].toFixed(4)),
-        Suspicious: parseFloat(probs[1].toFixed(4)),
-        Impersonated: parseFloat(probs[2].toFixed(4)),
-        Phishing: parseFloat(probs[3].toFixed(4)),
-        'Fraud-related': parseFloat(probs[4].toFixed(4))
-      };
-
-      return {
-        predictedClass,
-        probabilities: resultProbs,
-        confidence: parseFloat(bestProb.toFixed(3)),
-        topFeatures: tokenWeights.slice(0, 8)
-      };
+    const entries: Array<[number, number]> = [];
+    let sumSq = 0;
+    for (const [t, count] of Object.entries(counts)) {
+      const idx = this.model.vocabMap[t];
+      const tf = 1 + Math.log(count);
+      const tfidf = tf * (this.model.idf[t] || 1);
+      entries.push([idx, tfidf]);
+      sumSq += tfidf * tfidf;
     }
+
+    const norm = Math.sqrt(sumSq) || 1;
+    for (const e of entries) {
+      e[1] /= norm;
+    }
+
+    const numClasses = CLASS_NAMES.length;
+    const similarities = new Array(numClasses).fill(0);
+
+    for (let c = 0; c < numClasses; c++) {
+      let dot = 0;
+      const centroidRow = this.model.centroids[c];
+      if (centroidRow) {
+        for (const [fIdx, val] of entries) {
+          dot += (centroidRow[fIdx] || 0) * val;
+        }
+      }
+      similarities[c] = dot;
+    }
+
+    const temperature = this.model.temperature || 12.0;
+    const maxSim = Math.max(...similarities);
+    let sumExp = 0;
+    const exps = new Array(numClasses);
+    for (let c = 0; c < numClasses; c++) {
+      exps[c] = Math.exp(temperature * (similarities[c] - maxSim));
+      sumExp += exps[c];
+    }
+
+    const probs = exps.map(e => (sumExp > 0 ? e / sumExp : 1 / numClasses));
+
+    let bestIdx = 0;
+    let bestProb = -1;
+    for (let i = 0; i < probs.length; i++) {
+      if (probs[i] > bestProb) {
+        bestProb = probs[i];
+        bestIdx = i;
+      }
+    }
+
+    const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
+    const resultProbs: Record<EmailClassification, number> = {
+      Legitimate: parseFloat(probs[0].toFixed(4)),
+      Suspicious: parseFloat(probs[1].toFixed(4)),
+      Impersonated: parseFloat(probs[2].toFixed(4)),
+      Phishing: parseFloat(probs[3].toFixed(4)),
+      'Fraud-related': parseFloat(probs[4].toFixed(4))
+    };
+
+    const tokenWeights: Array<{ token: string; weight: number }> = [];
+    const centroidRow = this.model.centroids[bestIdx];
+    if (centroidRow) {
+      for (const [fIdx, val] of entries) {
+        const token = this.model.vocabulary[fIdx];
+        const w = (centroidRow[fIdx] || 0) * val;
+        if (w > 0.005) {
+          tokenWeights.push({ token, weight: parseFloat(w.toFixed(3)) });
+        }
+      }
+    }
+    tokenWeights.sort((a, b) => b.weight - a.weight);
+
+    const sortedProbs = [...probs].sort((a, b) => b - a);
+    const confidence = parseFloat((sortedProbs[0] - (sortedProbs[1] || 0)).toFixed(3));
 
     return {
-      predictedClass: 'Suspicious',
-      probabilities: defaultProbs,
-      confidence: 0.5,
-      topFeatures: []
+      predictedClass,
+      probabilities: resultProbs,
+      confidence: Math.max(0.1, confidence),
+      topFeatures: tokenWeights.slice(0, 8)
     };
   }
 }
 
-const mlEngine = new MachineLearningClassifier();
-
-const URGENCY_PATTERNS = [
-  /\burgent\b/i,
-  /\bimmediate(?:ly)?\b/i,
-  /\baction required\b/i,
-  /\baccount (?:suspended|restricted|locked|disabled)\b/i,
-  /\bwithin 24 hours\b/i,
-  /\bpassword (?:expired|expir(?:es|y)|reset)\b/i,
-  /\bunauthorized (?:access|activity|sign-in)\b/i,
-  /\bverify your (?:identity|account|credentials)\b/i,
-  /\bsecurity alert\b/i,
-  /\bwire (?:transfer|redirection)\b/i,
-  /\bdirect deposit\b/i,
-  /\bpayroll update\b/i
-];
-
-const BRAND_KEYWORDS = [
-  { name: 'PayPal', pattern: /\bpaypal\b/i, domainPattern: /paypal\.com$/i },
-  { name: 'Microsoft', pattern: /\bmicrosoft|office\s*365|m365|outlook\b/i, domainPattern: /(?:microsoft|office365|live|outlook)\.com$/i },
-  { name: 'DocuSign', pattern: /\bdocusign\b/i, domainPattern: /docusign\.com$/i },
-  { name: 'Google', pattern: /\bgoogle|gmail\b/i, domainPattern: /(?:google|gmail)\.com$/i },
-  { name: 'Apple', pattern: /\bapple|icloud\b/i, domainPattern: /(?:apple|icloud)\.com$/i },
-  { name: 'Chase', pattern: /\bchase\b/i, domainPattern: /chase\.com$/i },
-  { name: 'Bank of America', pattern: /\bbank of america|bofa\b/i, domainPattern: /bankofamerica\.com$/i }
-];
+export const mlEngine = new MachineLearningClassifier();
 
 /**
- * Main forensic classifier combining ML TF-IDF inference with structural header evidence.
+ * Main forensic classifier combining ML Centroid-Cosine TF-IDF inference with structural identity evidence.
+ * Generates an explainable 0-100 Threat Score without double-counting.
  */
 export function classifyEmailForensics(input: ClassifierInput): ClassificationResult {
   const features: FeatureWeight[] = [];
   const heuristics: ClassificationResult['heuristics'] = [];
   const topVectors: string[] = [];
 
-  const textCorpus = `${input.subject} ${input.bodyText || ''} from:${input.from} domain:${input.fromDomain}`;
-  const mlOutput = mlEngine.predict(textCorpus);
-
-  // 1. Typosquatting / Brand Lookalike Evaluation
-  const isTyposquat = Boolean(input.domainIntelligence?.typosquatting?.is_typosquat);
-  const targetBrand = input.domainIntelligence?.typosquatting?.target_brand;
-  features.push({
-    feature: 'domain_typosquatting',
-    category: 'DOMAIN',
-    weight: 42,
-    triggered: isTyposquat,
-    severity: 'CRITICAL',
-    title: 'Brand Impersonation & Typosquatting Domain',
-    description: isTyposquat
-      ? `Sending domain ${input.fromDomain} mimics enterprise brand "${targetBrand}" (${input.domainIntelligence?.typosquatting?.technique || 'lookalike'}).`
-      : 'No lookalike domain permutations detected.'
+  const mlOutput = mlEngine.predict({
+    subject: input.subject,
+    from: input.from,
+    fromDomain: input.fromDomain,
+    bodyText: input.bodyText || input.text,
+    replyTo: input.replyTo,
+    returnPath: input.returnPath,
+    auth: input.auth,
+    domainIntelligence: input.domainIntelligence,
+    hops: input.hops
   });
 
-  // 2. Display Name Spoofing Check
-  let displayNameSpoof = false;
-  let spoofedBrandName = '';
-  for (const brand of BRAND_KEYWORDS) {
-    if (brand.pattern.test(input.from) && !brand.domainPattern.test(input.fromDomain)) {
-      displayNameSpoof = true;
-      spoofedBrandName = brand.name;
-      break;
-    }
+  const structuralIdentity = evaluateStructuralIdentity({
+    from: input.from,
+    fromDomain: input.fromDomain,
+    replyTo: input.replyTo,
+    returnPath: input.returnPath,
+    auth: input.auth,
+    domainIntelligence: input.domainIntelligence,
+    hops: input.hops
+  });
+
+  // -------------------------------------------------------------
+  // Component 1: Authentication Evaluation (Max 25 pts)
+  // -------------------------------------------------------------
+  let authScore = 0;
+  const authReasons: string[] = [];
+
+  const spfStatus = input.auth?.spf?.status?.toUpperCase();
+  const dkimStatus = input.auth?.dkim?.status?.toUpperCase();
+  const dmarcStatus = input.auth?.dmarc?.status?.toUpperCase();
+
+  if (spfStatus === 'FAIL') {
+    authScore += 10;
+    authReasons.push('SPF validation hard-failed (-all rejected sending host IP)');
+  } else if (spfStatus === 'SOFTFAIL') {
+    authScore += 6;
+    authReasons.push('SPF validation soft-failed (~all unaligned sender IP)');
   }
+
+  if (dkimStatus === 'FAIL' || dkimStatus === 'INVALID') {
+    authScore += 10;
+    authReasons.push('DKIM cryptographic signature verification failed');
+  }
+
+  if (dmarcStatus === 'REJECT' || dmarcStatus === 'FAIL') {
+    authScore += 10;
+    authReasons.push('DMARC alignment policy failed');
+  }
+
+  authScore = Math.min(25, authScore);
   features.push({
-    feature: 'display_name_spoofing',
-    category: 'IDENTITY',
-    weight: 35,
-    triggered: displayNameSpoof,
-    severity: 'HIGH',
-    title: 'Display Name Identity Spoofing',
-    description: displayNameSpoof
-      ? `Display header claims identity "${spoofedBrandName}" but originates from unaligned domain ${input.fromDomain}.`
-      : 'Display name aligns with sender envelope domain.'
+    feature: 'authentication_alignment',
+    category: 'AUTHENTICATION',
+    weight: authScore,
+    triggered: authScore > 0,
+    severity: authScore >= 15 ? 'CRITICAL' : authScore > 0 ? 'HIGH' : 'LOW',
+    title: 'Authentication & Cryptographic Alignment',
+    description: authReasons.length > 0
+      ? authReasons.join('; ')
+      : 'SPF, DKIM, and DMARC passing or aligned.'
   });
 
-  // 3. Authoritative DNS Existence (NXDOMAIN)
+  // -------------------------------------------------------------
+  // Component 2: Domain Risk Evaluation (Max 25 pts)
+  // -------------------------------------------------------------
+  let domainScore = 0;
+  const domainReasons: string[] = [];
+
+  const isTyposquat = Boolean(input.domainIntelligence?.typosquatting?.is_typosquat || structuralIdentity.isLookalikeDomain);
+  const targetBrand = input.domainIntelligence?.typosquatting?.target_brand || structuralIdentity.claimedBrand;
+  if (isTyposquat) {
+    domainScore += 15;
+    domainReasons.push(`Domain mimics enterprise brand "${targetBrand || 'Known Brand'}"`);
+  }
+
   const isNxdomain = input.domainIntelligence?.status === 'nxdomain';
-  features.push({
-    feature: 'nxdomain_status',
-    category: 'DOMAIN',
-    weight: 38,
-    triggered: isNxdomain,
-    severity: 'HIGH',
-    title: 'Non-Existent Sender Domain (NXDOMAIN)',
-    description: isNxdomain
-      ? `Domain ${input.fromDomain} has no authoritative SOA or NS records in public DNS.`
-      : 'Domain successfully resolved in public DNS hierarchy.'
-  });
+  if (isNxdomain) {
+    domainScore += 15;
+    domainReasons.push(`Domain ${input.fromDomain} does not exist in public authoritative DNS (NXDOMAIN)`);
+  }
 
-  // 4. Newly Registered Domain (< 30 days)
   const isNewDomain = Boolean(input.domainIntelligence?.is_newly_registered);
   const domainAge = input.domainIntelligence?.domain_age_days;
+  if (isNewDomain) {
+    domainScore += 10;
+    domainReasons.push(`Newly registered domain (${domainAge !== undefined ? `${domainAge} days` : '<30 days'})`);
+  }
+
+  const mxMissing = Boolean(input.domainIntelligence?.mx_missing);
+  if (mxMissing) {
+    domainScore += 8;
+    domainReasons.push('No Mail Exchanger (MX) records found in DNS');
+  }
+
+  domainScore = Math.min(25, domainScore);
   features.push({
-    feature: 'newly_registered_domain',
+    feature: 'domain_risk_intelligence',
     category: 'DOMAIN',
-    weight: 22,
-    triggered: isNewDomain,
-    severity: 'HIGH',
-    title: 'Newly Registered Domain (NRD)',
-    description: isNewDomain
-      ? `Sender domain was registered recently (${domainAge !== undefined ? `${domainAge} days ago` : '< 30 days'}).`
-      : `Domain established with mature registration history (${domainAge !== undefined ? `${domainAge} days` : '> 1 year'}).`
+    weight: domainScore,
+    triggered: domainScore > 0,
+    severity: domainScore >= 15 ? 'CRITICAL' : domainScore > 0 ? 'HIGH' : 'LOW',
+    title: 'Domain Risk & Registration Intelligence',
+    description: domainReasons.length > 0 ? domainReasons.join('; ') : 'Established domain with authoritative DNS.'
   });
 
-  // 5. Tor / Blacklisted Relay Hop Infrastructure
-  const torHop = input.hops?.find(h => h.isTor || h.isBlacklisted || (h.abuseScore && h.abuseScore > 60));
+  // -------------------------------------------------------------
+  // Component 3: Infrastructure & Route Risk (Max 20 pts)
+  // -------------------------------------------------------------
+  let infraScore = 0;
+  const infraReasons: string[] = [];
+
+  const torOrAbuseHop = input.hops?.find(h => h.isTor || h.is_tor || h.isBlacklisted || (h.abuseScore && h.abuseScore > 60));
+  if (torOrAbuseHop) {
+    infraScore += 15;
+    infraReasons.push(`Relay hop ${torOrAbuseHop.fromIp || 'node'} flagged for anonymization / abuse score ${torOrAbuseHop.abuseScore || 85}%`);
+  }
+
+  infraScore = Math.min(20, infraScore);
   features.push({
-    feature: 'anonymized_relay_hop',
+    feature: 'infrastructure_route_risk',
     category: 'INFRASTRUCTURE',
-    weight: 40,
-    triggered: Boolean(torHop),
-    severity: 'CRITICAL',
-    title: 'Anonymized / High-Abuse Relay Infrastructure',
-    description: torHop
-      ? `Transmission path includes high-risk hop ${torHop.fromIp || 'node'} (Tor Exit / Abuse confidence ${torHop.abuseScore || 85}%).`
-      : 'No anonymized exit nodes or flagged relay subnets detected in route trace.'
+    weight: infraScore,
+    triggered: infraScore > 0,
+    severity: infraScore >= 15 ? 'CRITICAL' : 'LOW',
+    title: 'Transmission Route & Relay Infrastructure',
+    description: infraReasons.length > 0 ? infraReasons.join('; ') : 'Transmission path passed through verified relays.'
   });
 
-  // 6. Linguistic Urgency & Fraud Triggers
-  const matchedUrgencyPatterns = URGENCY_PATTERNS.filter(regex => regex.test(textCorpus));
-  const hasUrgency = matchedUrgencyPatterns.length > 0;
+  // -------------------------------------------------------------
+  // Component 4: Machine Learning Content Risk (Max 20 pts)
+  // -------------------------------------------------------------
+  const maliciousProbability = (mlOutput.probabilities.Phishing || 0) +
+    (mlOutput.probabilities['Fraud-related'] || 0) +
+    0.6 * (mlOutput.probabilities.Impersonated || 0) +
+    0.3 * (mlOutput.probabilities.Suspicious || 0);
+
+  const mlScore = Math.min(20, Math.round(maliciousProbability * 20));
+  const mlReasons: string[] = [
+    `ML classifier predicted class: "${mlOutput.predictedClass}" (confidence ${(mlOutput.confidence * 100).toFixed(1)}%)`,
+    `Phishing prob: ${((mlOutput.probabilities.Phishing || 0) * 100).toFixed(1)}%, Fraud prob: ${((mlOutput.probabilities['Fraud-related'] || 0) * 100).toFixed(1)}%`
+  ];
+
   features.push({
-    feature: 'linguistic_urgency_triggers',
+    feature: 'ml_content_probability',
     category: 'LINGUISTIC',
-    weight: Math.min(25, matchedUrgencyPatterns.length * 8),
-    triggered: hasUrgency,
-    severity: matchedUrgencyPatterns.length >= 2 ? 'HIGH' : 'MEDIUM',
-    title: 'Urgency & Psychological Coercion Cues',
-    description: hasUrgency
-      ? `Linguistic scanning detected ${matchedUrgencyPatterns.length} urgency patterns in message content.`
-      : 'No high-pressure psychological manipulation tokens detected.'
+    weight: mlScore,
+    triggered: mlScore > 5,
+    severity: mlScore >= 15 ? 'CRITICAL' : mlScore >= 10 ? 'HIGH' : 'LOW',
+    title: 'Machine Learning Content Classification',
+    description: mlReasons.join(' | ')
   });
 
-  // 7. Reply-To / Return-Path Mismatch
-  const replyTo = (input.replyTo || '').toLowerCase();
-  const replyToDomainMatch = replyTo.match(/@([\w.-]+)/);
-  const replyToDomain = replyToDomainMatch ? replyToDomainMatch[1] : '';
-  const hasReplyToMismatch = Boolean(replyToDomain && replyToDomain !== input.fromDomain.toLowerCase());
+  // -------------------------------------------------------------
+  // Component 5: Rule-Based Heuristics (Max 10 pts)
+  // -------------------------------------------------------------
+  let heuristicScore = 0;
+  const heuristicReasons: string[] = [];
+
+  if (structuralIdentity.isReplyToMismatch) {
+    heuristicScore += 5;
+    heuristicReasons.push(`Reply-To header routes to different domain (${input.replyTo})`);
+  }
+
+  if (structuralIdentity.isBrandDisplayMismatch) {
+    heuristicScore += 5;
+    heuristicReasons.push(`Display name claims identity "${structuralIdentity.claimedBrand}" but originates from unaligned domain ${input.fromDomain}`);
+  }
+
+  if (structuralIdentity.isPunycode) {
+    heuristicScore += 5;
+    heuristicReasons.push('Punycode / Homoglyph lookalike characters detected in sender domain');
+  }
+
+  heuristicScore = Math.min(10, heuristicScore);
   features.push({
-    feature: 'reply_to_mismatch',
+    feature: 'heuristic_identity_rules',
     category: 'IDENTITY',
-    weight: 20,
-    triggered: hasReplyToMismatch,
-    severity: 'MEDIUM',
-    title: 'Reply-To Routing Redirection',
-    description: hasReplyToMismatch
-      ? `Reply-To header directs responses to different domain (${replyToDomain}) than sender (${input.fromDomain}).`
-      : 'Reply-To routing matches envelope sender.'
+    weight: heuristicScore,
+    triggered: heuristicScore > 0,
+    severity: heuristicScore >= 8 ? 'HIGH' : heuristicScore > 0 ? 'MEDIUM' : 'LOW',
+    title: 'Identity & Routing Redirection Heuristics',
+    description: heuristicReasons.length > 0 ? heuristicReasons.join('; ') : 'No identity spoofing or reply redirection detected.'
   });
 
-  // Calculate Heuristics & Threat Score
-  let scoreSum = 0;
+  // Calculate Total Threat Score (0 - 100)
+  const totalThreatScore = Math.min(100, authScore + domainScore + infraScore + mlScore + heuristicScore);
+
+  const threatScoreBreakdown: ThreatScoreBreakdown = {
+    total: totalThreatScore,
+    maxScore: 100,
+    components: {
+      authentication: { score: authScore, max: 25, reasons: authReasons },
+      domainRisk: { score: domainScore, max: 25, reasons: domainReasons },
+      infrastructureRisk: { score: infraScore, max: 20, reasons: infraReasons },
+      mlClassification: { score: mlScore, max: 20, reasons: mlReasons },
+      heuristics: { score: heuristicScore, max: 10, reasons: heuristicReasons }
+    }
+  };
+
+  // Compile active heuristics list
   for (const feat of features) {
     if (feat.triggered) {
-      scoreSum += feat.weight;
       heuristics.push({
         id: `h-${feat.feature}`,
         title: feat.title,
@@ -522,19 +607,13 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     }
   }
 
-  // Determine final fused classification
+  // Classification & Verdict derivation
   let finalClass: EmailClassification = mlOutput.predictedClass;
-  if (isTyposquat || displayNameSpoof) {
-    finalClass = 'Impersonated';
-  } else if (matchedUrgencyPatterns.some(p => p.source.includes('wire') || p.source.includes('payroll') || p.source.includes('deposit'))) {
-    finalClass = 'Fraud-related';
-  } else if (scoreSum >= 65 && finalClass === 'Legitimate') {
-    finalClass = 'Phishing';
+  if (structuralIdentity.isBrandDisplayMismatch || structuralIdentity.isLookalikeDomain || structuralIdentity.isPunycode) {
+    if (mlOutput.predictedClass !== 'Fraud-related') {
+      finalClass = 'Impersonated';
+    }
   }
-
-  const threatScore = Math.min(99, Math.max(5, Math.round(scoreSum * 0.7 + (1 - mlOutput.probabilities.Legitimate) * 30)));
-  const phishingProbability = parseFloat((1 - mlOutput.probabilities.Legitimate).toFixed(3));
-  const mlConfidence = mlOutput.confidence;
 
   const verdict: ClassificationResult['verdict'] =
     finalClass === 'Phishing' ? 'MALICIOUS PHISH'
@@ -544,23 +623,26 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     : 'LEGITIMATE';
 
   const severity: ClassificationResult['severity'] =
-    threatScore > 85 ? 'CRITICAL'
-    : threatScore > 70 ? 'HIGH'
-    : threatScore > 40 ? 'MEDIUM'
-    : threatScore > 20 ? 'LOW'
+    totalThreatScore >= 80 ? 'CRITICAL'
+    : totalThreatScore >= 60 ? 'HIGH'
+    : totalThreatScore >= 35 ? 'MEDIUM'
+    : totalThreatScore >= 15 ? 'LOW'
     : 'CLEAN';
 
-  // Honest attribution: No fake TA505/Lazarus/Storm-0324
+  const phishingProbability = parseFloat((mlOutput.probabilities.Phishing || 0).toFixed(4));
+  const mlConfidence = mlOutput.confidence;
+
   const attribution: ClassificationResult['attribution'] = {
-    actor: 'Unattributed',
+    actor: 'Commodity Threat Infrastructure',
     confidence: 'LOW',
-    reason: 'Forensic telemetry indicates generic commodity phishing / BEC infrastructure without verified APT signatures.'
+    reason: 'Forensic indicators reflect automated or commodity spoofing infrastructure; no specific APT actor attribution is made.',
+    disclaimer: 'Evidence reflects intermediate transmission relays and network-level telemetry, NOT physical attacker location or definitive actor attribution.'
   };
 
   const infrastructureBreakdown = {
-    spoofedDomain: isTyposquat || displayNameSpoof ? 85 : 15,
-    anonymizedRelay: Boolean(torHop) ? 90 : 10,
-    compromisedAccount: hasReplyToMismatch ? 65 : 20,
+    spoofedDomain: isTyposquat || structuralIdentity.isBrandDisplayMismatch ? 85 : 10,
+    anonymizedRelay: Boolean(torOrAbuseHop) ? 90 : 10,
+    compromisedAccount: structuralIdentity.isReplyToMismatch ? 70 : 15,
     legitimateRoute: finalClass === 'Legitimate' ? 95 : 5
   };
 
@@ -569,7 +651,8 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     predictedClass: finalClass,
     probabilities: mlOutput.probabilities,
     confidence: mlConfidence,
-    threatScore,
+    threatScore: totalThreatScore,
+    threatScoreBreakdown,
     phishingProbability,
     mlConfidence,
     verdict,

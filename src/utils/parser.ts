@@ -18,16 +18,7 @@ export function extractDomain(url: string): string {
   }
 }
 
-// Known prefix lookups for local offline fallback
-const KNOWN_GEO: Record<string, { city: string; country: string; code: string; lat: number; lng: number; asn: string; org: string }> = {
-  '185.220': { city: 'Sofia', country: 'Bulgaria', code: 'BG', lat: 42.6977, lng: 23.3219, asn: 'AS200548', org: 'Zettahost Cyber Ltd' },
-  '89.144': { city: 'Frankfurt', country: 'Germany', code: 'DE', lat: 50.1109, lng: 8.6821, asn: 'AS24940', org: 'Hetzner Online' },
-  '194.26': { city: 'Chisinau', country: 'Moldova', code: 'MD', lat: 47.0105, lng: 28.8638, asn: 'AS57523', org: 'AlexHost SRL' },
-  '192.30': { city: 'San Francisco', country: 'United States', code: 'US', lat: 37.7749, lng: -122.4194, asn: 'AS36459', org: 'GitHub Inc.' },
-  '172.217': { city: 'Mountain View', country: 'United States', code: 'US', lat: 37.3861, lng: -122.0839, asn: 'AS15169', org: 'Google LLC' },
-  '45.141': { city: 'Bucharest', country: 'Romania', code: 'RO', lat: 44.4268, lng: 26.1025, asn: 'AS49981', org: 'WorldStream B.V.' },
-  '104.244': { city: 'San Francisco', country: 'United States', code: 'US', lat: 37.7749, lng: -122.4194, asn: 'AS13414', org: 'Twitter / X Corp' },
-};
+// MaxMind GeoLite2 Offline Resolver integration
 
 export interface ClassifiedIp {
   isPrivate: boolean;
@@ -180,10 +171,6 @@ function estimateGeo(ip?: string) {
       maxmindLicense: maxmind.license,
       lookupMethod: maxmind.lookupMethod
     };
-  }
-  const prefix = ip.split('.').slice(0, 2).join('.');
-  if (KNOWN_GEO[prefix]) {
-    return { ...KNOWN_GEO[prefix], lookupMethod: 'KNOWN_PREFIX_MAPPING' };
   }
   // Principle §24: UNKNOWN is a valid result. Do NOT invent fake Sofia/Tokyo/London locations for unknown IPs.
   return {
@@ -421,9 +408,7 @@ export function mapBackendCaseToAnalysis(
         'backend/data/maxmind/GeoLite2-ASN-Blocks-IPv4.csv'
       ]
     } : undefined),
-    isOfflineFallback: false,
-    isFastApiAccelerated: data.isFastApiAccelerated ?? data.is_fastapi_accelerated ?? false,
-    performanceMetrics: data.performanceMetrics || data.performance_metrics
+    isOfflineFallback: false
   };
 }
 
@@ -778,63 +763,4 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
     isOfflineFallback: false
   };
 }
-
-/**
- * Offloads email header parsing and regex extraction to the high-performance Python FastAPI service.
- * Automatically falls back to the client parser if the service is unreachable.
- */
-export async function parseRawEmlViaFastApi(raw: string, filename = 'custom_analysis.eml'): Promise<EmailAnalysis> {
-  try {
-    const res = await fetch('/api/fastapi/parse', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_content: raw, filename })
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data?.analysis) {
-        const analysis: EmailAnalysis = data.analysis;
-        analysis.isFastApiAccelerated = true;
-        analysis.isOfflineFallback = false;
-        if (!analysis.sha256Hash) {
-          analysis.sha256Hash = sha256Sync(raw);
-          analysis.custodyHash = analysis.sha256Hash;
-        }
-        if (!analysis.evidenceId) {
-          analysis.evidenceId = generateEvidenceId();
-        }
-        return analysis;
-      }
-    }
-  } catch (err) {
-    console.warn('[Parser] FastAPI service offload unavailable, using client fallback:', err);
-  }
-
-  // Graceful fallback to client parser
-  const fallback = parseRawEml(raw, filename);
-  fallback.isFastApiAccelerated = false;
-  fallback.isOfflineFallback = true;
-  return fallback;
-}
-
-/**
- * Offloads arbitrary text regex extraction to the FastAPI engine.
- */
-export async function extractRegexViaFastApi(text: string): Promise<any> {
-  try {
-    const res = await fetch('/api/fastapi/extract-regex', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text })
-    });
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (e) {
-    console.warn('[Parser] FastAPI extract-regex unavailable:', e);
-  }
-  return null;
-}
-
 

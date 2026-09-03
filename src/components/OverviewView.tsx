@@ -33,9 +33,11 @@ import {
   Activity,
   WifiOff,
   Radio,
-  HelpCircle
+  HelpCircle,
+  Tag
 } from 'lucide-react';
 import { EmailAnalysis, AINarrative } from '../types';
+import { EvidenceTagCard } from './EvidenceTagCard';
 import { computeSha256 } from '../utils/crypto';
 import { classifyIp } from '../utils/parser';
 import { lookupMaxMindGeo } from '../utils/maxmindService';
@@ -247,6 +249,8 @@ export function OverviewView({
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
   const [reverifying, setReverifying] = useState<boolean>(false);
   const [originAssessmentOpen, setOriginAssessmentOpen] = useState<boolean>(false);
+  const [isEvidenceTagOpen, setIsEvidenceTagOpen] = useState<boolean>(false);
+  const [overviewMode, setOverviewMode] = useState<'card' | 'workspace'>('card');
   const [auditResult, setAuditResult] = useState<{
     verified: boolean;
     recomputedHash: string;
@@ -482,8 +486,116 @@ export function OverviewView({
     URL.revokeObjectURL(url);
   };
 
+  if (overviewMode === 'card') {
+    return (
+      <div id="overview-dashboard-card" className="flex-1 flex flex-col overflow-y-auto bg-[#0B0C0F] text-[#E7E4DA]">
+        {/* Top Control & Mode Switcher Bar */}
+        <div className="bg-[#16181D] border-b border-[#2A2D34] px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5 p-1 bg-[#1D2027] rounded border border-[#2A2D34]">
+              <button
+                onClick={() => setOverviewMode('card')}
+                className={`px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 ${
+                  overviewMode === 'card'
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <span>Evidence Tag (Index Card)</span>
+              </button>
+              <button
+                onClick={() => setOverviewMode('workspace')}
+                className={`px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 ${
+                  overviewMode === 'workspace'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Database className="w-3.5 h-3.5 text-blue-400" />
+                <span>Full SOC Console</span>
+              </button>
+            </div>
+            
+            <span className="text-xs text-slate-500 font-mono hidden sm:inline">|</span>
+            <div className="text-xs text-slate-400 font-mono hidden sm:flex items-center gap-2">
+              <span>Case: <b className="text-slate-200">{analysis.id || 'sample-paypal-phish'}</b></span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-emerald-400">Preserved</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {onNavigateToTimeline && (
+              <button
+                onClick={onNavigateToTimeline}
+                className="px-2.5 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-indigo-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="View chronological investigation timeline for this sender/domain"
+              >
+                <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Threat Timeline</span>
+              </button>
+            )}
+            <button
+              onClick={handleReverifyVault}
+              disabled={reverifying}
+              className="px-2.5 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-slate-200 font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              title="Trigger live cryptographic SHA-256 re-verification"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${reverifying ? 'animate-spin' : ''}`} />
+              <span>{reverifying ? 'Re-Verifying...' : 'Audit Hash'}</span>
+            </button>
+            <button
+              onClick={handleDownloadRawEml}
+              className="px-2.5 py-1.5 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs text-blue-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Download original, unaltered RFC 822 .eml bytes"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Raw .EML</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Centered Evidence Tag Physical Card matching user template */}
+        <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 bg-[#0B0C0F]">
+          <div className="w-full max-w-[440px]">
+            <EvidenceTagCard
+              analysis={analysis}
+              onNavigateToMap={onNavigateToMap}
+              onNavigateToGraph={onNavigateToGraph}
+              onOpenNarrative={() => setOverviewMode('workspace')}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="overview-dashboard" className="flex-1 p-6 grid grid-cols-12 gap-6 overflow-y-auto bg-[#0F172A]">
+      {/* Top Bar Mode Switcher inside Workspace */}
+      <div className="col-span-12 flex items-center justify-between bg-[#1E293B] p-3 rounded-lg border border-slate-700">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOverviewMode('card')}
+            className="px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+          >
+            <Tag className="w-3.5 h-3.5 text-amber-400" />
+            <span>Evidence Tag (Index Card)</span>
+          </button>
+          <button
+            onClick={() => setOverviewMode('workspace')}
+            className="px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold"
+          >
+            <Database className="w-3.5 h-3.5 text-blue-400" />
+            <span>Full SOC Console</span>
+          </button>
+        </div>
+        <div className="text-xs text-slate-400 font-mono hidden sm:block">
+          Case ID: <span className="text-blue-300">{effectiveEvidenceId}</span>
+        </div>
+      </div>
+
       {/* Left 8 Columns: Evidence Vault, Auth status cards, Geo Origin panel, Metadata & Links */}
       <div className="col-span-12 lg:col-span-8 space-y-6">
         {/* Evidence Vault & Chain of Custody Immutable Ledger Banner */}
@@ -512,6 +624,14 @@ export function OverviewView({
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              <button
+                onClick={() => setIsEvidenceTagOpen(true)}
+                className="px-2.5 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs text-amber-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="View physical index-card style Evidence Tag Flashcard"
+              >
+                <Tag className="w-3.5 h-3.5 text-amber-400" />
+                <span>Evidence Tag</span>
+              </button>
               {onNavigateToTimeline && (
                 <button
                   onClick={onNavigateToTimeline}
@@ -575,28 +695,6 @@ export function OverviewView({
                 <div className="text-[10px] text-slate-400 mt-1 truncate">
                   Recomputed Digest: <span className="text-emerald-400">{auditResult.recomputedHash}</span>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* FastAPI High-Performance Engine Telemetry Pill */}
-          {analysis.performanceMetrics && (
-            <div className="mt-3 p-2.5 rounded bg-blue-950/40 border border-blue-500/40 flex flex-wrap items-center justify-between gap-2 text-xs text-blue-300 font-mono">
-              <div className="flex items-center gap-2">
-                <Cpu className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span className="font-semibold text-white">Engine:</span>
-                <span className="text-cyan-300">{analysis.performanceMetrics.engine}</span>
-                {analysis.isFastApiAccelerated && (
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-600/60 text-emerald-400 text-[10px] font-bold tracking-wider">
-                    FASTAPI ACCELERATED
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-4 text-[11px] text-slate-300">
-                <span>Latency: <strong className="text-emerald-400">{analysis.performanceMetrics.executionTimeMs.toFixed(2)} ms</strong></span>
-                <span>Headers: <strong className="text-cyan-400">{analysis.performanceMetrics.headerCount}</strong></span>
-                <span>Hops: <strong className="text-cyan-400">{analysis.performanceMetrics.hopCount}</strong></span>
-                <span>URLs: <strong className="text-cyan-400">{analysis.performanceMetrics.urlCount}</strong></span>
               </div>
             </div>
           )}
@@ -744,7 +842,7 @@ export function OverviewView({
               <div className="bg-slate-900/80 border border-slate-800 rounded-lg p-3">
                 <div className="text-slate-400 text-[10px] uppercase font-mono font-semibold tracking-wider">REGION & CITY</div>
                 <div className="text-white text-sm font-bold mt-1 truncate">
-                  {effectiveOriginHop.city || 'Sofia'}, {effectiveOriginHop.region && effectiveOriginHop.region !== effectiveOriginHop.city ? effectiveOriginHop.region : '—'}
+                  {effectiveOriginHop.city || 'Unresolved'}, {effectiveOriginHop.region && effectiveOriginHop.region !== effectiveOriginHop.city ? effectiveOriginHop.region : '—'}
                 </div>
               </div>
 
@@ -753,7 +851,7 @@ export function OverviewView({
                 <div className="text-slate-400 text-[10px] uppercase font-mono font-semibold tracking-wider">LATITUDE / LONGITUDE</div>
                 <div className="flex items-center justify-between mt-1">
                   <span className="text-emerald-400 text-sm font-bold font-mono">
-                    📍 {effectiveOriginHop.lat != null ? `${effectiveOriginHop.lat.toFixed(4)}, ${effectiveOriginHop.lng?.toFixed(4)}` : '42.6977, 23.3219'}
+                    📍 {effectiveOriginHop.lat != null ? `${effectiveOriginHop.lat.toFixed(4)}, ${effectiveOriginHop.lng?.toFixed(4)}` : 'Unmapped Coordinates'}
                   </span>
                   {effectiveOriginHop.lat != null && effectiveOriginHop.lng != null && (
                     <a
@@ -901,12 +999,12 @@ export function OverviewView({
               {originAssessmentOpen && (
                 <div className="p-4 border-t border-slate-800 text-xs text-slate-300 space-y-2.5 bg-slate-950/60">
                   <div className="font-semibold text-slate-200">
-                    {analysis.originWhy?.why || originHopRaw?.why?.why || 'First-hop network envelope matched to AS200548 (Zettahost Cyber Ltd) in Sofia, Bulgaria. Reverse DNS resolves to known Tor Exit / Proxy relay infrastructure.'}
+                    {analysis.originWhy?.why || originHopRaw?.why?.why || `First external network hop matched to ${effectiveOriginHop.asn || 'AS Unknown'} (${effectiveOriginHop.org || 'Unmapped Network Operator'}) in ${effectiveOriginHop.city || 'Unresolved City'}, ${effectiveOriginHop.country || 'Unknown Country'}.`}
                   </div>
                   <div className="space-y-1 text-slate-400 font-mono text-[11px]">
-                    <div>• Origin IP {effectiveOriginHop.fromIp || '185.220.101.5'} verified through MaxMind GeoLite2 City & ASN databases.</div>
-                    <div>• High-confidence abuse threat score ({effectiveOriginHop.abuseScore ?? 88}/100) indexed on AbuseIPDB with reports of credential harvesting.</div>
-                    <div>• Transmission delay of 2.0s between origin hop and ingress gateway indicates direct socket connection.</div>
+                    <div>• Ingress Hop IP {effectiveOriginHop.fromIp || 'Unresolved IP'} evaluated through GeoIP & ASN lookup.</div>
+                    <div>• Abuse confidence score: {effectiveOriginHop.abuseScore ?? 0}/100.</div>
+                    <div>• Email headers establish routing across MTAs, not physical attacker identity.</div>
                   </div>
                 </div>
               )}
@@ -1453,6 +1551,23 @@ export function OverviewView({
           )}
         </div>
       </div>
+
+      {/* Standalone Evidence Tag Flashcard Modal */}
+      {isEvidenceTagOpen && (
+        <EvidenceTagCard
+          analysis={analysis}
+          isModal
+          onClose={() => setIsEvidenceTagOpen(false)}
+          onNavigateToMap={() => {
+            setIsEvidenceTagOpen(false);
+            if (onNavigateToMap) onNavigateToMap();
+          }}
+          onNavigateToGraph={() => {
+            setIsEvidenceTagOpen(false);
+            if (onNavigateToGraph) onNavigateToGraph();
+          }}
+        />
+      )}
     </div>
   );
 }

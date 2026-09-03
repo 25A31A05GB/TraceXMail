@@ -27,9 +27,11 @@ import {
   AlertOctagon,
   UserCheck,
   BookOpen,
-  Database
+  Database,
+  Tag
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
+import { EvidenceTagCard } from './EvidenceTagCard';
 import { 
   PrivacyConfig, 
   DEFAULT_PRIVACY_CONFIG, 
@@ -51,6 +53,7 @@ interface ReportModalProps {
 }
 
 export type ReportTab = 
+  | 'evidence_card'
   | 'institutional'
   | 'legal'
   | 'incident_response'
@@ -223,6 +226,17 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
         <div className="flex flex-wrap items-center justify-between border-b border-slate-800 bg-slate-950/60 px-6 pt-2 gap-3">
           <div className="flex gap-2 flex-wrap">
             <button
+              onClick={() => setActiveTab('evidence_card')}
+              className={`flex items-center gap-1.5 pb-2.5 px-2 text-xs font-semibold border-b-2 transition-colors ${
+                activeTab === 'evidence_card'
+                  ? 'border-amber-400 text-amber-300'
+                  : 'border-transparent text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5 text-amber-400" />
+              <span>Evidence Tag Flashcard</span>
+            </button>
+            <button
               onClick={() => setActiveTab('institutional')}
               className={`flex items-center gap-1.5 pb-2.5 px-2 text-xs font-semibold border-b-2 transition-colors ${
                 activeTab === 'institutional'
@@ -321,6 +335,31 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-slate-300">
           
+          {/* TAB 0: EVIDENCE TAG FLASHCARD */}
+          {activeTab === 'evidence_card' && (
+            <div className="flex flex-col items-center justify-center py-4 space-y-4">
+              <div className="text-center max-w-md">
+                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider font-mono">
+                  Forensic Physical Evidence Index Tag
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Single-portrait non-scrolling case-file artifact ready for immediate forensic audit, printing, and evidence custody inclusion.
+                </p>
+              </div>
+
+              <EvidenceTagCard 
+                analysis={analysis} 
+                onNavigateToMap={() => {
+                  onClose();
+                  // Dispatch custom event or callback if available
+                }}
+                onNavigateToGraph={() => {
+                  onClose();
+                }}
+              />
+            </div>
+          )}
+
           {/* TAB 1: INSTITUTIONAL ACTION & GOVERNANCE */}
           {activeTab === 'institutional' && (
             <div className="space-y-6">

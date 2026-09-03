@@ -146,20 +146,6 @@ function isIpInCidr(ip: string, cidr: string): boolean {
   }
 }
 
-// Global deterministic fallback records for unlisted public IPs
-const FALLBACK_GEOLATIONS = [
-  { geonameId: 1850147, city: 'Tokyo', country: 'Japan', code: 'JP', region: 'Tokyo', lat: 35.6762, lng: 139.6503, asn: 'AS2514', org: 'NTTPC Communications Inc', timeZone: 'Asia/Tokyo', continentCode: 'AS', continentName: 'Asia' },
-  { geonameId: 2643743, city: 'London', country: 'United Kingdom', code: 'GB', region: 'England', lat: 51.5074, lng: -0.1278, asn: 'AS2856', org: 'BT Public Network', timeZone: 'Europe/London', continentCode: 'EU', continentName: 'Europe' },
-  { geonameId: 2147714, city: 'Sydney', country: 'Australia', code: 'AU', region: 'New South Wales', lat: -33.8688, lng: 151.2093, asn: 'AS4804', org: 'Telstra Corporation', timeZone: 'Australia/Sydney', continentCode: 'OC', continentName: 'Oceania' },
-  { geonameId: 2925533, city: 'Frankfurt am Main', country: 'Germany', code: 'DE', region: 'Hesse', lat: 50.1109, lng: 8.6821, asn: 'AS3320', org: 'Deutsche Telekom AG', timeZone: 'Europe/Berlin', continentCode: 'EU', continentName: 'Europe' },
-  { geonameId: 6167865, city: 'Toronto', country: 'Canada', code: 'CA', region: 'Ontario', lat: 43.6532, lng: -79.3832, asn: 'AS577', org: 'Rogers Communications', timeZone: 'America/Toronto', continentCode: 'NA', continentName: 'North America' },
-  { geonameId: 1880252, city: 'Singapore', country: 'Singapore', code: 'SG', region: 'Central Singapore', lat: 1.3521, lng: 103.8198, asn: 'AS4657', org: 'StarHub Ltd', timeZone: 'Asia/Singapore', continentCode: 'AS', continentName: 'Asia' },
-  { geonameId: 1275339, city: 'Mumbai', country: 'India', code: 'IN', region: 'Maharashtra', lat: 19.0760, lng: 72.8777, asn: 'AS55836', org: 'Reliance Jio Infocomm', timeZone: 'Asia/Kolkata', continentCode: 'AS', continentName: 'Asia' },
-  { geonameId: 3448439, city: 'Sao Paulo', country: 'Brazil', code: 'BR', region: 'Sao Paulo', lat: -23.5505, lng: -46.6333, asn: 'AS28573', org: 'Claro Brasil', timeZone: 'America/Sao_Paulo', continentCode: 'SA', continentName: 'South America' },
-  { geonameId: 5128581, city: 'New York', country: 'United States', code: 'US', region: 'New York', lat: 40.7128, lng: -74.0060, asn: 'AS701', org: 'Verizon Business', timeZone: 'America/New_York', continentCode: 'NA', continentName: 'North America' },
-  { geonameId: 2988507, city: 'Paris', country: 'France', code: 'FR', region: 'Ile-de-France', lat: 48.8566, lng: 2.3522, asn: 'AS3215', org: 'Orange S.A.', timeZone: 'Europe/Paris', continentCode: 'EU', continentName: 'Europe' },
-  { geonameId: 1835848, city: 'Seoul', country: 'South Korea', code: 'KR', region: 'Seoul', lat: 37.5665, lng: 126.9780, asn: 'AS4766', org: 'Korea Telecom', timeZone: 'Asia/Seoul', continentCode: 'AS', continentName: 'Asia' }
-];
 
 /**
  * Resolves an IP against local MaxMind GeoLite2 datasets.
@@ -259,39 +245,24 @@ export function lookupMaxMindGeo(ip?: string): MaxMindGeoResolution {
     };
   }
 
-  // Deterministic fallback for unmapped public IPv4 addresses
-  let hash = 0;
-  for (let i = 0; i < ip.length; i++) {
-    hash = (hash << 5) - hash + ip.charCodeAt(i);
-    hash |= 0;
-  }
-  const fallbackIdx = Math.abs(hash) % FALLBACK_GEOLATIONS.length;
-  const fb = FALLBACK_GEOLATIONS[fallbackIdx];
-
+  // Unmapped address - NEVER fabricate coordinates or fake cities
   return {
-    found: true,
+    found: false,
     isPrivate: false,
     isRfc1918: false,
-    geonameId: fb.geonameId,
-    city: fb.city,
-    country: fb.country,
-    countryCode: fb.code,
-    region: fb.region,
-    continentCode: fb.continentCode,
-    continentName: fb.continentName,
-    timeZone: fb.timeZone,
-    isInEuropeanUnion: fb.code === 'DE' || fb.code === 'FR',
-    lat: fb.lat,
-    lng: fb.lng,
-    accuracyRadius: 25,
-    asn: fb.asn,
-    org: fb.org,
-    isp: fb.org,
-    reverseDns: `relay-${ip.replace(/\./g, '-')}.net`,
+    city: undefined,
+    country: undefined,
+    countryCode: undefined,
+    region: undefined,
+    lat: undefined,
+    lng: undefined,
+    asn: undefined,
+    org: undefined,
     sourceFile: "backend/data/maxmind/GeoLite2-City-Locations-en.csv",
     copyright: MAXMIND_COPYRIGHT,
     license: MAXMIND_LICENSE,
-    isVerified: true,
-    lookupMethod: "MaxMind GeoLite2 Subnet Mapping"
+    isVerified: false,
+    lookupMethod: "Unmapped Address"
   };
 }
+

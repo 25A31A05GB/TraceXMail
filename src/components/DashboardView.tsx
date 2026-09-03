@@ -103,7 +103,7 @@ const REGIONAL_THREATS_DATA: RegionThreat[] = [
     severity: 'CRITICAL',
     category: 'HARVESTING',
     topAsn: 'AS4134 (Chinanet)',
-    topMalware: 'APT41 PhishKit v4.2',
+    topMalware: 'Commodity Credential PhishKit v4.2',
     ipRange: '218.92.0.0/16',
     riskScore: 91,
     recentSpike: true

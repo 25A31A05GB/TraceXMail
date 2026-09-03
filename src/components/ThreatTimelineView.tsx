@@ -137,9 +137,9 @@ export function ThreatTimelineView({
       returnPath: analysis.headers.returnPath,
       replyTo: analysis.headers.replyTo,
       originIp: currentOriginIp,
-      asn: analysis.hops[0]?.asn || 'AS200548',
-      asnOrg: analysis.hops[0]?.org || 'Zettahost Cyber Ltd',
-      location: analysis.hops[0]?.city ? `${analysis.hops[0].city}, ${analysis.hops[0].countryCode || ''}` : 'Sofia, BG',
+      asn: analysis.hops[0]?.asn || 'Unmapped ASN',
+      asnOrg: analysis.hops[0]?.org || 'Unmapped Provider',
+      location: analysis.hops[0]?.city ? `${analysis.hops[0].city}, ${analysis.hops[0].countryCode || ''}` : 'Relay Location: Unresolved',
       verdict: analysis.verdict,
       threatScore: analysis.riskScore,
       spfStatus: (analysis.auth.spf.status as any) || 'FAIL',
@@ -180,9 +180,9 @@ export function ThreatTimelineView({
           returnPath: sample.headers.returnPath,
           replyTo: sample.headers.replyTo,
           originIp: sample.hops[0]?.fromIp || '185.220.101.5',
-          asn: sample.hops[0]?.asn || 'AS200548',
-          asnOrg: sample.hops[0]?.org || 'Zettahost Cyber Ltd',
-          location: sample.hops[0]?.city ? `${sample.hops[0].city}, ${sample.hops[0].countryCode || ''}` : 'Sofia, BG',
+          asn: sample.hops[0]?.asn || 'Unmapped ASN',
+          asnOrg: sample.hops[0]?.org || 'Unmapped Provider',
+          location: sample.hops[0]?.city ? `${sample.hops[0].city}, ${sample.hops[0].countryCode || ''}` : 'Relay Location: Unresolved',
           verdict: sample.verdict,
           threatScore: sample.riskScore,
           spfStatus: (sample.auth.spf.status as any) || 'FAIL',
@@ -713,11 +713,11 @@ export function ThreatTimelineView({
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                          <span className="truncate">ASN: <strong className="text-slate-100">{inc.asn || 'AS200548'}</strong></span>
+                          <span className="truncate">ASN: <strong className="text-slate-100">{inc.asn || 'Unmapped ASN'}</strong></span>
                         </div>
                         <div className="flex items-center gap-1.5">
                           <Terminal className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                          <span className="truncate">Location: <strong className="text-slate-100">{inc.location || 'Sofia, BG'}</strong></span>
+                          <span className="truncate">Location: <strong className="text-slate-100">{inc.location || 'Relay Location: Unresolved'}</strong></span>
                         </div>
                       </div>
 

@@ -1,0 +1,35 @@
+Delivered-To: sales-lead@enterprise-corp.internal
+Received: by 10.200.1.10 with SMTP id mx-gateway-internal for <sales-lead@enterprise-corp.internal>;
+        Thu, 03 Sep 2026 10:11:42 -0700 (PDT)
+Received: from mail.outbound-lead-growth-system.io (outbound-mailer.vultr.com [45.76.120.44])
+        by mx.enterprise-corp.internal (Enterprise Postfix) with ESMTPS id 9H8k7j6h5g
+        for <sales-lead@enterprise-corp.internal>;
+        Thu, 03 Sep 2026 10:11:39 -0700 (PDT)
+Authentication-Results: mx.enterprise-corp.internal;
+        dkim=pass header.d=outbound-lead-growth-system.io header.i=@outbound-lead-growth-system.io;
+        spf=pass (mx.enterprise-corp.internal: domain of bounce@outbound-lead-growth-system.io designates 45.76.120.44 as permitted sender);
+        dmarc=pass (p=NONE dis=NONE) header.from=outbound-lead-growth-system.io
+From: "Alex Miller | Growth Acceleration" <alex.miller@outbound-lead-growth-system.io>
+To: VP of Engineering <sales-lead@enterprise-corp.internal>
+Subject: 15-minute sync regarding enterprise pipeline acceleration [Q3 slots]
+Date: Thu, 03 Sep 2026 10:11:35 -0700
+Message-ID: <cold_b2b_20260903_44810@outbound-lead-growth-system.io>
+Return-Path: <bounce@outbound-lead-growth-system.io>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Hi there,
+
+I noticed your engineering team recently scaled infrastructure across Kubernetes and Cloud Run.
+
+We help Series B and enterprise organizations source 40+ pre-qualified sales meetings every month using our proprietary AI lead qualification crawler. We currently work with fast-growing tech teams looking to double outbound pipeline without hiring additional SDRs.
+
+Do you have 10 minutes next Tuesday or Wednesday at 2:00 PM EST for a brief introductory walkthrough?
+
+If you are not the right person to speak with regarding growth initiatives, could you point me to the appropriate colleague on your leadership team?
+
+Best regards,
+Alex Miller
+Senior Director of Business Development
+Growth Velocity Engine Inc.
+To opt out of future updates, reply with 'UNSUBSCRIBE' or visit http://outbound-lead-growth-system.io/unsubscribe?id=99281

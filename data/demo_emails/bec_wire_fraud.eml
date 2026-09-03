@@ -1,0 +1,41 @@
+Delivered-To: controller@enterprise-corp.internal
+Received: by 10.200.1.10 with SMTP id mx-gateway-internal for <controller@enterprise-corp.internal>;
+        Thu, 03 Sep 2026 08:30:14 -0700 (PDT)
+Received: from mail-relay.executive-office-forwarder.org (relay-node-71.linode.com [172.104.14.71])
+        by mx.enterprise-corp.internal (Enterprise Postfix) with ESMTPS id 7A2b9c3d4e
+        for <controller@enterprise-corp.internal>;
+        Thu, 03 Sep 2026 08:30:10 -0700 (PDT)
+Authentication-Results: mx.enterprise-corp.internal;
+        dkim=none;
+        spf=neutral (mx.enterprise-corp.internal: 172.104.14.71 is neither permitted nor denied by domain of ceo@enterprise-corp.com) smtp.mailfrom=ceo@executive-office-forwarder.org;
+        dmarc=fail (p=REJECT dis=QUARANTINE) header.from=enterprise-corp.com
+From: "David Harrison (Chief Executive Officer)" <david.harrison@enterprise-corp.com>
+To: Senior Financial Controller <controller@enterprise-corp.internal>
+Reply-To: "Executive Director Desk" <david.harrison.ceo.office@gmail.com>
+Subject: CONFIDENTIAL: Urgent Outgoing Wire Transfer - M&A Escrow Closing Today
+Date: Thu, 03 Sep 2026 08:30:05 -0700
+Message-ID: <bec_exec_20260903_0019@executive-office-forwarder.org>
+Return-Path: <ceo@executive-office-forwarder.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+Good morning,
+
+Are you at your desk right now? I need you to handle an urgent confidential financial matter for our board.
+
+We are completing the initial escrow deposit for our strategic acquisition of CloudScale Systems today. The transaction is strictly confidential and has not been publicly announced, so please do not discuss this with anyone on the finance team or call my cell phone while I am in negotiations.
+
+Please initiate an urgent international wire transfer in the amount of $84,500.00 USD to our outside escrow counsel before the 11:30 AM Federal Reserve cutoff. 
+
+Beneficiary Name: Vantage Legal Escrow Trust Ltd
+Bank: Barclays Bank PLC, London Branch
+IBAN: GB29BARC20000087654321
+Swift / BIC: BARCGB22
+Reference: Project BlueSky - Acquisition Escrow Tranche 1
+
+Please email me the wire transmission PDF receipt as soon as the transfer has been released so I can provide confirmation to opposing counsel.
+
+Thank you,
+David Harrison
+Chief Executive Officer
+Enterprise Global Corporation

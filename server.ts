@@ -4,14 +4,29 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import multer from 'multer';
-import { spawn, ChildProcess } from 'child_process';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 
 import { extractHopsAndOriginIp, classifyIp } from './src/server/ipExtractor';
 import { resolveIpGeolocation } from './src/server/geoService';
 import { resolveDomainIntelligence } from './src/server/domainService';
-import { classifyEmailForensics } from './src/server/classifier';
+import {
+  enrichIpFull,
+  resolveDomainIntelligence as resolveIntelligenceDomain,
+  resolveDns as resolveIntelligenceDns,
+  resolveRdap as resolveIntelligenceRdap,
+  resolveGeoIp,
+  resolveAsn,
+  geoIpCache,
+  asnCache,
+  dnsCache,
+  rdapCache,
+  threatIntelCache,
+  providerRateLimiter,
+  MAXMIND_COPYRIGHT_NOTICE,
+  MAXMIND_LICENSE_NOTICE
+} from './src/server/intelligence';
+import { classifyEmailForensics, mlEngine } from './src/server/classifier';
 import { GoogleGenAI } from '@google/genai';
 import { authenticate } from 'mailauth';
 import PDFDocument from 'pdfkit';
@@ -37,68 +52,6 @@ import {
   type UserContext,
   type AuthenticatedRequest
 } from './src/server/compliance';
-
-// ============================================================================
-// FASTAPI HIGH-PERFORMANCE FORENSIC PARSER SERVICE MANAGER
-// ============================================================================
-let fastApiProcess: ChildProcess | null = null;
-const FASTAPI_PORT = 8000;
-const FASTAPI_BASE_URL = `http://127.0.0.1:${FASTAPI_PORT}`;
-
-function startFastApiService() {
-  const servicePath = path.join(process.cwd(), 'backend', 'fastapi_service.py');
-  if (!fs.existsSync(servicePath)) {
-    console.warn('[FastAPI Manager] Service script not found at:', servicePath);
-    return;
-  }
-
-  if (fastApiProcess && !fastApiProcess.killed) {
-    return;
-  }
-
-  console.log(`[FastAPI Manager] Spawning high-performance Python FastAPI service on 127.0.0.1:${FASTAPI_PORT}...`);
-  try {
-    fastApiProcess = spawn('python3', [servicePath], {
-      cwd: process.cwd(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PYTHONUNBUFFERED: '1' }
-    });
-
-    fastApiProcess.stdout?.on('data', (chunk) => {
-      const line = chunk.toString().trim();
-      if (line) console.log(`[FastAPI Engine] ${line}`);
-    });
-
-    fastApiProcess.stderr?.on('data', (chunk) => {
-      const line = chunk.toString().trim();
-      if (line && !line.includes('INFO:')) console.warn(`[FastAPI Engine Log] ${line}`);
-    });
-
-    fastApiProcess.on('exit', (code, signal) => {
-      console.warn(`[FastAPI Manager] Process exited (code ${code}, signal ${signal})`);
-      fastApiProcess = null;
-      setTimeout(() => {
-        if (!fastApiProcess) {
-          console.log('[FastAPI Manager] Auto-recovering FastAPI service...');
-          startFastApiService();
-        }
-      }, 4000);
-    });
-
-    const shutdownFastApi = () => {
-      if (fastApiProcess && !fastApiProcess.killed) {
-        try {
-          fastApiProcess.kill();
-        } catch (_) {}
-      }
-    };
-    process.on('exit', shutdownFastApi);
-    process.on('SIGINT', shutdownFastApi);
-    process.on('SIGTERM', shutdownFastApi);
-  } catch (err) {
-    console.error('[FastAPI Manager] Error launching FastAPI process:', err);
-  }
-}
 
 // Multer memory storage for uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -399,37 +352,18 @@ function maskCasePii(caseItem: any): any {
 
 // Real Forensic Analysis Engine (Dynamic Geolocation, True IP Extraction, Authentic DNS/RDAP)
 async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'email.eml') {
-  // 0. Offload compute-heavy RFC 822 parsing & regex extraction to FastAPI microservice
-  let fastApiData: any = null;
-  try {
-    const fastApiRes = await fetch(`${FASTAPI_BASE_URL}/parse`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw_content: rawContent, filename: fileName }),
-      signal: AbortSignal.timeout(2500)
-    });
-    if (fastApiRes.ok) {
-      const parsedRes = await fastApiRes.json();
-      if (parsedRes?.analysis) {
-        fastApiData = parsedRes.analysis;
-      }
-    }
-  } catch (_e) {
-    // FastAPI microservice offline or starting up; gracefully fallback to internal node extraction
-  }
-
   // 1. Extract chronological hops and candidate origin IPs using RFC 5321/5322 extraction engine
   const { hops: extractedHops, originIp, originIpSource } = extractHopsAndOriginIp(rawContent);
 
   const lines = rawContent.split(/\r?\n/);
-  let subject = fastApiData?.headers?.subject || '(No Subject)';
-  let from = fastApiData?.headers?.from || 'unknown@sender.corp';
-  let to = fastApiData?.headers?.to || 'recipient@enterprise.corp';
-  let replyTo: string | undefined = fastApiData?.headers?.replyTo || undefined;
-  let returnPath: string | undefined = fastApiData?.headers?.returnPath || undefined;
-  let date = fastApiData?.headers?.date || new Date().toUTCString();
-  let messageId = fastApiData?.headers?.messageId || `<${Date.now()}@tracexmail.local>`;
-  const allHeaders: Record<string, string> = { ...(fastApiData?.headers?.allHeaders || {}) };
+  let subject = '(No Subject)';
+  let from = 'unknown@sender.corp';
+  let to = 'recipient@enterprise.corp';
+  let replyTo: string | undefined = undefined;
+  let returnPath: string | undefined = undefined;
+  let date = new Date().toUTCString();
+  let messageId = `<${Date.now()}@tracexmail.local>`;
+  const allHeaders: Record<string, string> = {};
 
   let currentHeader = '';
   let currentValue = '';
@@ -447,13 +381,13 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       currentValue = line.substring(colonIdx + 1).trim();
 
       const lower = currentHeader.toLowerCase();
-      if (lower === 'subject' && !fastApiData) subject = currentValue;
-      else if (lower === 'from' && !fastApiData) from = currentValue;
-      else if (lower === 'to' && !fastApiData) to = currentValue;
-      else if (lower === 'reply-to' && !fastApiData) replyTo = currentValue;
-      else if (lower === 'return-path' && !fastApiData) returnPath = currentValue;
-      else if (lower === 'date' && !fastApiData) date = currentValue;
-      else if (lower === 'message-id' && !fastApiData) messageId = currentValue;
+      if (lower === 'subject') subject = currentValue;
+      else if (lower === 'from') from = currentValue;
+      else if (lower === 'to') to = currentValue;
+      else if (lower === 'reply-to') replyTo = currentValue;
+      else if (lower === 'return-path') returnPath = currentValue;
+      else if (lower === 'date') date = currentValue;
+      else if (lower === 'message-id') messageId = currentValue;
     } else if (/^\s+/.test(line) && currentHeader) {
       currentValue += ' ' + line.trim();
     }
@@ -464,7 +398,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
 
   // 2. Extract genuine fromEmail and sender domain
   const fromEmailMatch = from.match(/<([^>]+)>/) || from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-  const fromEmail = fastApiData?.headers?.fromEmail || (fromEmailMatch ? fromEmailMatch[1].trim() : from.trim());
+  const fromEmail = fromEmailMatch ? fromEmailMatch[1].trim() : from.trim();
   let fromDomain = '';
   if (fromEmail.includes('@')) {
     fromDomain = fromEmail.split('@')[1].toLowerCase().trim();
@@ -583,14 +517,14 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   const arcStatus = authResult?.arc?.status?.result ? String(authResult.arc.status.result).toUpperCase() : 'NONE';
   const arcDetails = authResult?.arc?.authResults || (authResult?.arc?.status?.result ? `ARC status: ${authResult.arc.status.result}` : 'No ARC signature chain present');
 
-  // Adjust combined threat score with content risk
-  const combinedHeuristics = [...classification.heuristics, ...contentRisk.heuristics];
-  const combinedScore = Math.min(100, classification.threatScore + Math.floor(contentRisk.score * 0.5));
-  const threatScore = combinedScore;
-  const severity = threatScore >= 80 ? 'CRITICAL' : threatScore >= 60 ? 'HIGH' : threatScore >= 35 ? 'MEDIUM' : threatScore >= 15 ? 'LOW' : 'CLEAN';
-  const verdict = threatScore >= 70 ? 'MALICIOUS' : threatScore >= 40 ? 'SUSPICIOUS' : 'LEGITIMATE';
+  // Forensic threat evaluation from classifier (no double-counting)
+  const combinedHeuristics = [...classification.heuristics, ...contentRisk.heuristics.filter(h => !classification.heuristics.some(ch => ch.id === h.id))];
+  const threatScore = classification.threatScore;
+  const severity = classification.severity;
+  const verdict = classification.verdict;
   const mlConfidence = classification.mlConfidence;
   const phishingProbability = classification.phishingProbability;
+  const threatScoreBreakdown = classification.threatScoreBreakdown;
 
   const torHop = hops.find(h => h.is_tor || h.isBlacklisted || (h.abuseScore && h.abuseScore > 60));
 
@@ -602,6 +536,8 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     status: 'OPEN',
     severity,
     threat_score: threatScore,
+    threat_score_breakdown: threatScoreBreakdown,
+    classification: classification.classification,
     created_at: new Date().toISOString(),
     from_domain: fromDomain,
     origin_ip: primaryGeoHop?.fromIp || '127.0.0.1',
@@ -712,7 +648,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       arc: { status: arcStatus, details: arcDetails }
     },
     hops,
-    urls: (fastApiData?.urls && fastApiData.urls.length > 0) ? fastApiData.urls : [
+    urls: [
       {
         url: `https://${fromDomain}/`,
         defangedUrl: `hxxps://${fromDomain.replace(/\./g, '[.]')}/`,
@@ -722,7 +658,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
         category: isTyposquat ? 'Credential Harvesting' : 'Legitimate Domain'
       }
     ],
-    attachments: fastApiData?.attachments || [],
+    attachments: [],
     heuristics: combinedHeuristics.length > 0 ? combinedHeuristics : [
       {
         id: 'h-baseline',
@@ -733,23 +669,20 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       }
     ],
     logs: [
-      { id: 'l1', timestamp: new Date().toISOString(), tag: 'INIT', message: `Parsed ${rawContent.length} bytes from ${fileName} (FastAPI Engine: ${fastApiData ? 'Active' : 'Fallback'})` },
+      { id: 'l1', timestamp: new Date().toISOString(), tag: 'INIT', message: `Parsed ${rawContent.length} bytes from ${fileName}` },
       { id: 'l2', timestamp: new Date().toISOString(), tag: 'DNS', message: `Resolved authoritative DNS & RDAP for ${fromDomain} (${domainIntelligence.status})` },
       { id: 'l3', timestamp: new Date().toISOString(), tag: 'ROUTING', message: `Identified ${hops.length} chronological relay hops (${hops.filter(h => h.isPrivate).length} RFC 1918 private subnets)` },
       { id: 'l4', timestamp: new Date().toISOString(), tag: 'SEC', message: `Verdict: ${verdict} (Risk Score: ${threatScore}/100)` }
     ],
     riskScore: threatScore,
+    threatScore,
+    threatVerdict: verdict,
+    threatScoreBreakdown,
+    classification: classification.classification,
+    probabilities: classification.probabilities,
     verdict,
-    mlConfidence: 0.96,
-    isFastApiAccelerated: !!fastApiData,
-    performanceMetrics: fastApiData?.performanceMetrics || {
-      engine: 'TraceXMail Internal Engine',
-      executionTimeMs: 4.8,
-      headerCount: Object.keys(allHeaders).length,
-      hopCount: hops.length,
-      urlCount: fastApiData?.urls?.length || 1,
-      attachmentCount: fastApiData?.attachments?.length || 0
-    },
+    mlConfidence,
+    phishingProbability,
     domain_intelligence: domainIntelligence,
     domainIntelligence: domainIntelligence,
     maxmindIntelligence: primaryGeoHop ? {
@@ -847,9 +780,6 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
 }
 
 async function startServer() {
-  // Launch high-performance Python FastAPI engine for RFC822 parsing & regex offloading
-  startFastApiService();
-
   const app = express();
   const PORT = 3000;
 
@@ -1484,6 +1414,56 @@ Link: https://verify-auth-portal.net/login`;
   app.post('/api/analyze/raw', upload.single('file'), handleAnalyze);
   app.post('/api/analyze', upload.single('file'), handleAnalyze);
 
+  // Machine Learning Model Metrics & Forensic Evaluation Telemetry
+  const handleMlMetrics = (_req: express.Request, res: express.Response) => {
+    const status = mlEngine.getStatus();
+    const evaluationReportPath = path.join(process.cwd(), 'docs/model_evaluation_report.json');
+    let evaluationReport: any = null;
+    if (fs.existsSync(evaluationReportPath)) {
+      try {
+        evaluationReport = JSON.parse(fs.readFileSync(evaluationReportPath, 'utf8'));
+      } catch (e) {
+        console.warn('[Server] Could not load model_evaluation_report.json:', e);
+      }
+    }
+
+    res.json({
+      status: status.status,
+      is_operational: status.isOperational,
+      error: status.error,
+      model_name: status.modelName || 'TraceXMail 5-Class Forensic Classifier',
+      algorithm: status.metadata?.algorithm || 'Nearest Centroid Cosine Classifier with Temperature-Scaled Softmax Calibration',
+      schema_version: status.schemaVersion || '2.3.0',
+      feature_schema_version: status.featureSchemaVersion || '1.2.0',
+      trained_at: status.metadata?.trainedAt || null,
+      dataset_version: 'RealCorpus-2026-v2.3',
+      total_samples: status.metadata?.totalSamples || 0,
+      train_count: status.metadata?.trainCount || 0,
+      test_count: status.metadata?.testCount || 0,
+      classes: status.classes,
+      vocabulary_size: status.vocabularySize,
+      calibration_temperature: status.temperature,
+      evaluation_metrics: {
+        accuracy: status.metadata?.testAccuracy || 0,
+        macro_f1: status.metadata?.macroF1 || 0,
+        weighted_f1: status.metadata?.weightedF1 || 0,
+        majority_baseline_accuracy: status.metadata?.baselineAccuracy || 0,
+        per_class: status.metadata?.perClassMetrics || null,
+        confusion_matrix: status.metadata?.confusionMatrix || evaluationReport?.confusion_matrix || null
+      },
+      evaluation_report: evaluationReport,
+      attribution_policy: {
+        physical_attribution_claim: false,
+        explanation: 'Evidence reflects intermediate transmission infrastructure and identity consistency metrics. Network geolocation reflects intermediate hosting relays, not physical attacker location.'
+      }
+    });
+  };
+
+  app.get('/api/ml/metrics', handleMlMetrics);
+  app.get('/api/v1/ml/metrics', handleMlMetrics);
+  app.get('/api/ml/status', handleMlMetrics);
+  app.get('/api/v1/ml/status', handleMlMetrics);
+
   // Dedicated Live Domain Intelligence endpoint
   app.get(['/api/v1/cases/:caseId/domain-intelligence', '/api/domain-intelligence/:domain'], async (req, res) => {
     let domain = req.params.domain || (req.params.caseId?.includes('.') ? req.params.caseId : '');
@@ -1500,6 +1480,106 @@ Link: https://verify-auth-portal.net/login`;
 
     const intel = await resolveDomainIntelligence(domain);
     res.json(intel);
+  });
+
+  // --- Standardized Forensic Intelligence Endpoints ---
+  app.get('/api/intelligence/ip/:ip', async (req, res) => {
+    try {
+      const result = await enrichIpFull(req.params.ip);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to enrich IP intelligence' });
+    }
+  });
+
+  app.get('/api/intelligence/domain/:domain', async (req, res) => {
+    try {
+      const result = await resolveIntelligenceDomain(req.params.domain);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to resolve domain intelligence' });
+    }
+  });
+
+  app.get('/api/intelligence/dns/:domain', async (req, res) => {
+    try {
+      const result = await resolveIntelligenceDns(req.params.domain);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to resolve DNS' });
+    }
+  });
+
+  app.get('/api/intelligence/rdap/:domain', async (req, res) => {
+    try {
+      const result = await resolveIntelligenceRdap(req.params.domain);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to resolve RDAP' });
+    }
+  });
+
+  app.get('/api/intelligence/status', (_req, res) => {
+    const rateLimit = providerRateLimiter.getUsage('maxmind-geolite');
+    const mmdbPath = process.env.MAXMIND_CITY_DB_PATH || path.join(process.cwd(), 'data', 'maxmind', 'GeoLite2-City.mmdb');
+    const hasMmdb = fs.existsSync(mmdbPath);
+
+    res.json({
+      status: 'operational',
+      maxmind: {
+        hasMmdb,
+        mmdbPath: hasMmdb ? mmdbPath : null,
+        hasWebCredentials: Boolean(process.env.MAXMIND_ACCOUNT_ID && process.env.MAXMIND_LICENSE_KEY),
+        copyright: MAXMIND_COPYRIGHT_NOTICE,
+        license: MAXMIND_LICENSE_NOTICE
+      },
+      rateLimits: {
+        'maxmind-geolite': {
+          dailyUsed: rateLimit.count,
+          dailyLimit: 1000,
+          resetDayUtc: rateLimit.dayUtc
+        }
+      },
+      cache: {
+        geoipSize: geoIpCache.size(),
+        asnSize: asnCache.size(),
+        dnsSize: dnsCache.size(),
+        rdapSize: rdapCache.size(),
+        threatIntelSize: threatIntelCache.size()
+      },
+      rfcStandards: [
+        'RFC 1918 (Private Address Allocation)',
+        'RFC 1122 (Loopback & Host Requirements)',
+        'RFC 3927 (Dynamic Configuration of IPv4 Link-Local)',
+        'RFC 6598 (Shared Address Space / CGNAT)',
+        'RFC 7208 (Sender Policy Framework - SPF)',
+        'RFC 6376 (DomainKeys Identified Mail - DKIM)',
+        'RFC 7489 (Domain-based Message Authentication - DMARC)',
+        'RFC 8617 (Authenticated Received Chain - ARC)',
+        'RFC 7480 (Registration Data Access Protocol - RDAP)'
+      ]
+    });
+  });
+
+  app.post('/api/intelligence/cache/clear', (req, res) => {
+    const scope = req.body?.scope || 'all';
+    if (scope === 'all' || scope === 'geoip') geoIpCache.clear();
+    if (scope === 'all' || scope === 'asn') asnCache.clear();
+    if (scope === 'all' || scope === 'dns') dnsCache.clear();
+    if (scope === 'all' || scope === 'rdap') rdapCache.clear();
+    if (scope === 'all' || scope === 'threat') threatIntelCache.clear();
+
+    res.json({
+      status: 'success',
+      clearedScope: scope,
+      remainingSizes: {
+        geoip: geoIpCache.size(),
+        asn: asnCache.size(),
+        dns: dnsCache.size(),
+        rdap: rdapCache.size(),
+        threat: threatIntelCache.size()
+      }
+    });
   });
 
   // Dedicated Origin Intelligence & IP Geolocation endpoint (handling RFC 1918 & public IPs)
@@ -1599,141 +1679,6 @@ Link: https://verify-auth-portal.net/login`;
       res.type('text/markdown').send(content);
     } else {
       res.status(404).send('# MaxMind Documentation Not Found');
-    }
-  });
-
-  // Dedicated Machine Learning Metrics & Evaluation Endpoints
-  app.get('/api/ml/metrics', (_req, res) => {
-    try {
-      const modelPath = path.join(process.cwd(), 'data/datasets/trained_model.json');
-      if (fs.existsSync(modelPath)) {
-        const raw = fs.readFileSync(modelPath, 'utf-8');
-        const parsed = JSON.parse(raw);
-        res.json({
-          status: 'success',
-          metadata: parsed.metadata || {},
-          classes: parsed.classes || [],
-          vocabSize: parsed.vocabSize || parsed.vocabulary?.length || 0
-        });
-      } else {
-        res.status(404).json({ status: 'error', message: 'Trained model not found' });
-      }
-    } catch (e: any) {
-      res.status(500).json({ status: 'error', message: e.message });
-    }
-  });
-
-  app.get('/api/ml/report', (_req, res) => {
-    try {
-      const reportPath = path.join(process.cwd(), 'reports/ML_EVALUATION_REPORT.md');
-      if (fs.existsSync(reportPath)) {
-        const content = fs.readFileSync(reportPath, 'utf-8');
-        res.type('text/markdown').send(content);
-      } else {
-        res.status(404).send('# ML Evaluation Report Not Found');
-      }
-    } catch (e: any) {
-      res.status(500).send(`# Error: ${e.message}`);
-    }
-  });
-
-  app.post('/api/ml/classify', (req, res) => {
-    try {
-      const { text, from = '', fromDomain = '', subject = '' } = req.body || {};
-      const result = classifyEmailForensics({
-        from,
-        fromDomain: fromDomain || (from.includes('@') ? from.split('@')[1].toLowerCase() : 'unknown.com'),
-        subject,
-        bodyText: text || ''
-      });
-      res.json({
-        status: 'success',
-        result
-      });
-    } catch (e: any) {
-      res.status(500).json({ status: 'error', message: e.message });
-    }
-  });
-
-  // Dedicated FastAPI Microservice Proxy & Telemetry Endpoints
-  app.get(['/api/fastapi/health', '/api/v1/fastapi/health'], async (_req, res) => {
-    try {
-      const resp = await fetch(`${FASTAPI_BASE_URL}/health`, { signal: AbortSignal.timeout(1500) });
-      if (resp.ok) {
-        const data = await resp.json();
-        return res.json({ ...data, internalProxy: true, port: FASTAPI_PORT });
-      }
-      res.status(503).json({ status: 'offline', message: 'FastAPI microservice unresponsive' });
-    } catch (e: any) {
-      res.status(503).json({ status: 'offline', error: e.message, port: FASTAPI_PORT });
-    }
-  });
-
-  app.post(['/api/fastapi/parse', '/api/v1/fastapi/parse'], async (req, res) => {
-    try {
-      const rawContent = req.body?.raw_content || req.body?.raw_email || req.body?.rawEml || req.body?.raw || '';
-      const filename = req.body?.filename || 'email.eml';
-      if (!rawContent) {
-        return res.status(400).json({ error: 'raw_content is required' });
-      }
-
-      const resp = await fetch(`${FASTAPI_BASE_URL}/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_content: rawContent, filename }),
-        signal: AbortSignal.timeout(5000)
-      });
-
-      if (resp.ok) {
-        const data = await resp.json();
-        return res.json(data);
-      }
-      res.status(resp.status).json({ error: 'FastAPI service returned error', status: resp.status });
-    } catch (err: any) {
-      res.status(502).json({ error: 'Failed to communicate with FastAPI service', detail: err.message });
-    }
-  });
-
-  app.post(['/api/fastapi/extract-regex', '/api/v1/fastapi/extract-regex'], async (req, res) => {
-    try {
-      const text = req.body?.text || '';
-      const resp = await fetch(`${FASTAPI_BASE_URL}/extract/regex`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-        signal: AbortSignal.timeout(3000)
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        return res.json(data);
-      }
-      res.status(resp.status).json({ error: 'FastAPI regex extraction failed' });
-    } catch (err: any) {
-      res.status(502).json({ error: 'Failed to communicate with FastAPI regex engine', detail: err.message });
-    }
-  });
-
-  app.post('/api/fastapi/upload', upload.single('file'), async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-      const rawContent = req.file.buffer.toString('utf-8');
-      const filename = req.file.originalname || 'uploaded.eml';
-
-      const resp = await fetch(`${FASTAPI_BASE_URL}/parse`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_content: rawContent, filename }),
-        signal: AbortSignal.timeout(5000)
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        return res.json(data);
-      }
-      res.status(resp.status).json({ error: 'FastAPI parse failed' });
-    } catch (err: any) {
-      res.status(502).json({ error: 'FastAPI upload failed', detail: err.message });
     }
   });
 

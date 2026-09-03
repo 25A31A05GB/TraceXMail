@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
-import { parseRawEml, parseRawEmlViaFastApi, mapBackendCaseToAnalysis } from '../utils/parser';
+import { parseRawEml, mapBackendCaseToAnalysis } from '../utils/parser';
 
 interface NewAnalysisModalProps {
   isOpen: boolean;
@@ -64,7 +64,7 @@ export function NewAnalysisModal({
 
       const parsed = apiResponse
         ? mapBackendCaseToAnalysis(apiResponse, pastedRaw, fileName)
-        : await parseRawEmlViaFastApi(pastedRaw, fileName);
+        : parseRawEml(pastedRaw, fileName);
 
       onAnalysisCreated(parsed);
       setIsProcessing(false);
@@ -105,7 +105,7 @@ export function NewAnalysisModal({
 
         const parsed = apiResponse
           ? mapBackendCaseToAnalysis(apiResponse, content, file.name)
-          : await parseRawEmlViaFastApi(content, file.name);
+          : parseRawEml(content, file.name);
 
         onAnalysisCreated(parsed);
         setIsProcessing(false);
@@ -134,18 +134,12 @@ export function NewAnalysisModal({
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-950/80 border border-blue-600/40 text-blue-300 text-[10px] font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span>FastAPI Offload</span>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-700/80 cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-700/80 cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Modal Tab Switcher */}

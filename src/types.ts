@@ -248,6 +248,20 @@ export interface EmailAnalysis {
   messageId?: string;
   threatVerdict?: string;
   threatScore?: number;
+  threatScoreBreakdown?: {
+    total: number;
+    maxScore: number;
+    components: {
+      authentication: { score: number; max: number; reasons: string[] };
+      domainRisk: { score: number; max: number; reasons: string[] };
+      infrastructureRisk: { score: number; max: number; reasons: string[] };
+      mlClassification: { score: number; max: number; reasons: string[] };
+      heuristics: { score: number; max: number; reasons: string[] };
+    };
+  };
+  classification?: string;
+  probabilities?: Record<string, number>;
+  phishingProbability?: number;
   rawHeaders?: string;
   authResults?: AuthResults;
   heuristicSignals?: HeuristicSignal[];
@@ -309,14 +323,5 @@ export interface EmailAnalysis {
   ai_narrative?: AINarrative | null;
   graph?: any;
   isOfflineFallback?: boolean;
-  isFastApiAccelerated?: boolean;
-  performanceMetrics?: {
-    engine?: string;
-    executionTimeMs?: number;
-    headerCount?: number;
-    hopCount?: number;
-    urlCount?: number;
-    attachmentCount?: number;
-  };
 }
 

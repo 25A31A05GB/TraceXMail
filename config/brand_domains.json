@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.2.0",
+  "updatedAt": "2026-09-03T12:00:00Z",
+  "brands": [
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "legitimateDomains": ["paypal.com", "paypal.co.uk", "paypal.de", "paypal.fr", "paypal-communication.com", "paypal-corp.com"],
+      "keywords": ["paypal", "pay pal", "paypal resolution", "paypal security", "paypal team"],
+      "regex": "\\b(?:pay\\s*pal|paypal)\\b"
+    },
+    {
+      "id": "microsoft",
+      "name": "Microsoft",
+      "legitimateDomains": ["microsoft.com", "office365.com", "office.com", "microsoftonline.com", "live.com", "outlook.com", "msn.com", "azure.com"],
+      "keywords": ["microsoft", "office 365", "office365", "m365", "outlook", "azure", "windows defender", "microsoft 365"],
+      "regex": "\\b(?:microsoft|office\\s*365|m365|outlook|azure|microsoftonline|microsoft\\s*365)\\b"
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "legitimateDomains": ["google.com", "google.co.uk", "gmail.com", "googlemail.com", "youtube.com", "googlecloud.com"],
+      "keywords": ["google", "gmail", "google workspace", "google drive", "google cloud", "google security", "google calendar"],
+      "regex": "\\b(?:google|gmail|google\\s*workspace|google\\s*drive|google\\s*cloud|google\\s*calendar)\\b"
+    },
+    {
+      "id": "apple",
+      "name": "Apple",
+      "legitimateDomains": ["apple.com", "icloud.com", "me.com", "mac.com", "appleid.apple.com"],
+      "keywords": ["apple", "icloud", "apple id", "apple support", "itunes", "app store"],
+      "regex": "\\b(?:apple|icloud|apple\\s*id|apple\\s*support)\\b"
+    },
+    {
+      "id": "docusign",
+      "name": "DocuSign",
+      "legitimateDomains": ["docusign.com", "docusign.net"],
+      "keywords": ["docusign", "docu sign", "docusign envelope", "docusign electronic signature"],
+      "regex": "\\b(?:docusign|docu\\s*sign)\\b"
+    },
+    {
+      "id": "amazon",
+      "name": "Amazon",
+      "legitimateDomains": ["amazon.com", "amazon.co.uk", "amazon.de", "amazon.fr", "amazonaws.com"],
+      "keywords": ["amazon", "amazon prime", "aws", "amazon web services", "amazon security", "amazon billing"],
+      "regex": "\\b(?:amazon|amazonaws|amazon\\s*prime|aws)\\b"
+    },
+    {
+      "id": "chase",
+      "name": "Chase Bank",
+      "legitimateDomains": ["chase.com", "jpmorgan.com", "jpmorganchase.com"],
+      "keywords": ["chase", "jpmorgan", "chase online", "chase bank", "jpmorgan chase"],
+      "regex": "\\b(?:chase|jpmorgan|jpmorgan\\s*chase)\\b"
+    },
+    {
+      "id": "bankofamerica",
+      "name": "Bank of America",
+      "legitimateDomains": ["bankofamerica.com", "bofa.com", "merrill.com"],
+      "keywords": ["bank of america", "bofa", "merrill lynch"],
+      "regex": "\\b(?:bank\\s*of\\s*america|bofa|merrill\\s*lynch)\\b"
+    },
+    {
+      "id": "wellsfargo",
+      "name": "Wells Fargo",
+      "legitimateDomains": ["wellsfargo.com"],
+      "keywords": ["wells fargo", "wellsfargo online", "wells fargo security"],
+      "regex": "\\b(?:wells\\s*fargo|wellsfargo)\\b"
+    },
+    {
+      "id": "netflix",
+      "name": "Netflix",
+      "legitimateDomains": ["netflix.com"],
+      "keywords": ["netflix", "netflix member", "netflix subscription"],
+      "regex": "\\b(?:netflix)\\b"
+    },
+    {
+      "id": "dropbox",
+      "name": "Dropbox",
+      "legitimateDomains": ["dropbox.com", "dropboxmail.com"],
+      "keywords": ["dropbox", "dropbox business", "dropbox share"],
+      "regex": "\\b(?:dropbox)\\b"
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "legitimateDomains": ["stripe.com"],
+      "keywords": ["stripe", "stripe billing", "stripe payment"],
+      "regex": "\\b(?:stripe)\\b"
+    },
+    {
+      "id": "github",
+      "name": "GitHub",
+      "legitimateDomains": ["github.com"],
+      "keywords": ["github", "github notifications"],
+      "regex": "\\b(?:github)\\b"
+    },
+    {
+      "id": "gitlab",
+      "name": "GitLab",
+      "legitimateDomains": ["gitlab.com"],
+      "keywords": ["gitlab", "gitlab runner", "gitlab ci"],
+      "regex": "\\b(?:gitlab)\\b"
+    },
+    {
+      "id": "atlassian",
+      "name": "Atlassian",
+      "legitimateDomains": ["atlassian.com", "atlassian.net", "jira.com"],
+      "keywords": ["atlassian", "jira", "confluence", "bitbucket"],
+      "regex": "\\b(?:atlassian|jira|confluence|bitbucket)\\b"
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "legitimateDomains": ["slack.com"],
+      "keywords": ["slack", "slack notification"],
+      "regex": "\\b(?:slack)\\b"
+    },
+    {
+      "id": "fedex",
+      "name": "FedEx",
+      "legitimateDomains": ["fedex.com"],
+      "keywords": ["fedex", "fedex express", "fedex tracking"],
+      "regex": "\\b(?:fedex)\\b"
+    },
+    {
+      "id": "ups",
+      "name": "UPS",
+      "legitimateDomains": ["ups.com"],
+      "keywords": ["ups", "ups quantum view", "ups tracking"],
+      "regex": "\\b(?:ups|quantum\\s*view)\\b"
+    }
+  ]
+}

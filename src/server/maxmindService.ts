@@ -563,36 +563,10 @@ export class MaxMindDatabase {
       };
     }
 
-    // 4. Deterministic global fallback for unmapped public IPv4 addresses
-    const FALLBACKS = [
-      { city: 'Tokyo', countryCode: 'JP', country: 'Japan', regionCode: '13', region: 'Tokyo', lat: 35.6762, lng: 139.6503, tz: 'Asia/Tokyo', asn: 2514, asnOrg: 'NTTPC Communications', contCode: 'AS', contName: 'Asia', eu: false },
-      { city: 'London', countryCode: 'GB', country: 'United Kingdom', regionCode: 'ENG', region: 'England', lat: 51.5074, lng: -0.1278, tz: 'Europe/London', asn: 2856, asnOrg: 'BT Public Network', contCode: 'EU', contName: 'Europe', eu: false },
-      { city: 'Sydney', countryCode: 'AU', country: 'Australia', regionCode: 'NSW', region: 'New South Wales', lat: -33.8688, lng: 151.2093, tz: 'Australia/Sydney', asn: 4804, asnOrg: 'Telstra Corporation', contCode: 'OC', contName: 'Oceania', eu: false },
-      { city: 'Frankfurt am Main', countryCode: 'DE', country: 'Germany', regionCode: 'HE', region: 'Hesse', lat: 50.1109, lng: 8.6821, tz: 'Europe/Berlin', asn: 3320, asnOrg: 'Deutsche Telekom AG', contCode: 'EU', contName: 'Europe', eu: true },
-      { city: 'Toronto', countryCode: 'CA', country: 'Canada', regionCode: 'ON', region: 'Ontario', lat: 43.6532, lng: -79.3832, tz: 'America/Toronto', asn: 577, asnOrg: 'Rogers Communications', contCode: 'NA', contName: 'North America', eu: false },
-      { city: 'Singapore', countryCode: 'SG', country: 'Singapore', regionCode: 'SG', region: 'Central Singapore', lat: 1.3521, lng: 103.8198, tz: 'Asia/Singapore', asn: 4657, asnOrg: 'StarHub Ltd', contCode: 'AS', contName: 'Asia', eu: false },
-      { city: 'Mumbai', countryCode: 'IN', country: 'India', regionCode: 'MH', region: 'Maharashtra', lat: 19.0760, lng: 72.8777, tz: 'Asia/Kolkata', asn: 55836, asnOrg: 'Reliance Jio Infocomm', contCode: 'AS', contName: 'Asia', eu: false },
-      { city: 'Sao Paulo', countryCode: 'BR', country: 'Brazil', regionCode: 'SP', region: 'Sao Paulo', lat: -23.5505, lng: -46.6333, tz: 'America/Sao_Paulo', asn: 28573, asnOrg: 'Claro Brasil', contCode: 'SA', contName: 'South America', eu: false },
-      { city: 'New York', countryCode: 'US', country: 'United States', regionCode: 'NY', region: 'New York', lat: 40.7128, lng: -74.0060, tz: 'America/New_York', asn: 701, asnOrg: 'Verizon Business', contCode: 'NA', contName: 'North America', eu: false },
-      { city: 'Paris', countryCode: 'FR', country: 'France', regionCode: 'IDF', region: 'Ile-de-France', lat: 48.8566, lng: 2.3522, tz: 'Europe/Paris', asn: 3215, asnOrg: 'Orange S.A.', contCode: 'EU', contName: 'Europe', eu: true }
-    ];
-
-    let hash = 0;
-    for (let i = 0; i < ip.length; i++) {
-      hash = (hash << 5) - hash + ip.charCodeAt(i);
-      hash |= 0;
-    }
-    const fb = FALLBACKS[Math.abs(hash) % FALLBACKS.length];
-
-    return {
-      city: { names: { en: fb.city } },
-      country: { iso_code: fb.countryCode, names: { en: fb.country }, is_in_european_union: fb.eu },
-      subdivisions: [{ iso_code: fb.regionCode, names: { en: fb.region } }],
-      continent: { code: fb.contCode, names: { en: fb.contName } },
-      location: { latitude: fb.lat, longitude: fb.lng, time_zone: fb.tz, accuracy_radius: 25 },
-      traits: { autonomous_system_number: fb.asn, autonomous_system_organization: fb.asnOrg, isp: fb.asnOrg, organization: fb.asnOrg }
-    };
+    // 4. Return null for unmapped public addresses (Do NOT invent fake cities or coordinates)
+    return null;
   }
 }
 
 export const maxMindDb = new MaxMindDatabase();
+

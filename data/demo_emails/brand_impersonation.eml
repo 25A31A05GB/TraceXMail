@@ -1,0 +1,31 @@
+Delivered-To: executive@enterprise-corp.internal
+Received: by 10.200.1.10 with SMTP id mx-gateway-internal for <executive@enterprise-corp.internal>;
+        Wed, 02 Sep 2026 09:15:10 -0700 (PDT)
+Received: from mail.docusign-envelope-review.net (unverified-relay.zettahost.bg [185.220.101.5])
+        by mx.enterprise-corp.internal (Enterprise Postfix) with ESMTPS id 3K9f9x1z01q
+        for <executive@enterprise-corp.internal>;
+        Wed, 02 Sep 2026 09:15:08 -0700 (PDT)
+Authentication-Results: mx.enterprise-corp.internal;
+        dkim=fail (bad signature) header.d=docusign-envelope-review.net;
+        spf=softfail (mx.enterprise-corp.internal: transitioning domain of service@docusign-envelope-review.net does not designate 185.220.101.5 as permitted sender);
+        dmarc=fail (p=REJECT dis=QUARANTINE) header.from=docusign-envelope-review.net
+From: "DocuSign Electronic Signature Service" <service@docusign-envelope-review.net>
+To: Senior Director <executive@enterprise-corp.internal>
+Reply-To: <diverted-reviews@secure-legal-docs.org>
+Subject: DocuSign: Please review and sign your updated enterprise agreement [Ref #49102]
+Date: Wed, 02 Sep 2026 09:15:05 -0700
+Message-ID: <docusign_fake_20260902_49102@docusign-envelope-review.net>
+Return-Path: <bounce@unregistered-relay-bounce.info>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+DocuSign Electronic Document Notification
+
+An electronic envelope has been transmitted for your immediate signature regarding:
+Document Title: Master Services Agreement Supplement & Stock Grant Annex
+Transmitted By: Corporate Counsel (Legal Affairs)
+
+Please review this document immediately to ensure compliance prior to closing:
+http://docusign-envelope-review.net/d/auth/sign?env=7a9182bf901
+
+This digital notification is powered by DocuSign Trust Network. Do not forward this email as your link contains access credentials.
