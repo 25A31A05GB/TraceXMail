@@ -325,3 +325,77 @@ export interface EmailAnalysis {
   isOfflineFallback?: boolean;
 }
 
+export interface EvidenceCardData {
+  caseId: string;
+  evidenceId: string;
+  timestamp: string;
+  verdict: {
+    text: string;
+    status: 'bad' | 'warn' | 'good' | string;
+    scoreLabel: string;
+  };
+  subject: string;
+  identityRows: Array<{
+    k: string;
+    v: string;
+    status?: 'bad' | 'warn' | 'good' | string;
+  }>;
+  checks: Array<{
+    label: string;
+    value: string;
+    status: 'pass' | 'fail' | 'warn' | string;
+  }>;
+  origin?: {
+    sectionTitle: string;
+    ip: string;
+    ipStatus?: 'bad' | 'warn' | 'good' | string;
+    location: string;
+    mapsUrl?: string;
+    extraRows?: Array<{
+      k: string;
+      v: string;
+      status?: 'bad' | 'warn' | 'good' | string;
+    }>;
+  };
+  relay?: {
+    chain: string;
+    graphUrl?: string;
+  };
+  entity?: {
+    sectionTitle: string;
+    rows: Array<{
+      k: string;
+      v: string;
+      status?: 'bad' | 'warn' | 'good' | string;
+    }>;
+    flags?: Array<{
+      text: string;
+      level?: 'red' | 'amber' | 'green' | string;
+    }>;
+  };
+  aiSummary?: {
+    text: string;
+    engine: string;
+    fullUrl?: string;
+  };
+  findings?: Array<{
+    label: string;
+    badge: string;
+    status: 'mal' | 'clean' | 'warn' | string;
+  }>;
+  score?: {
+    label: string;
+    percent: number;
+    resultText: string;
+    resultLabel: string;
+    good?: boolean;
+  };
+  footer?: {
+    hashLabel: string;
+    hash: string;
+    actionLabel: string;
+    action: string;
+    actionGood?: boolean;
+  };
+}
+

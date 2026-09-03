@@ -34,10 +34,11 @@ import {
   WifiOff,
   Radio,
   HelpCircle,
-  Tag
+  Tag,
+  Printer
 } from 'lucide-react';
 import { EmailAnalysis, AINarrative } from '../types';
-import { EvidenceTagCard } from './EvidenceTagCard';
+import { EvidenceCard, EvidenceTagCard, mapAnalysisToEvidenceCardData } from './EvidenceTagCard';
 import { computeSha256 } from '../utils/crypto';
 import { classifyIp } from '../utils/parser';
 import { lookupMaxMindGeo } from '../utils/maxmindService';
@@ -486,118 +487,67 @@ export function OverviewView({
     URL.revokeObjectURL(url);
   };
 
-  if (overviewMode === 'card') {
-    return (
-      <div id="overview-dashboard-card" className="flex-1 flex flex-col overflow-y-auto bg-[#0B0C0F] text-[#E7E4DA]">
-        {/* Top Control & Mode Switcher Bar */}
-        <div className="bg-[#16181D] border-b border-[#2A2D34] px-6 py-3 flex flex-wrap items-center justify-between gap-4 sticky top-0 z-20">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5 p-1 bg-[#1D2027] rounded border border-[#2A2D34]">
-              <button
-                onClick={() => setOverviewMode('card')}
-                className={`px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 ${
-                  overviewMode === 'card'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Tag className="w-3.5 h-3.5 text-amber-400" />
-                <span>Evidence Tag (Index Card)</span>
-              </button>
-              <button
-                onClick={() => setOverviewMode('workspace')}
-                className={`px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 ${
-                  overviewMode === 'workspace'
-                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                <Database className="w-3.5 h-3.5 text-blue-400" />
-                <span>Full SOC Console</span>
-              </button>
-            </div>
-            
-            <span className="text-xs text-slate-500 font-mono hidden sm:inline">|</span>
-            <div className="text-xs text-slate-400 font-mono hidden sm:flex items-center gap-2">
-              <span>Case: <b className="text-slate-200">{analysis.id || 'sample-paypal-phish'}</b></span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              <span className="text-emerald-400">Preserved</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-wrap">
-            {onNavigateToTimeline && (
-              <button
-                onClick={onNavigateToTimeline}
-                className="px-2.5 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-indigo-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-                title="View chronological investigation timeline for this sender/domain"
-              >
-                <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Threat Timeline</span>
-              </button>
-            )}
-            <button
-              onClick={handleReverifyVault}
-              disabled={reverifying}
-              className="px-2.5 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-slate-200 font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
-              title="Trigger live cryptographic SHA-256 re-verification"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${reverifying ? 'animate-spin' : ''}`} />
-              <span>{reverifying ? 'Re-Verifying...' : 'Audit Hash'}</span>
-            </button>
-            <button
-              onClick={handleDownloadRawEml}
-              className="px-2.5 py-1.5 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs text-blue-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Download original, unaltered RFC 822 .eml bytes"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Raw .EML</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Centered Evidence Tag Physical Card matching user template */}
-        <div className="flex-1 flex flex-col items-center justify-start p-6 md:p-8 bg-[#0B0C0F]">
-          <div className="w-full max-w-[440px]">
-            <EvidenceTagCard
-              analysis={analysis}
-              onNavigateToMap={onNavigateToMap}
-              onNavigateToGraph={onNavigateToGraph}
-              onOpenNarrative={() => setOverviewMode('workspace')}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const evidenceCardData = mapAnalysisToEvidenceCardData(analysis);
 
   return (
-    <div id="overview-dashboard" className="flex-1 p-6 grid grid-cols-12 gap-6 overflow-y-auto bg-[#0F172A]">
-      {/* Top Bar Mode Switcher inside Workspace */}
-      <div className="col-span-12 flex items-center justify-between bg-[#1E293B] p-3 rounded-lg border border-slate-700">
-        <div className="flex items-center gap-2">
+    <div id="overview-dashboard" className="flex-1 p-4 md:p-6 grid grid-cols-12 gap-6 overflow-y-auto bg-[#0F172A] text-slate-100">
+      {/* Top Bar Header & Action Controls */}
+      <div className="col-span-12 flex flex-wrap items-center justify-between gap-4 bg-[#1E293B] px-4 py-3 rounded-lg border border-slate-700 shadow-sm">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono font-bold text-slate-400 uppercase tracking-wider">Investigation Case:</span>
+            <span className="text-sm font-mono font-bold text-blue-400 bg-blue-950/60 px-2 py-0.5 rounded border border-blue-800/80">
+              {analysis.id || effectiveEvidenceId}
+            </span>
+          </div>
+          <span className="text-slate-600 hidden sm:inline">|</span>
+          <div className="flex items-center gap-1.5 text-xs text-emerald-400 font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Cryptographically Preserved</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => setOverviewMode('card')}
-            className="px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800"
+            onClick={() => setIsEvidenceTagOpen(true)}
+            className="px-2.5 py-1.5 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-xs text-amber-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Expand Fullscreen Physical Forensic Evidence Tag Card"
           >
             <Tag className="w-3.5 h-3.5 text-amber-400" />
-            <span>Evidence Tag (Index Card)</span>
+            <span>Fullscreen Card</span>
+          </button>
+          {onNavigateToTimeline && (
+            <button
+              onClick={onNavigateToTimeline}
+              className="px-2.5 py-1.5 rounded bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-xs text-indigo-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="View chronological investigation timeline for this sender/domain"
+            >
+              <Clock className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Threat Timeline</span>
+            </button>
+          )}
+          <button
+            onClick={handleReverifyVault}
+            disabled={reverifying}
+            className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs text-slate-200 font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            title="Trigger live cryptographic SHA-256 re-verification"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-400 ${reverifying ? 'animate-spin' : ''}`} />
+            <span>{reverifying ? 'Re-Verifying...' : 'Audit Hash'}</span>
           </button>
           <button
-            onClick={() => setOverviewMode('workspace')}
-            className="px-3 py-1 text-xs font-mono rounded transition-colors flex items-center gap-1.5 bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold"
+            onClick={handleDownloadRawEml}
+            className="px-2.5 py-1.5 rounded bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-xs text-blue-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+            title="Download original, unaltered RFC 822 .eml bytes"
           >
-            <Database className="w-3.5 h-3.5 text-blue-400" />
-            <span>Full SOC Console</span>
+            <Download className="w-3.5 h-3.5" />
+            <span>Raw .EML</span>
           </button>
-        </div>
-        <div className="text-xs text-slate-400 font-mono hidden sm:block">
-          Case ID: <span className="text-blue-300">{effectiveEvidenceId}</span>
         </div>
       </div>
 
-      {/* Left 8 Columns: Evidence Vault, Auth status cards, Geo Origin panel, Metadata & Links */}
-      <div className="col-span-12 lg:col-span-8 space-y-6">
+      {/* Left Columns: Evidence Vault, Auth status cards, Geo Origin panel, Metadata & Links */}
+      <div className="col-span-12 xl:col-span-7 2xl:col-span-8 space-y-6">
         {/* Evidence Vault & Chain of Custody Immutable Ledger Banner */}
         <div className="bg-[#1E293B] border border-blue-500/30 rounded-lg p-4 shadow-sm relative overflow-hidden bg-gradient-to-r from-[#1E293B] via-slate-900 to-slate-900">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
@@ -1419,22 +1369,65 @@ export function OverviewView({
         </div>
       </div>
 
-      {/* Right 4 Columns: Threat Intelligence Log & ML Probability Meter */}
-      <div className="col-span-12 lg:col-span-4 bg-[#1E293B] border border-slate-700 rounded-lg flex flex-col overflow-hidden shadow-sm">
-        {/* Threat Intel Header */}
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/40">
-          <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
-            <span className="text-sm font-semibold text-slate-100">Threat Intelligence Log</span>
+      {/* Right Columns: Physical Evidence Card, Threat Intelligence Log & ML Probability Meter */}
+      <div className="col-span-12 xl:col-span-5 2xl:col-span-4 space-y-6 flex flex-col">
+        {/* Physical Evidence Card Section */}
+        <div className="bg-[#16181D] border border-[#2A2D34] rounded-xl p-4 shadow-lg flex flex-col items-center">
+          <div className="w-full flex items-center justify-between border-b border-[#2A2D34] pb-2.5 mb-4 text-xs font-mono">
+            <div className="flex items-center gap-2 text-amber-400 font-semibold">
+              <Tag className="w-4 h-4 text-amber-400" />
+              <span>FORENSIC EVIDENCE TAG</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEvidenceTagOpen(true)}
+                className="px-2 py-1 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-slate-300 hover:text-amber-300 text-[11px] font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                title="Expand to Fullscreen Modal"
+              >
+                <ExternalLink className="w-3 h-3" />
+                <span>Expand</span>
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-2 py-1 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-slate-300 hover:text-slate-100 text-[11px] font-mono flex items-center gap-1 transition-colors cursor-pointer"
+                title="Print Case Tag"
+              >
+                <Printer className="w-3 h-3" />
+                <span>Print</span>
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onNavigateToLogs}
-            className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1 cursor-pointer"
-          >
-            <span>Live Console</span>
-            <Terminal className="w-3 h-3" />
-          </button>
+
+          <div className="w-full flex justify-center">
+            <EvidenceCard
+              data={evidenceCardData}
+              analysis={analysis}
+              onNavigateToMap={onNavigateToMap}
+              onNavigateToGraph={onNavigateToGraph}
+              onOpenNarrative={() => {
+                const el = document.getElementById('ai-case-summary-panel');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+              }}
+            />
+          </div>
         </div>
+
+        {/* Threat Intelligence Log Console */}
+        <div className="bg-[#1E293B] border border-slate-700 rounded-lg flex flex-col overflow-hidden shadow-sm">
+          {/* Threat Intel Header */}
+          <div className="p-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/40">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
+              <span className="text-sm font-semibold text-slate-100">Threat Intelligence Log</span>
+            </div>
+            <button
+              onClick={onNavigateToLogs}
+              className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1 cursor-pointer font-mono"
+            >
+              <span>Live Console</span>
+              <Terminal className="w-3 h-3" />
+            </button>
+          </div>
 
         {/* Forensic Log Stream */}
         <div className="flex-1 p-4 font-mono text-[11px] space-y-3 overflow-y-auto max-h-[460px] bg-[#0F172A]/80">
@@ -1551,6 +1544,7 @@ export function OverviewView({
           )}
         </div>
       </div>
+    </div>
 
       {/* Standalone Evidence Tag Flashcard Modal */}
       {isEvidenceTagOpen && (
