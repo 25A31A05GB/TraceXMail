@@ -66,7 +66,7 @@ export type ReportTab =
 
 export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT_PRIVACY_CONFIG }: ReportModalProps) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<ReportTab>('institutional');
+  const [activeTab, setActiveTab] = useState<ReportTab>('evidence_card');
   const [enforceMasking, setEnforceMasking] = useState(privacyConfig.maskingEnabled);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
 

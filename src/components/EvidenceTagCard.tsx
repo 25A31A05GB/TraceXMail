@@ -946,6 +946,27 @@ export function EvidenceTagCard({
             </div>
             <div className="flex items-center gap-2">
               <button
+                type="button"
+                onClick={handleExportPdf}
+                disabled={exportingPdf}
+                className="px-2.5 py-1 rounded bg-[#CC9A4A]/20 hover:bg-[#CC9A4A]/30 border border-[#CC9A4A]/50 text-[#CC9A4A] hover:text-[#F2EFE7] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                title="Export Evidence Card as PDF Dossier"
+              >
+                {exportingPdf ? <Loader2 className="w-3 h-3 animate-spin text-[#CC9A4A]" /> : <FileText className="w-3 h-3 text-[#CC9A4A]" />}
+                <span>{exportingPdf ? 'Saving PDF...' : 'PDF'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleExportImage}
+                disabled={exportingImage}
+                className="px-2.5 py-1 rounded bg-blue-900/30 hover:bg-blue-800/40 border border-blue-700/60 text-blue-300 hover:text-white text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                title="Export Evidence Card as High-Res PNG Image"
+              >
+                {exportingImage ? <Loader2 className="w-3 h-3 animate-spin text-blue-400" /> : <ImageIcon className="w-3 h-3 text-blue-400" />}
+                <span>{exportingImage ? 'Saving PNG...' : 'Image'}</span>
+              </button>
+              <button
+                type="button"
                 onClick={handleCopySummary}
                 className="px-2.5 py-1 rounded bg-[#171B24] hover:bg-[#2B3140] border border-[#2B3140] text-[#F2EFE7] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Copy Text Summary"
@@ -954,6 +975,7 @@ export function EvidenceTagCard({
                 <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
               <button
+                type="button"
                 onClick={handlePrint}
                 className="px-2.5 py-1 rounded bg-[#171B24] hover:bg-[#2B3140] border border-[#2B3140] text-[#F2EFE7] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Print Evidence Tag Card"
@@ -963,6 +985,7 @@ export function EvidenceTagCard({
               </button>
               {onClose && (
                 <button
+                  type="button"
                   onClick={onClose}
                   className="p-1 rounded bg-[#171B24] hover:bg-[#2B3140] border border-[#2B3140] text-[#7C8494] hover:text-[#F2EFE7] transition-colors cursor-pointer"
                   title="Close Card View"
