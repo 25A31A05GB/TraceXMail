@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { 
   ShieldAlert, 
   ShieldCheck, 
   AlertTriangle, 
-  CheckCircle2, 
   ChevronDown, 
   ChevronUp, 
-  Info, 
-  Lock 
+  Info,
+  ShieldBan,
+  ArrowRight
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { JargonTooltip } from './JargonTooltip';
@@ -28,10 +28,11 @@ export function PlainLanguageSummaryCard({
     : (typeof analysis.riskScore === 'number' ? analysis.riskScore : 0);
 
   const verdictRaw = (analysis.threatVerdict || analysis.verdict || 'SUSPICIOUS').toUpperCase();
-  const isPhish = verdictRaw.includes('PHISH') || verdictRaw.includes('FRAUD') || verdictRaw.includes('IMPERSONAT') || threatScore >= 70;
-  const isSuspicious = !isPhish && (verdictRaw.includes('SUSPICIOUS') || threatScore >= 35);
-  const isClean = !isPhish && !isSuspicious;
+  const isMalicious = verdictRaw.includes('PHISH') || verdictRaw.includes('FRAUD') || verdictRaw.includes('IMPERSONAT') || verdictRaw.includes('MALICIOUS') || threatScore >= 70;
+  const isSuspicious = !isMalicious && (verdictRaw.includes('SUSPICIOUS') || threatScore >= 35);
+  const isSafe = !isMalicious && !isSuspicious;
 
+  // Cryptographic authentication checks
   const spfPass = analysis.auth?.spf?.status === 'PASS';
   const dkimPass = analysis.auth?.dkim?.status === 'PASS';
   const dmarcPass = analysis.auth?.dmarc?.status === 'PASS';
@@ -40,123 +41,169 @@ export function PlainLanguageSummaryCard({
   const fromEmail = analysis.headers?.fromEmail || analysis.from || 'unknown@sender.corp';
   const fromDomain = fromEmail.includes('@') ? fromEmail.split('@')[1].replace(/[<>]/g, '').trim() : 'sender domain';
 
-  // Determine top drivers and bullets
-  const bullets: Array<{ text: string; jargonKey?: string }> = [];
-
+  // Domain intelligence & lookalike checks
   const domIntel = analysis.domain_intelligence || analysis.domainIntelligence;
-  if (domIntel?.is_typosquat || domIntel?.typosquatting?.is_typosquat) {
-    const target = domIntel.typosquat_matched_brand || domIntel.typosquatting?.target_brand || 'a recognized brand';
-    bullets.push({
-      text: `Sender domain "${fromDomain}" is a lookalike domain mimicking ${target}.`,
-      jargonKey: 'TYPOSQUATTING'
-    });
-  } else if (domIntel?.is_newly_registered) {
-    const days = domIntel.domain_age_days ?? 14;
-    bullets.push({
-      text: `Sender domain "${fromDomain}" was registered recently (${days} days ago).`,
-      jargonKey: 'RDAP'
-    });
-  }
+  const isTyposquat = Boolean(domIntel?.is_typosquat || domIntel?.typosquatting?.is_typosquat);
+  const targetBrand = domIntel?.typosquat_matched_brand || domIntel?.typosquatting?.target_brand || null;
 
-  const heuristics = analysis.heuristics || [];
-  heuristics.filter(h => h.triggered).forEach(h => {
-    if (bullets.length < 3) {
-      bullets.push({ text: `${h.title}: ${h.description || 'Identified by forensic security rule.'}` });
-    }
-  });
+  // Anomalous routing check
+  const anomalousHop = analysis.hops?.find(h => h.is_tor || h.isBlacklisted || (h.abuseScore && h.abuseScore > 60));
+  const isOriginAnomalous = Boolean(anomalousHop) || (analysis.hops && analysis.hops.length > 0 && !analysis.hops[0].isPrivate && (analysis.hops[0].abuseScore || 0) > 50);
 
-  if (bullets.length === 0) {
-    if (isPhish || isSuspicious) {
-      bullets.push({ text: 'Content patterns strongly resemble known phishing lures and credential harvesting.' });
-      bullets.push({ text: 'Suspicious email header configuration or transmission hop routing.' });
+  // Suspicious URLs check
+  const suspiciousUrls = (analysis.urls || []).filter(u => u.status === 'MALICIOUS' || (u.virustotalScore && !u.virustotalScore.startsWith('0/')));
+  const hasSuspiciousUrls = suspiciousUrls.length > 0;
+
+  // Suspicious attachments check
+  const dangerousAtts = (analysis.attachments || []).filter(a => a.status === 'MALICIOUS' || /\.(exe|scr|bat|vbs|docm|xlsm|pptm|jar|iso)$/i.test(a.filename));
+  const hasDangerousAtts = dangerousAtts.length > 0;
+
+  // 1. One-Sentence Plain-Language Explanation of What Was Detected
+  let plainExplanation = '';
+  if (isMalicious) {
+    if (isTyposquat && targetBrand) {
+      plainExplanation = `This email is pretending to be from ${targetBrand}, but the sender's domain (${fromDomain}) is a deceptive lookalike registered to trick you.`;
+    } else if (hasSuspiciousUrls) {
+      const dest = suspiciousUrls[0].domain || 'an external unknown host';
+      plainExplanation = `This email contains deceptive links that point to an untrusted server (${dest}) to harvest credentials.`;
+    } else if (anomalousHop) {
+      plainExplanation = `This email originated from an anonymized relay or suspicious hosting provider (${anomalousHop.city || 'unverified region'}, ${anomalousHop.country || 'anomalous network'}) rather than an authorized enterprise mail server.`;
+    } else if (hasDangerousAtts) {
+      plainExplanation = `This email includes dangerous file attachments (${dangerousAtts[0].filename}) engineered to execute malicious scripts or malware.`;
     } else {
-      bullets.push({ text: 'Sender domain has established reputation with clean DNS records.', jargonKey: 'RDAP' });
-      bullets.push({ text: 'Cryptographic authentication headers verified cleanly.', jargonKey: 'DMARC' });
-    }
-  }
-
-  const primaryDriverText = bullets[0]?.text ? bullets[0].text.toLowerCase().replace(/\.$/, '') : 'suspicious message indicators';
-
-  let verdictTitle = '';
-  let mainSummarySentence = '';
-  let authNoteText: string | null = null;
-
-  if (isPhish) {
-    verdictTitle = 'Phishing Threat Detected';
-    mainSummarySentence = `This email is flagged as PHISHING (${threatScore}/100 threat score) mainly because of ${primaryDriverText}${authPassed ? ' — even though email authentication passed.' : '.'}`;
-    if (authPassed) {
-      authNoteText = `Note for reviewers: Cryptographic email authentication (SPF, DKIM, DMARC) passed because the sender owns the sending domain "${fromDomain}". Passing authentication proves domain ownership, but does NOT mean the email content, links, or destination are safe.`;
+      plainExplanation = `This email exhibits strong indicators of a targeted phishing or wire fraud lure designed to compromise credentials.`;
     }
   } else if (isSuspicious) {
-    verdictTitle = 'Suspicious Email Warning';
-    mainSummarySentence = `This email is flagged as SUSPICIOUS (${threatScore}/100 threat score) due to risk factors: ${primaryDriverText}.`;
-    if (authPassed) {
-      authNoteText = `Note: Email authentication (SPF, DKIM, DMARC) passed, but content heuristics triggered security warnings.`;
-    }
+    plainExplanation = `This email exhibits irregular routing or sender configuration anomalies that warrant caution before interacting with its contents.`;
   } else {
-    verdictTitle = 'Verified Legitimate Email';
-    mainSummarySentence = `This email was verified as legitimate with a low threat score (${threatScore}/100). Cryptographic authentication checks passed and no security threats were found.`;
+    plainExplanation = `This email was verified authentic with clean cryptographic signatures and safe transmission routing.`;
+  }
+
+  // 2. 'What this means' section translating technical findings into plain English
+  const whatThisMeans: Array<{ title: string; text: string; jargonKey?: string }> = [];
+
+  if (authPassed) {
+    whatThisMeans.push({
+      title: 'Authentication passed',
+      text: 'Authentication passed — this means the sender really owns their domain, but it does NOT mean the email is safe.',
+      jargonKey: 'DMARC'
+    });
+  } else if (analysis.auth?.spf?.status === 'FAIL' || analysis.auth?.dkim?.status === 'FAIL' || analysis.auth?.dmarc?.status === 'FAIL' || analysis.auth?.dmarc?.status === 'REJECT') {
+    whatThisMeans.push({
+      title: 'Authentication failed',
+      text: 'Authentication failed — the sender failed cryptographic SPF/DKIM verification, indicating potential sender spoofing.',
+      jargonKey: 'SPF'
+    });
+  }
+
+  if (isTyposquat) {
+    whatThisMeans.push({
+      title: 'Lookalike domain',
+      text: `Lookalike domain — the sender's address looks almost identical to ${targetBrand || 'a trusted brand'} but has deliberate typos to trick you.`,
+      jargonKey: 'TYPOSQUATTING'
+    });
+  }
+
+  if (hasSuspiciousUrls) {
+    whatThisMeans.push({
+      title: 'Dangerous links',
+      text: "Dangerous links — the email contains links whose displayed text doesn't match where they actually lead.",
+    });
+  }
+
+  if (isOriginAnomalous) {
+    whatThisMeans.push({
+      title: 'Unusual routing',
+      text: 'Unusual routing — the email originated from a hosting provider or exit relay rather than a standard corporate mail server.',
+      jargonKey: anomalousHop?.is_tor ? 'TOR' : 'ASN'
+    });
+  }
+
+  if (hasDangerousAtts) {
+    whatThisMeans.push({
+      title: 'Dangerous attachments',
+      text: 'Dangerous attachments — contains files that could execute malware or scripts on your computer.'
+    });
+  }
+
+  if (isSafe && whatThisMeans.length === 0) {
+    whatThisMeans.push({
+      title: 'Verified sender',
+      text: 'Verified sender — cryptographic checks confirmed the sender identity and no deceptive links or malware were found.'
+    });
+  }
+
+  // 3. Clear Recommended Action
+  let recommendedAction = '';
+  if (isMalicious) {
+    recommendedAction = 'Do not click links or reply. Block sender domain and delete message.';
+  } else if (isSuspicious) {
+    recommendedAction = 'Exercise caution. Do not click links, open attachments, or enter credentials until verified with the sender through an independent channel.';
+  } else {
+    recommendedAction = 'Message passed safety and identity verification. Safe to read and proceed normally.';
   }
 
   return (
-    <div className="bg-[#16181D] border border-[#2A2D34] rounded-lg p-4 md:p-5 mb-5 shadow-md font-sans text-slate-100">
-      {/* Top Banner Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2D34] pb-3 mb-3">
+    <div id="plain-language-summary-card" className="bg-[#16181D] border border-[#2A2D34] rounded-xl p-5 shadow-lg font-sans text-slate-100">
+      {/* Header: Clear, Bold Verdict Badge + Threat Score + Progressive Disclosure Toggle */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2A2D34] pb-4 mb-4">
         <div className="flex items-center gap-3">
+          {/* Bold Verdict Badge: SAFE (green), SUSPICIOUS (amber), MALICIOUS (red) */}
           <div
-            className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 shadow-sm ${
-              isPhish
-                ? 'bg-rose-500/20 border border-rose-500/40 text-rose-400'
+            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-2 font-black text-sm tracking-wider uppercase shadow-md ${
+              isMalicious
+                ? 'bg-rose-500 text-white shadow-rose-900/40'
                 : isSuspicious
-                ? 'bg-amber-500/20 border border-amber-500/40 text-amber-400'
-                : 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-400'
+                ? 'bg-amber-500 text-slate-950 shadow-amber-900/30'
+                : 'bg-emerald-600 text-white shadow-emerald-900/40'
             }`}
           >
-            {isPhish ? (
-              <ShieldAlert className="w-5 h-5" />
+            {isMalicious ? (
+              <ShieldAlert className="w-4 h-4 text-white shrink-0" />
             ) : isSuspicious ? (
-              <AlertTriangle className="w-5 h-5" />
+              <AlertTriangle className="w-4 h-4 text-slate-950 shrink-0" />
             ) : (
-              <ShieldCheck className="w-5 h-5" />
+              <ShieldCheck className="w-4 h-4 text-white shrink-0" />
             )}
+            <span>
+              {isMalicious ? 'MALICIOUS' : isSuspicious ? 'SUSPICIOUS' : 'SAFE'}
+            </span>
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-base font-bold text-slate-100 tracking-tight">
-                {verdictTitle}
-              </h2>
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-xs font-bold font-mono border ${
-                  isPhish
-                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                    : isSuspicious
-                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                }`}
-              >
-                {threatScore}/100 Threat Score
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5 font-mono">
-              Non-technical forensic verdict summary
-            </p>
+
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span
+              className={`px-2.5 py-1 rounded-md font-bold border ${
+                isMalicious
+                  ? 'bg-rose-950/40 border-rose-800 text-rose-300'
+                  : isSuspicious
+                  ? 'bg-amber-950/40 border-amber-800 text-amber-300'
+                  : 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
+              }`}
+            >
+              {threatScore}/100 Threat Score
+            </span>
+            <span className="text-slate-400 hidden md:inline">•</span>
+            <span className="text-slate-300 text-xs hidden md:inline">
+              Executive & Non-Technical Reviewer Summary
+            </span>
           </div>
         </div>
 
+        {/* Progressive Disclosure Toggle Button */}
         {onToggleTechnicalDetails && (
           <button
             type="button"
             onClick={() => onToggleTechnicalDetails(!isTechnicalExpanded)}
-            className="px-3 py-1.5 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-slate-300 font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+            className="px-3.5 py-1.5 rounded-lg bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-xs text-cyan-300 hover:text-cyan-200 font-mono font-medium flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto shadow-sm"
           >
             {isTechnicalExpanded ? (
               <>
-                <ChevronUp className="w-3.5 h-3.5 text-cyan-400" />
+                <ChevronUp className="w-4 h-4 text-cyan-400" />
                 <span>Hide technical deep dive</span>
               </>
             ) : (
               <>
-                <ChevronDown className="w-3.5 h-3.5 text-cyan-400" />
+                <ChevronDown className="w-4 h-4 text-cyan-400" />
                 <span>Show technical deep dive</span>
               </>
             )}
@@ -164,48 +211,65 @@ export function PlainLanguageSummaryCard({
         )}
       </div>
 
-      {/* Main Single-Sentence Plain Language Summary */}
-      <div className="text-sm font-medium leading-relaxed text-slate-100 bg-[#1D2027]/80 p-3.5 rounded border border-[#2A2D34] mb-3">
-        {mainSummarySentence}
+      {/* 1. One-Sentence Plain-Language Explanation */}
+      <div className={`p-4 rounded-lg border mb-4 text-[14px] leading-relaxed font-medium ${
+        isMalicious 
+          ? 'bg-rose-950/20 border-rose-900/40 text-rose-100' 
+          : isSuspicious 
+          ? 'bg-amber-950/20 border-amber-900/40 text-amber-100' 
+          : 'bg-emerald-950/20 border-emerald-900/40 text-emerald-100'
+      }`}>
+        <p>{plainExplanation}</p>
       </div>
 
-      {/* Primary Contributing Risk Bullets */}
-      <div className="space-y-1.5 mb-3">
-        <div className="text-xs font-bold font-mono text-slate-400 uppercase tracking-wider mb-1">
-          Top Contributing Factors
-        </div>
-        {bullets.slice(0, 3).map((b, idx) => (
-          <div key={idx} className="flex items-start gap-2 text-xs text-slate-200 leading-snug">
-            {isPhish || isSuspicious ? (
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-            ) : (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-            )}
-            <div>
-              <span>{b.text} </span>
-              {b.jargonKey && (
-                <JargonTooltip termKey={b.jargonKey} className="ml-1" />
-              )}
+      {/* 2. 'What this means' Section translating findings into plain English */}
+      <div className="mb-4 space-y-2">
+        <h3 className="text-xs font-bold font-mono text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+          <Info className="w-3.5 h-3.5 text-slate-400" />
+          <span>What this means</span>
+        </h3>
+        <div className="grid grid-cols-1 gap-2">
+          {whatThisMeans.map((item, idx) => (
+            <div 
+              key={idx} 
+              className="bg-[#1D2027] border border-[#2A2D34] rounded-lg p-3 text-xs text-slate-200 flex items-start gap-2.5 leading-relaxed"
+            >
+              <div className="mt-0.5 shrink-0">
+                {isMalicious || isSuspicious ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 block" />
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 block" />
+                )}
+              </div>
+              <div className="flex-1">
+                <span>{item.text}</span>
+                {item.jargonKey && (
+                  <span className="ml-2 inline-block">
+                    <JargonTooltip termKey={item.jargonKey} className="text-[11px]" />
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
-      {/* Authentication Pass Explanation Note */}
-      {authNoteText && (
-        <div className="bg-amber-950/20 border border-amber-500/30 rounded p-3 text-xs text-amber-200/90 leading-relaxed flex items-start gap-2.5">
-          <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-semibold text-amber-300">Why Authentication Passed: </span>
-            {authNoteText}{' '}
-            <span className="inline-flex items-center gap-2 mt-1">
-              <JargonTooltip termKey="SPF" text="What is SPF?" />
-              <JargonTooltip termKey="DKIM" text="What is DKIM?" />
-              <JargonTooltip termKey="DMARC" text="What is DMARC?" />
-            </span>
-          </div>
+      {/* 3. Recommended Action Banner */}
+      <div className={`rounded-lg p-3.5 border flex items-start gap-3 text-xs leading-relaxed ${
+        isMalicious
+          ? 'bg-rose-950/30 border-rose-700/60 text-rose-200'
+          : isSuspicious
+          ? 'bg-amber-950/30 border-amber-700/60 text-amber-200'
+          : 'bg-emerald-950/30 border-emerald-700/60 text-emerald-200'
+      }`}>
+        <div className="font-bold uppercase tracking-wider font-mono text-[11px] shrink-0 flex items-center gap-1 mt-0.5">
+          {isMalicious ? <ShieldBan className="w-3.5 h-3.5 text-rose-400" /> : <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />}
+          <span>Recommended Action:</span>
         </div>
-      )}
+        <div className="font-semibold text-slate-100">
+          {recommendedAction}
+        </div>
+      </div>
     </div>
   );
 }

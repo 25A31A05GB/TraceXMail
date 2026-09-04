@@ -3,36 +3,44 @@ import { HelpCircle } from 'lucide-react';
 
 const JARGON_MAP: Record<string, { term: string; definition: string }> = {
   SPF: {
-    term: 'Sender Policy Framework (SPF)',
-    definition: 'Validates that the sending server IP is explicitly authorized by the domain owner in DNS.'
+    term: 'SPF (Sender Policy Framework)',
+    definition: 'Checks if sender is authorized by domain owner.'
   },
   DKIM: {
-    term: 'DomainKeys Identified Mail (DKIM)',
-    definition: 'A digital cryptographic signature ensuring the email message body and headers were not altered in transit.'
+    term: 'DKIM (DomainKeys Identified Mail)',
+    definition: 'Verifies message was not altered in transit.'
   },
   DMARC: {
-    term: 'Domain-based Message Authentication (DMARC)',
-    definition: 'Specifies how email receivers should handle messages that fail SPF or DKIM policy checks (e.g., reject or quarantine).'
+    term: 'DMARC (Domain-based Message Authentication)',
+    definition: 'Tells receivers what to do if authentication fails.'
   },
   ASN: {
-    term: 'Autonomous System Number (ASN)',
-    definition: 'A unique identifier for the network operator or datacenter infrastructure hosting the sending IP address.'
+    term: 'ASN (Autonomous System Number)',
+    definition: 'Identifies the network operator or datacenter hosting the sending server.'
+  },
+  CIDR: {
+    term: 'CIDR (Classless Inter-Domain Routing)',
+    definition: 'Standard IP subnet notation defining an address range.'
   },
   RDAP: {
-    term: 'Registration Data Access Protocol (RDAP)',
-    definition: 'Modern protocol used to query official domain ownership, creation age, and registrar records.'
+    term: 'RDAP (Domain Registry Intelligence)',
+    definition: 'Queries authoritative registry records for domain creation age, registrar, and ownership.'
   },
   NXDOMAIN: {
-    term: 'Non-Existent Domain (NXDOMAIN)',
-    definition: 'Indicates the domain name does not exist in public Domain Name System (DNS) servers.'
+    term: 'NXDOMAIN (Non-Existent Domain)',
+    definition: 'Indicates the domain name does not exist in authoritative public DNS servers.'
   },
   TYPOSQUATTING: {
-    term: 'Typosquatting / Lookalike Domain',
-    definition: 'Registering a domain name closely mimicking a trusted brand (e.g. paypa1.com instead of paypal.com).'
+    term: 'Typosquatting (Lookalike Domain)',
+    definition: 'A deceptive domain name registered with deliberate typos to trick recipients (e.g. paypa1.com).'
+  },
+  TOR: {
+    term: 'Tor Exit Node',
+    definition: 'Anonymized routing relay often abused by threat actors to conceal origin network location.'
   },
   BEC: {
-    term: 'Business Email Compromise (BEC)',
-    definition: 'Social engineering attack impersonating executives or vendors to request unauthorized wire transfers or payroll changes.'
+    term: 'BEC (Business Email Compromise)',
+    definition: 'Impersonation attack targeting employees to authorize fraudulent wire transfers or disclose credentials.'
   }
 };
 

@@ -1,7 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { EmailAnalysis, EvidenceCardData } from '../types';
-import { Printer, Copy, Check, ExternalLink, X, Tag } from 'lucide-react';
+import { Printer, Copy, Check, ExternalLink, X, Tag, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { sha256Sync, generateEvidenceId } from '../utils/crypto';
+import { resolveOrigin, formatOriginLocation, formatOriginIp } from '../utils/originResolution';
 
 /**
  * Pure mapping helper that converts an EmailAnalysis object to the EvidenceCardData schema.
@@ -35,23 +36,15 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   const isSuspicious = rawVerdict.includes('SUSPICIOUS') || rawVerdict.includes('WARN');
   const isClean = rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN');
 
-  // Accurately resolve Threat Score
-  let threatScore = 0;
-  if (typeof analysis.threatScore === 'number' && analysis.threatScore >= 0) {
+  // Accurately use backend threatScore directly without independent re-derivation or artificial overrides
+  let threatScore: number | null = null;
+  let hasValidThreatScore = false;
+  if (typeof analysis.threatScore === 'number' && !isNaN(analysis.threatScore) && analysis.threatScore >= 0) {
     threatScore = analysis.threatScore;
-  } else if (typeof analysis.riskScore === 'number' && analysis.riskScore >= 0) {
+    hasValidThreatScore = true;
+  } else if (typeof analysis.riskScore === 'number' && !isNaN(analysis.riskScore) && analysis.riskScore >= 0) {
     threatScore = analysis.riskScore;
-  } else if (isMalicious) {
-    threatScore = 95;
-  } else if (isSuspicious) {
-    threatScore = 65;
-  } else {
-    threatScore = 8;
-  }
-
-  // Ensure malicious verdicts never evaluate to 0 threat score
-  if (isMalicious && threatScore < 50) {
-    threatScore = 95;
+    hasValidThreatScore = true;
   }
 
   let stampWord = 'PHISH';
@@ -74,10 +67,11 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     stampStatus = 'bad';
   }
 
-  const trustScore = Math.max(0, Math.min(100, 100 - threatScore));
-  const trustScoreLabel = stampStatus === 'good' 
-    ? `${trustScore}/100 TRUST` 
-    : `${threatScore}/100 THREAT (${trustScore}/100 TRUST)`;
+  const trustScoreLabel = hasValidThreatScore && threatScore !== null
+    ? (stampStatus === 'good' 
+        ? `${Math.max(0, Math.min(100, 100 - threatScore))}/100 TRUST` 
+        : `${threatScore}/100 THREAT (${Math.max(0, Math.min(100, 100 - threatScore))}/100 TRUST)`)
+    : 'Score unavailable';
 
   // Identity Rows
   const identityRows = [
@@ -109,18 +103,18 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     }
   ];
 
-  // Origin Hop
-  const originHop = analysis.hops?.find(h => h.isOrigin) || analysis.hops?.find(h => !h.isPrivate && h.fromIp) || analysis.hops?.[0];
-  const originIp = originHop?.fromIp || '185.220.101.5';
-  const originCity = originHop?.city || (originHop?.isPrivate ? 'Internal Subnet' : (originHop?.fromIp ? 'Unknown City' : 'Unknown Origin'));
-  const originCountry = originHop?.country || (originHop?.isPrivate ? 'Private Network (RFC 1918)' : (originHop?.fromIp ? 'Unverified Infrastructure' : 'Unknown Country'));
-  const originAsn = originHop?.asn || (originHop?.fromIp ? 'AS-UNKNOWN' : 'AS200548');
-  const originOrg = originHop?.org || originHop?.isp || '';
-  const isTor = Boolean(originHop?.is_tor || originHop?.reverseDns?.includes('tor') || (originHop?.abuseScore && originHop.abuseScore > 80));
-  const torRdns = originHop?.reverseDns || (originHop?.fromIp ? `ptr-${originHop.fromIp.replace(/\./g, '-')}.in-addr.arpa` : 'unknown.ptr');
-  const abuseScore = originHop?.abuseScore ?? (threatScore > 70 ? 88 : 0);
-  const originLocationStr = `${originCity}, ${originCountry} (${originAsn}${originOrg ? ` · ${originOrg}` : ''})`;
-  const mapsUrl = `https://www.google.com/maps?q=${originHop?.lat || 42.6977},${originHop?.lng || 23.3219}`;
+  // Origin Hop using centralized zero-fake-data resolver
+  const origin = resolveOrigin(analysis.hops);
+  const originIp = formatOriginIp(origin);
+  const originLocationStr = formatOriginLocation(origin);
+  const mapsUrl = origin.resolved && origin.lat != null && origin.lng != null
+    ? `https://www.google.com/maps?q=${origin.lat},${origin.lng}`
+    : undefined;
+
+  const matchedOriginHop = origin.resolved ? analysis.hops?.find(h => h.fromIp === origin.ip) : undefined;
+  const isTor = Boolean(matchedOriginHop?.is_tor || matchedOriginHop?.reverseDns?.includes('tor'));
+  const torRdns = matchedOriginHop?.reverseDns || 'No PTR record';
+  const abuseScore = origin.resolved ? (matchedOriginHop?.abuseScore ?? 0) : 0;
 
   // Relay Chain
   let chainString = '';
@@ -276,7 +270,8 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
       actionLabel: 'SOC action:',
       action: socAction,
       actionGood: stampStatus === 'good'
-    }
+    },
+    threatScoreBreakdown: analysis.threatScoreBreakdown
   };
 }
 
@@ -301,6 +296,7 @@ export function EvidenceTagCard({
 }: EvidenceCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   // Compute final case card data from analysis or direct data prop
   const cardData: EvidenceCardData = directData || (analysis ? mapAnalysisToEvidenceCardData(analysis) : {
@@ -470,13 +466,15 @@ export function EvidenceTagCard({
               <div className="k">LOCATION</div>
               <div className="v">
                 <span>{cardData.origin.location}</span>
-                <button 
-                  onClick={handleOpenMaps}
-                  className="inline-link"
-                  title="Open Location in Geo Map View"
-                >
-                  Maps ↗
-                </button>
+                {cardData.origin.mapsUrl && (
+                  <button 
+                    onClick={handleOpenMaps}
+                    className="inline-link"
+                    title="Open Location in Geo Map View"
+                  >
+                    Maps ↗
+                  </button>
+                )}
               </div>
             </div>
 
@@ -586,6 +584,68 @@ export function EvidenceTagCard({
             </div>
           </>
         )}
+
+        {/* Threat Score Breakdown */}
+        {(cardData.threatScoreBreakdown || analysis?.threatScoreBreakdown) && (() => {
+          const bd = cardData.threatScoreBreakdown || analysis?.threatScoreBreakdown;
+          if (!bd || !bd.components) return null;
+          return (
+            <>
+              <div className="section-label flex items-center justify-between">
+                <span>THREAT SCORE BREAKDOWN</span>
+                <button
+                  type="button"
+                  onClick={() => setShowBreakdown(!showBreakdown)}
+                  className="inline-link text-[10px]"
+                >
+                  {showBreakdown ? 'Hide ▲' : 'Details ▼'}
+                </button>
+              </div>
+              <div className="p-2 bg-slate-900/50 rounded border border-slate-700/50 text-[11px] font-mono space-y-1.5">
+                <div className="flex justify-between items-center text-slate-300 font-bold">
+                  <span>Cumulative Threat Risk:</span>
+                  <span className={bd.total >= 70 ? 'text-red-400' : bd.total >= 40 ? 'text-amber-400' : 'text-emerald-400'}>
+                    {bd.total} / {bd.maxScore || 100}
+                  </span>
+                </div>
+                {showBreakdown && (
+                  <div className="space-y-1 pt-1 border-t border-slate-800 text-[10px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Authentication:</span>
+                      <span className={bd.components.authentication?.score > 0 ? 'text-red-400' : 'text-slate-300'}>
+                        +{bd.components.authentication?.score ?? 0} pts
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Domain Intelligence:</span>
+                      <span className={bd.components.domainRisk?.score > 0 ? 'text-red-400' : 'text-slate-300'}>
+                        +{bd.components.domainRisk?.score ?? 0} pts
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Infrastructure:</span>
+                      <span className={bd.components.infrastructureRisk?.score > 0 ? 'text-red-400' : 'text-slate-300'}>
+                        +{bd.components.infrastructureRisk?.score ?? 0} pts
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">ML Content Classification:</span>
+                      <span className={bd.components.mlClassification?.score > 0 ? 'text-red-400' : 'text-slate-300'}>
+                        +{bd.components.mlClassification?.score ?? 0} pts
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Heuristics & Signals:</span>
+                      <span className={bd.components.heuristics?.score > 0 ? 'text-red-400' : 'text-slate-300'}>
+                        +{bd.components.heuristics?.score ?? 0} pts
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
 
       </div>
 

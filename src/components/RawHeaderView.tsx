@@ -22,6 +22,7 @@ import {
   X
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
+import { resolveOrigin } from '../utils/originResolution';
 
 interface RawHeaderViewProps {
   analysis: EmailAnalysis;
@@ -83,7 +84,8 @@ function getEffectiveRawHeaders(analysis: EmailAnalysis): string {
   const dkimStat = (analysis.auth?.dkim?.status || analysis.authResults?.dkim?.status || 'NONE').toLowerCase();
   const dmarcStat = (analysis.auth?.dmarc?.status || analysis.authResults?.dmarc?.status || 'NONE').toLowerCase();
 
-  const clientIp = analysis.auth?.spf?.ip || analysis.hops?.find((h) => h.isOrigin)?.fromIp || '185.220.101.5';
+  const origin = resolveOrigin(analysis.hops);
+  const clientIp = analysis.auth?.spf?.ip || (origin.resolved ? origin.ip! : 'unresolved-ip');
   const senderDomain = analysis.headers?.fromEmail?.split('@')[1] || 'sender.com';
 
   lines.push(`Received-SPF: ${spfStat} (mx.corporate.com: domain designates ${clientIp} as permitted sender) client-ip=${clientIp}; envelope-from=${senderDomain};`);

@@ -398,5 +398,16 @@ export interface EvidenceCardData {
     action: string;
     actionGood?: boolean;
   };
+  threatScoreBreakdown?: {
+    total: number;
+    maxScore: number;
+    components: {
+      authentication: { score: number; max: number; reasons: string[] };
+      domainRisk: { score: number; max: number; reasons: string[] };
+      infrastructureRisk: { score: number; max: number; reasons: string[] };
+      mlClassification: { score: number; max: number; reasons: string[] };
+      heuristics: { score: number; max: number; reasons: string[] };
+    };
+  };
 }
 

@@ -424,12 +424,18 @@ function buildEvidenceWhyNarrative(analysisOrCase: any) {
 
   let whyText = '';
   const evidenceChain: string[] = [];
+  const classificationName = analysisOrCase.classification || '';
+  const verdictName = (analysisOrCase.verdict || '').toUpperCase();
+  const isElevatedThreat = threatScore >= 25 || 
+    ['CRITICAL', 'HIGH', 'MEDIUM'].includes(severity) || 
+    ['PHISH', 'MALICIOUS', 'FRAUD', 'SUSPICIOUS', 'IMPERSONATION', 'BEC'].includes(verdictName) ||
+    (classificationName && !['Legitimate', 'Clean'].includes(classificationName));
 
-  if (threatScore >= 35 || ['CRITICAL', 'HIGH', 'MEDIUM'].includes(severity)) {
+  if (isElevatedThreat) {
     if (authAllPass) {
-      whyText = `Flagged with threat score ${threatScore}/100 (${severity}). Note: Cryptographic authentication (SPF, DKIM, DMARC) passed successfully, which confirms domain ownership but does NOT guarantee message content or link safety. Primary risk is driven by: ${primaryDriversStr}.`;
+      whyText = `Flagged with threat score ${threatScore}/100 (${severity}, verdict ${verdictName || 'SUSPICIOUS'}). Note: Cryptographic authentication (SPF, DKIM, DMARC) passed successfully, which confirms domain ownership but does NOT guarantee message content or link safety. Primary risk is driven by: ${primaryDriversStr}.`;
     } else {
-      whyText = `Flagged with threat score ${threatScore}/100 (${severity}) due to detected threat vectors: ${primaryDriversStr}.`;
+      whyText = `Flagged with threat score ${threatScore}/100 (${severity}, verdict ${verdictName || 'SUSPICIOUS'}) due to detected threat vectors: ${primaryDriversStr}.`;
     }
     evidenceChain.push(`1. Primary threat drivers: ${primaryDriversStr}.`);
     if (authAllPass) {
@@ -947,18 +953,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       license: primaryGeoHop.maxmindLicense,
       isVerified: true
     } : undefined,
-    why: {
-      why: isTyposquat 
-        ? `Forensic evaluation detected lookalike domain (${fromDomain}) spoofing ${targetBrand || 'enterprise brand'} with deceptive syntax.`
-        : (domainIntelligence.status === 'nxdomain' ? `Sender domain (${fromDomain}) does not exist in public DNS.` : 'Envelope authentication, sender domain, and transmission path validated authentic.'),
-      evidence_chain: [
-        `1. Sender domain "${fromDomain}" resolved via live DNS and RDAP.`,
-        `2. Origin submission traced to ${primaryGeoHop?.fromIp || 'internal LAN'} (${primaryGeoHop?.city || 'Internal Subnet'}, ${primaryGeoHop?.country || 'Private Space'}).`,
-        `3. Evaluated cryptographic SPF/DMARC policy enforcement.`
-      ],
-      confidence: 0.96,
-      limitation: 'Live authoritative network verification.'
-    }
+    why: whyNarrative
   };
 
   // 2. Automatically generate SIEM Alert for newly analyzed case

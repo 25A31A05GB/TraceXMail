@@ -38,6 +38,7 @@ import {
   Printer
 } from 'lucide-react';
 import { EmailAnalysis, AINarrative } from '../types';
+import { resolveOrigin } from '../utils/originResolution';
 import { sha256Sync } from '../utils/crypto';
 import { ForensicCaseTwoPanel } from './ForensicCaseTwoPanel';
 import { EvidenceCard, EvidenceTagCard, mapAnalysisToEvidenceCardData } from './EvidenceTagCard';
@@ -46,6 +47,8 @@ import { classifyIp } from '../utils/parser';
 import { lookupMaxMindGeo } from '../utils/maxmindService';
 import { WhyAffordance } from './WhyAffordance';
 import { RelationshipGraphView } from './RelationshipGraphView';
+import { PlainLanguageSummaryCard } from './PlainLanguageSummaryCard';
+import { JargonTooltip } from './JargonTooltip';
 
 interface AICaseSummaryProps {
   analysis: EmailAnalysis;
@@ -258,6 +261,7 @@ export function OverviewView({
   const [originAssessmentOpen, setOriginAssessmentOpen] = useState<boolean>(false);
   const [isEvidenceTagOpen, setIsEvidenceTagOpen] = useState<boolean>(false);
   const [overviewMode, setOverviewMode] = useState<'card' | 'workspace'>('card');
+  const [isTechnicalExpanded, setIsTechnicalExpanded] = useState<boolean>(true);
   const [auditResult, setAuditResult] = useState<{
     verified: boolean;
     recomputedHash: string;
@@ -588,12 +592,23 @@ export function OverviewView({
         </div>
       </div>
 
+      {/* Top-of-view Plain-Language Summary for Non-Technical Reviewers */}
+      <div className="mb-6">
+        <PlainLanguageSummaryCard
+          analysis={analysis}
+          isTechnicalExpanded={isTechnicalExpanded}
+          onToggleTechnicalDetails={(expanded) => setIsTechnicalExpanded(expanded)}
+        />
+      </div>
+
       {/* Main View Rendering */}
       {overviewMode === 'card' ? (
         <ForensicCaseTwoPanel
           analysis={analysis}
           evidenceCardData={evidenceCardData}
           effectiveHash={effectiveHash}
+          isTechnicalExpanded={isTechnicalExpanded}
+          onToggleTechnicalExpanded={setIsTechnicalExpanded}
           onNavigateToMap={onNavigateToMap}
           onNavigateToGraph={onNavigateToGraph}
           onNavigateToLogs={onNavigateToLogs}
@@ -711,88 +726,109 @@ export function OverviewView({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* SPF Status */}
-          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm">
-            <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
-              <span>SPF Status</span>
-              {analysis.auth.spf.status === 'PASS' ? (
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              ) : (
-                <ShieldAlert className="w-4 h-4 text-rose-500" />
-              )}
+          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <JargonTooltip termKey="SPF" text="SPF Status" />
+                </span>
+                {analysis.auth.spf.status === 'PASS' ? (
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <ShieldAlert className="w-4 h-4 text-rose-500" />
+                )}
+              </div>
+              <div className="flex items-end justify-between">
+                <span
+                  className={`text-2xl font-bold tracking-tight ${
+                    analysis.auth.spf.status === 'PASS'
+                      ? 'text-emerald-400'
+                      : analysis.auth.spf.status === 'SOFTFAIL'
+                      ? 'text-amber-400'
+                      : 'text-rose-500'
+                  }`}
+                >
+                  {analysis.auth.spf.status}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]" title={analysis.auth.spf.record}>
+                  {analysis.auth.spf.record || `ip:${effectiveOriginHop.fromIp || '185...'}`}
+                </span>
+              </div>
             </div>
-            <div className="flex items-end justify-between">
-              <span
-                className={`text-2xl font-bold tracking-tight ${
-                  analysis.auth.spf.status === 'PASS'
-                    ? 'text-emerald-400'
-                    : analysis.auth.spf.status === 'SOFTFAIL'
-                    ? 'text-amber-400'
-                    : 'text-rose-500'
-                }`}
-              >
-                {analysis.auth.spf.status}
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]" title={analysis.auth.spf.record}>
-                {analysis.auth.spf.record || `ip:${effectiveOriginHop.fromIp || '185...'}`}
-              </span>
+            <div className="text-[10px] text-slate-400 font-sans mt-2 pt-2 border-t border-slate-800">
+              Checks if sender is authorized by domain owner
             </div>
           </div>
 
           {/* DKIM Status */}
-          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm">
-            <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
-              <span>DKIM Status</span>
-              {analysis.auth.dkim.status === 'PASS' ? (
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              ) : (
-                <ShieldX className="w-4 h-4 text-rose-500" />
-              )}
+          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <JargonTooltip termKey="DKIM" text="DKIM Status" />
+                </span>
+                {analysis.auth.dkim.status === 'PASS' ? (
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <ShieldX className="w-4 h-4 text-rose-500" />
+                )}
+              </div>
+              <div className="flex items-end justify-between">
+                <span
+                  className={`text-2xl font-bold tracking-tight ${
+                    analysis.auth.dkim.status === 'PASS'
+                      ? 'text-emerald-400'
+                      : analysis.auth.dkim.status === 'NONE'
+                      ? 'text-slate-400'
+                      : 'text-rose-500'
+                  }`}
+                >
+                  {analysis.auth.dkim.status}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]" title={analysis.auth.dkim.selector}>
+                  {analysis.auth.dkim.selector ? `s=${analysis.auth.dkim.selector}` : 's=none'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-end justify-between">
-              <span
-                className={`text-2xl font-bold tracking-tight ${
-                  analysis.auth.dkim.status === 'PASS'
-                    ? 'text-emerald-400'
-                    : analysis.auth.dkim.status === 'NONE'
-                    ? 'text-slate-400'
-                    : 'text-rose-500'
-                }`}
-              >
-                {analysis.auth.dkim.status}
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]" title={analysis.auth.dkim.selector}>
-                {analysis.auth.dkim.selector ? `s=${analysis.auth.dkim.selector}` : 's=none'}
-              </span>
+            <div className="text-[10px] text-slate-400 font-sans mt-2 pt-2 border-t border-slate-800">
+              Verifies message was not altered in transit
             </div>
           </div>
 
           {/* DMARC Status */}
-          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm">
-            <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
-              <span>DMARC Status</span>
-              {analysis.auth.dmarc.status === 'PASS' ? (
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              ) : analysis.auth.dmarc.status === 'QUARANTINE' ? (
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
-              ) : (
-                <AlertOctagon className="w-4 h-4 text-rose-500" />
-              )}
+          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  <JargonTooltip termKey="DMARC" text="DMARC Status" />
+                </span>
+                {analysis.auth.dmarc.status === 'PASS' ? (
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                ) : analysis.auth.dmarc.status === 'QUARANTINE' ? (
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <AlertOctagon className="w-4 h-4 text-rose-500" />
+                )}
+              </div>
+              <div className="flex items-end justify-between">
+                <span
+                  className={`text-2xl font-bold tracking-tight ${
+                    analysis.auth.dmarc.status === 'PASS'
+                      ? 'text-emerald-400'
+                      : analysis.auth.dmarc.status === 'QUARANTINE'
+                      ? 'text-amber-400'
+                      : 'text-rose-500'
+                  }`}
+                >
+                  {analysis.auth.dmarc.status}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]" title={analysis.auth.dmarc.policy}>
+                  {analysis.auth.dmarc.policy || 'p=reject;'}
+                </span>
+              </div>
             </div>
-            <div className="flex items-end justify-between">
-              <span
-                className={`text-2xl font-bold tracking-tight ${
-                  analysis.auth.dmarc.status === 'PASS'
-                    ? 'text-emerald-400'
-                    : analysis.auth.dmarc.status === 'QUARANTINE'
-                    ? 'text-amber-400'
-                    : 'text-rose-500'
-                }`}
-              >
-                {analysis.auth.dmarc.status}
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono truncate max-w-[140px]" title={analysis.auth.dmarc.policy}>
-                {analysis.auth.dmarc.policy || 'p=reject;'}
-              </span>
+            <div className="text-[10px] text-slate-400 font-sans mt-2 pt-2 border-t border-slate-800">
+              Tells receivers what to do if authentication fails
             </div>
           </div>
         </div>

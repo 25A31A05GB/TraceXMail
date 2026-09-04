@@ -7,6 +7,8 @@ interface ForensicCaseTwoPanelProps {
   analysis: EmailAnalysis;
   evidenceCardData: EvidenceCardData;
   effectiveHash: string;
+  isTechnicalExpanded?: boolean;
+  onToggleTechnicalExpanded?: (expanded: boolean) => void;
   onNavigateToMap?: () => void;
   onNavigateToGraph?: () => void;
   onNavigateToLogs?: () => void;
@@ -16,21 +18,21 @@ export function ForensicCaseTwoPanel({
   analysis,
   evidenceCardData,
   effectiveHash,
+  isTechnicalExpanded: controlledIsTechnicalExpanded,
+  onToggleTechnicalExpanded,
   onNavigateToMap,
   onNavigateToGraph,
   onNavigateToLogs,
 }: ForensicCaseTwoPanelProps) {
-  const [isTechnicalExpanded, setIsTechnicalExpanded] = useState<boolean>(true);
+  const [internalExpanded, setInternalExpanded] = useState<boolean>(true);
+  const isTechnicalExpanded = controlledIsTechnicalExpanded !== undefined ? controlledIsTechnicalExpanded : internalExpanded;
+  const setIsTechnicalExpanded = (expanded: boolean) => {
+    setInternalExpanded(expanded);
+    if (onToggleTechnicalExpanded) onToggleTechnicalExpanded(expanded);
+  };
 
   return (
     <div className="space-y-5">
-      {/* ABOVE-THE-FOLD PLAIN-LANGUAGE SUMMARY CARD FOR NON-TECHNICAL REVIEWERS */}
-      <PlainLanguageSummaryCard
-        analysis={analysis}
-        isTechnicalExpanded={isTechnicalExpanded}
-        onToggleTechnicalDetails={(expanded) => setIsTechnicalExpanded(expanded)}
-      />
-
       {/* CORE FORENSIC DASHBOARD GRID */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] gap-5 items-start">
         {/* LEFT COLUMN: The Evidence Card */}
@@ -93,21 +95,28 @@ export function ForensicCaseTwoPanel({
             {evidenceCardData.checks.map((c, idx) => (
               <div
                 key={idx}
-                className="rounded border border-[#2A2D34] bg-[#1D2027] p-2.5 text-center"
+                className="rounded border border-[#2A2D34] bg-[#1D2027] p-2.5 text-center flex flex-col justify-between"
               >
-                <div className="text-[10px] text-[#8C94A0] font-semibold uppercase tracking-wider flex items-center justify-center gap-1">
-                  <JargonTooltip termKey={c.label} text={c.label} />
+                <div>
+                  <div className="text-[10px] text-[#8C94A0] font-semibold uppercase tracking-wider flex items-center justify-center gap-1">
+                    <JargonTooltip termKey={c.label} text={c.label} />
+                  </div>
+                  <div
+                    className={`text-sm font-black mt-0.5 ${
+                      c.status === 'fail'
+                        ? 'text-[#F87171]'
+                        : c.status === 'pass'
+                        ? 'text-[#34D399]'
+                        : 'text-[#FBBF24]'
+                    }`}
+                  >
+                    {c.value}
+                  </div>
                 </div>
-                <div
-                  className={`text-sm font-black mt-0.5 ${
-                    c.status === 'fail'
-                      ? 'text-[#F87171]'
-                      : c.status === 'pass'
-                      ? 'text-[#34D399]'
-                      : 'text-[#FBBF24]'
-                  }`}
-                >
-                  {c.value}
+                <div className="text-[9px] text-slate-400 font-sans mt-1.5 leading-tight">
+                  {c.label === 'SPF' ? 'Checks if sender is authorized by domain owner' :
+                   c.label === 'DKIM' ? 'Verifies message was not altered in transit' :
+                   'Tells receivers what to do if authentication fails'}
                 </div>
               </div>
             ))}
