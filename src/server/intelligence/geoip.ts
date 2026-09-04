@@ -7,6 +7,7 @@ import { geoIpCache } from './cache';
 import { providerRateLimiter } from './rateLimiter';
 import { createProvenanceMetadata, MAXMIND_COPYRIGHT_NOTICE, MAXMIND_LICENSE_NOTICE } from './provenance';
 import { GeoIpResult, IntelligenceLookupStatus } from './types';
+import { isTorExitNode } from './torExitNodes';
 
 // Long-lived Reader instances for performance
 let cityReaderInstance: Reader<CityResponse> | null = null;
@@ -197,6 +198,7 @@ export async function resolveGeoIp(ipAddress: string): Promise<GeoIpResult> {
 
 async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
   const now = new Date().toISOString();
+  const isTor = isTorExitNode(ip);
 
   // Tier 1: Local MaxMind .mmdb database
   try {
@@ -219,6 +221,7 @@ async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
           timeZone: record.location?.time_zone || null,
           isInEuropeanUnion: Boolean(record.country.is_in_european_union),
           isAnonymousProxy: Boolean(record.traits?.is_anonymous_proxy),
+          isTorExitNode: isTor,
           isSatelliteProvider: Boolean(record.traits?.is_satellite_provider),
           source: 'GeoLite2-City.mmdb',
           provider: 'MaxMind GeoLite2 Local Database',
@@ -266,6 +269,7 @@ async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
           timeZone: loc.timeZone || null,
           isInEuropeanUnion: loc.isInEuropeanUnion,
           isAnonymousProxy: matchedBlock.isAnonymousProxy,
+          isTorExitNode: isTor,
           isSatelliteProvider: matchedBlock.isSatelliteProvider,
           source: 'backend/data/maxmind/GeoLite2-City-Locations-en.csv',
           provider: 'MaxMind GeoLite2 Verified Extract',
@@ -310,6 +314,7 @@ async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
         accuracyRadius: null,
         timeZone: null,
         isInEuropeanUnion: null,
+        isTorExitNode: isTor,
         source: 'geolite.info',
         provider: 'MaxMind GeoLite Web Service',
         lookupMethod: 'MaxMind Web Service Rate-Limited',
@@ -355,6 +360,7 @@ async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
           timeZone: data.location?.time_zone || null,
           isInEuropeanUnion: Boolean(data.country?.is_in_european_union),
           isAnonymousProxy: Boolean(data.traits?.is_anonymous_proxy),
+          isTorExitNode: isTor,
           isSatelliteProvider: Boolean(data.traits?.is_satellite_provider),
           source: 'geolite.info',
           provider: 'MaxMind GeoLite2 Web Service',
@@ -392,6 +398,7 @@ async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
           accuracyRadius: null,
           timeZone: null,
           isInEuropeanUnion: null,
+          isTorExitNode: isTor,
           source: 'geolite.info',
           provider: 'MaxMind GeoLite Web Service',
           lookupMethod: 'MaxMind Web Service (Rate Limited)',
@@ -426,6 +433,7 @@ async function executeGeoIpLookup(ip: string): Promise<GeoIpResult> {
     timeZone: null,
     isInEuropeanUnion: null,
     isAnonymousProxy: null,
+    isTorExitNode: isTor,
     isSatelliteProvider: null,
     source: 'MaxMind Local/Remote Engine',
     provider: 'MaxMind GeoLite2',

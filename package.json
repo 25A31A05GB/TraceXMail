@@ -9,6 +9,8 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
+    "setup:maxmind": "tsx scripts/download_maxmind_db.ts",
+    "refresh:maxmind": "tsx scripts/refresh_maxmind_db.ts",
     "test:forensics": "tsx scripts/test_forensics.ts",
     "test:intelligence": "tsx scripts/test_intelligence.ts",
     "test:network": "tsx scripts/test_network_intelligence.ts",

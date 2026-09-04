@@ -80,6 +80,7 @@ export interface GeoIpResult {
   timeZone: string | null;
   isInEuropeanUnion: boolean | null;
   isAnonymousProxy?: boolean | null;
+  isTorExitNode?: boolean | null;
   isSatelliteProvider?: boolean | null;
   source: string;
   provider: string;
@@ -197,6 +198,7 @@ export interface IpEnrichmentResult {
     lookupStatus: IntelligenceLookupStatus;
     abuseConfidenceScore: number | null;
     isTor: boolean;
+    isTorExitNode?: boolean;
     isProxyOrVpn: boolean;
     isBlacklisted: boolean;
     source: string;

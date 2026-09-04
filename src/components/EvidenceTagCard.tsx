@@ -1,9 +1,12 @@
 import React, { useRef, useState } from 'react';
 import { EmailAnalysis, EvidenceCardData } from '../types';
-import { Printer, Copy, Check, ExternalLink, X, Tag, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
+import { Printer, Copy, Check, ExternalLink, X, Tag, ChevronDown, ChevronUp, AlertCircle, AlertTriangle, Scale, ShieldAlert, CheckCircle2, Crosshair, Sparkles, AlertOctagon } from 'lucide-react';
 import { sha256Sync, generateEvidenceId } from '../utils/crypto';
 import { resolveOrigin, formatOriginLocation, formatOriginIp } from '../utils/originResolution';
 import { getStandardizedVerdict } from '../utils/verdict';
+import { generateAttackNarrative } from '../utils/attackNarrative';
+import { computeCounterfactuals, CounterfactualFactor } from '../utils/counterfactual';
+import { mapComplianceFlags, ComplianceFlag } from '../utils/complianceMapping';
 
 /**
  * Pure mapping helper that converts an EmailAnalysis object to the EvidenceCardData schema.
@@ -176,6 +179,15 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   
   const socAction = stdVerdict.recommendedAction;
 
+  // Deep Analysis Modules
+  const attackNarrative = generateAttackNarrative(analysis);
+  const counterfactuals = computeCounterfactuals(analysis);
+  const complianceFlags = mapComplianceFlags(analysis);
+  const senderBaselineAnomaly = analysis.senderBaselineAnomaly ||
+    analysis.correlationEvidence?.find(c => c.rule === 'SENDER_BASELINE_ANOMALY')?.description ||
+    analysis.heuristics?.find(h => h.id === 'SENDER_BASELINE_ANOMALY' || h.title?.toLowerCase().includes('sender baseline'))?.description ||
+    null;
+
   return {
     caseId,
     evidenceId,
@@ -232,7 +244,14 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
       action: socAction,
       actionGood: stampStatus === 'good'
     },
-    threatScoreBreakdown: analysis.threatScoreBreakdown
+    threatScoreBreakdown: analysis.threatScoreBreakdown,
+    senderBaselineAnomaly,
+    deepAnalysis: {
+      attackNarrative,
+      counterfactuals,
+      complianceFlags,
+      senderBaselineAnomaly
+    }
   };
 }
 
@@ -258,6 +277,12 @@ export function EvidenceTagCard({
   const cardRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [showBreakdown, setShowBreakdown] = useState(false);
+  const [deepAnalysisOpen, setDeepAnalysisOpen] = useState(false);
+  const [showAllCounterfactuals, setShowAllCounterfactuals] = useState(false);
+  const [attackStoryOpen, setAttackStoryOpen] = useState(true);
+  const [counterfactualsOpen, setCounterfactualsOpen] = useState(true);
+  const [complianceOpen, setComplianceOpen] = useState(true);
+  const [senderAnomalyOpen, setSenderAnomalyOpen] = useState(true);
 
   // Compute final case card data from analysis or direct data prop
   const cardData: EvidenceCardData = directData || (analysis ? mapAnalysisToEvidenceCardData(analysis) : {
@@ -322,6 +347,24 @@ export function EvidenceTagCard({
       actionGood: true
     }
   });
+
+  // Deep analysis data derivation
+  const attackNarrative = cardData.deepAnalysis?.attackNarrative || (analysis ? generateAttackNarrative(analysis) : undefined);
+  const counterfactuals: CounterfactualFactor[] = cardData.deepAnalysis?.counterfactuals || (analysis ? computeCounterfactuals(analysis) : []);
+  const complianceFlags: ComplianceFlag[] = cardData.deepAnalysis?.complianceFlags || (analysis ? mapComplianceFlags(analysis) : []);
+  const senderAnomaly = cardData.deepAnalysis?.senderBaselineAnomaly ||
+    cardData.senderBaselineAnomaly ||
+    analysis?.senderBaselineAnomaly ||
+    analysis?.correlationEvidence?.find(c => c.rule === 'SENDER_BASELINE_ANOMALY')?.description ||
+    analysis?.heuristics?.find(h => h.id === 'SENDER_BASELINE_ANOMALY' || h.title?.toLowerCase().includes('sender baseline'))?.description ||
+    null;
+
+  // Calculate one-line teaser summary for collapsed state
+  const indicatorCount = (analysis?.heuristics || []).filter(h => h.triggered).length || (cardData.findings || []).filter(f => f.status === 'mal').length || (cardData.verdict.status !== 'good' ? 3 : 0);
+  const complianceNames = complianceFlags.length > 0
+    ? complianceFlags.map(f => f.regime.split('(')[0].replace(/§43A.*/, '§43A').trim()).slice(0, 2).join(', ')
+    : 'None';
+  const teaserSummary = `${indicatorCount} attack indicator${indicatorCount === 1 ? '' : 's'} · ${counterfactuals.length > 0 ? (showAllCounterfactuals ? `${counterfactuals.length} counterfactuals` : '1 counterfactual') : 'counterfactuals'} · compliance: ${complianceNames}${senderAnomaly ? ' · ⚠️ baseline anomaly' : ''}`;
 
   // Procedural barcode line widths
   const barcodeWidths = [3, 1, 2, 1, 4, 1, 1, 3, 2, 1, 1, 4, 2, 1, 3, 1, 2, 4, 1, 1, 2, 3, 1, 1, 4, 2, 1, 3, 1, 2, 1, 4, 1, 2, 3, 1, 1, 2, 4, 1];
@@ -607,6 +650,234 @@ export function EvidenceTagCard({
             </>
           );
         })()}
+
+        {/* Expandable Deep Analysis Section */}
+        <div className="mt-3 rounded-lg border border-slate-700 bg-slate-900/80 overflow-hidden text-xs">
+          {/* Main Deep Analysis Toggle Header */}
+          <button
+            type="button"
+            onClick={() => setDeepAnalysisOpen(!deepAnalysisOpen)}
+            className="w-full px-3 py-2 flex items-center justify-between bg-slate-800/60 hover:bg-slate-800 transition-colors text-left select-none cursor-pointer"
+          >
+            <div className="flex items-center gap-2 min-w-0 pr-2">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="font-semibold text-slate-200">Deep Analysis</span>
+              <span className="px-1.5 py-0.2 rounded bg-cyan-950/60 border border-cyan-800/80 text-[10px] text-cyan-400 font-mono">
+                Forensic Lab
+              </span>
+              {!deepAnalysisOpen && (
+                <span className="text-[10px] text-slate-400 font-mono truncate hidden sm:inline ml-1" title={teaserSummary}>
+                  — {teaserSummary}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {deepAnalysisOpen ? (
+                <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              )}
+            </div>
+          </button>
+
+          {/* Sub-teaser when collapsed on small screens */}
+          {!deepAnalysisOpen && (
+            <div className="px-3 py-1.5 text-[10px] font-mono text-slate-400 bg-slate-950/40 border-t border-slate-800/60 flex items-center justify-between sm:hidden">
+              <span className="truncate">{teaserSummary}</span>
+            </div>
+          )}
+
+          {/* Expanded Deep Analysis Body */}
+          {deepAnalysisOpen && (
+            <div className="p-3 space-y-3 border-t border-slate-800 text-slate-300">
+              {/* 1. Attack Story Panel */}
+              {attackNarrative && (
+                <div className="rounded border border-slate-700/60 bg-slate-950/40 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setAttackStoryOpen(!attackStoryOpen)}
+                    className="w-full px-2.5 py-1.5 flex items-center justify-between bg-slate-800/40 hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Crosshair className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="font-semibold text-[11px] text-slate-200">What likely happened</span>
+                      <span className="text-[10px] text-slate-400 font-mono">(Attack Story)</span>
+                    </div>
+                    {attackStoryOpen ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                  </button>
+                  {attackStoryOpen && (
+                    <div className="p-2.5 border-t border-slate-800/60 text-slate-300 text-xs leading-relaxed font-sans">
+                      <p>{attackNarrative}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 2. Counterfactual Panel */}
+              {counterfactuals.length > 0 && (
+                <div className="rounded border border-slate-700/60 bg-slate-950/40 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setCounterfactualsOpen(!counterfactualsOpen)}
+                    className="w-full px-2.5 py-1.5 flex items-center justify-between bg-slate-800/40 hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Scale className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      <span className="font-semibold text-[11px] text-slate-200">Score Sensitivity &amp; Counterfactuals</span>
+                      <span className="px-1 py-0.2 rounded bg-cyan-950/60 border border-cyan-800/60 text-[9px] text-cyan-300 font-mono">
+                        {counterfactuals.length} Pillars
+                      </span>
+                    </div>
+                    {counterfactualsOpen ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                  </button>
+
+                  {counterfactualsOpen && (
+                    <div className="p-2.5 border-t border-slate-800/60 space-y-2">
+                      <div className="text-[10px] text-slate-400">
+                        Simulated score &amp; verdict if individual forensic factors were reversed:
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-[11px] font-mono border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-800 text-[10px] text-slate-400 uppercase">
+                              <th className="py-1 pr-2">Factor / Simulation</th>
+                              <th className="py-1 px-2 text-right">Current</th>
+                              <th className="py-1 pl-2 text-right">If Reversed</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {(showAllCounterfactuals ? counterfactuals : counterfactuals.slice(0, 1)).map((cf, idx) => {
+                              const isLegit = cf.verdictIfFlipped === 'LEGITIMATE';
+                              const isSusp = cf.verdictIfFlipped === 'SUSPICIOUS';
+                              const badgeColor = isLegit
+                                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
+                                : isSusp
+                                ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
+                                : 'bg-rose-950/80 text-rose-300 border-rose-700/60';
+
+                              return (
+                                <tr key={idx} className="hover:bg-slate-800/30">
+                                  <td className="py-1.5 pr-2">
+                                    <div className="font-semibold text-slate-200 flex items-center gap-1">
+                                      <span>{cf.factor}</span>
+                                      {cf.isDecisive && (
+                                        <span className="px-1 py-0.2 rounded bg-amber-950/80 border border-amber-700/80 text-[9px] text-amber-300 font-sans font-normal">
+                                          ★ Decisive
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-sans leading-tight mt-0.5">
+                                      {cf.actionText}
+                                    </div>
+                                  </td>
+                                  <td className="py-1.5 px-2 text-right align-top whitespace-nowrap">
+                                    <span className={cf.currentContribution > 0 ? 'text-rose-400' : 'text-slate-400'}>
+                                      {cf.currentContribution > 0 ? `+${cf.currentContribution}` : '0'} pts
+                                    </span>
+                                  </td>
+                                  <td className="py-1.5 pl-2 text-right align-top whitespace-nowrap">
+                                    <div className="font-bold text-slate-200">
+                                      {cf.scoreIfFlipped}/100
+                                    </div>
+                                    <span className={`inline-block px-1 py-0.2 rounded border text-[9px] ${badgeColor} mt-0.5`}>
+                                      {cf.verdictIfFlipped}
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {counterfactuals.length > 1 && (
+                        <div className="pt-1 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setShowAllCounterfactuals(!showAllCounterfactuals)}
+                            className="inline-link text-[10px] font-mono cursor-pointer"
+                          >
+                            {showAllCounterfactuals
+                              ? '▲ Show most decisive factor only'
+                              : `▼ Show all ${counterfactuals.length} forensic pillars`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3. Compliance / Regulatory Mapping Panel */}
+              {complianceFlags.length > 0 && (
+                <div className="rounded border border-slate-700/60 bg-slate-950/40 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setComplianceOpen(!complianceOpen)}
+                    className="w-full px-2.5 py-1.5 flex items-center justify-between bg-slate-800/40 hover:bg-slate-800/60 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <ShieldAlert className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <span className="font-semibold text-[11px] text-slate-200">Regulatory &amp; Compliance Flags</span>
+                      <span className="px-1 py-0.2 rounded bg-purple-950/60 border border-purple-800/60 text-[9px] text-purple-300 font-mono">
+                        {complianceFlags.length}
+                      </span>
+                    </div>
+                    {complianceOpen ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                  </button>
+
+                  {complianceOpen && (
+                    <div className="p-2.5 border-t border-slate-800/60 space-y-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {complianceFlags.map((flag, idx) => (
+                          <div
+                            key={idx}
+                            className={`px-2 py-1.5 rounded border text-[11px] font-mono flex flex-col gap-0.5 ${flag.color || 'bg-slate-900 border-slate-700 text-slate-300'} w-full`}
+                          >
+                            <div className="font-bold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                              <span>{flag.regime}</span>
+                            </div>
+                            <div className="text-[10px] font-sans opacity-90 leading-tight">
+                              {flag.reason}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. Sender Baseline Anomaly Panel (rendered ONLY if present) */}
+              {senderAnomaly && (
+                <div className="rounded border border-rose-800/70 bg-rose-950/30 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setSenderAnomalyOpen(!senderAnomalyOpen)}
+                    className="w-full px-2.5 py-1.5 flex items-center justify-between bg-rose-950/50 hover:bg-rose-950/70 transition-colors text-left cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <AlertOctagon className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      <span className="font-semibold text-[11px] text-rose-300">Sender Baseline Anomaly</span>
+                      <span className="px-1 py-0.2 rounded bg-rose-950 border border-rose-700 text-[9px] text-rose-300 font-mono">
+                        Deviation
+                      </span>
+                    </div>
+                    {senderAnomalyOpen ? <ChevronUp className="w-3 h-3 text-rose-400" /> : <ChevronDown className="w-3 h-3 text-rose-400" />}
+                  </button>
+
+                  {senderAnomalyOpen && (
+                    <div className="p-2.5 border-t border-rose-900/60 text-xs text-rose-200 leading-relaxed font-sans">
+                      <p>{typeof senderAnomaly === 'string' ? senderAnomaly : senderAnomaly.description}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
       </div>
 

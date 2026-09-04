@@ -162,8 +162,15 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
                     <span className="text-slate-400">+{hop.delaySec}s delay</span>
                   </div>
 
+                  {/* Tor Exit Node Badge */}
+                  {(hop.isTorExitNode || hop.is_tor) && (
+                    <div className="mt-2 text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/40 px-2 py-0.5 rounded font-mono font-bold text-center flex items-center justify-center gap-1">
+                      <span>🧅</span> <span>CONFIRMED TOR EXIT NODE</span>
+                    </div>
+                  )}
+
                   {/* Malicious Tag if Origin is Blacklisted */}
-                  {hop.abuseScore && hop.abuseScore > 50 && (
+                  {hop.abuseScore && hop.abuseScore > 50 && !(hop.isTorExitNode || hop.is_tor) && (
                     <div className="mt-2 text-[10px] bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-0.5 rounded font-mono font-bold text-center">
                       ABUSE SCORE: {hop.abuseScore}%
                     </div>
@@ -209,8 +216,13 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
             <div className="bg-slate-900/70 p-3.5 rounded-lg border border-slate-800">
               <div className="text-[10px] text-slate-400 uppercase font-semibold font-mono">IP Address</div>
               <div className="text-sm font-mono font-bold text-blue-400 mt-1">{activeHop.fromIp}</div>
-              <div className="text-[10px] text-slate-400 font-mono mt-1">
-                {activeHop.isOrigin ? 'Originating Envelope Sender' : 'Intermediate Relay Agent'}
+              <div className="text-[10px] text-slate-400 font-mono mt-1 flex items-center gap-1.5 flex-wrap">
+                <span>{activeHop.isOrigin ? 'Origin Envelope Sender' : 'Relay Agent'}</span>
+                {(activeHop.isTorExitNode || activeHop.is_tor) && (
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    TOR EXIT
+                  </span>
+                )}
               </div>
             </div>
 
@@ -246,15 +258,25 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
               <div className="text-[10px] text-slate-400 uppercase font-semibold font-mono">Threat Reputation</div>
               <div
                 className={`text-sm font-mono font-bold mt-1 ${
-                  activeHop.abuseScore && activeHop.abuseScore > 50
+                  (activeHop.isTorExitNode || activeHop.is_tor)
+                    ? 'text-rose-400'
+                    : activeHop.abuseScore && activeHop.abuseScore > 50
                     ? 'text-rose-500'
                     : 'text-emerald-400'
                 }`}
               >
-                {activeHop.abuseScore ? `${activeHop.abuseScore}% Risk Score` : '0% Clean'}
+                {(activeHop.isTorExitNode || activeHop.is_tor)
+                  ? 'Tor Exit Node (High Risk)'
+                  : activeHop.abuseScore
+                  ? `${activeHop.abuseScore}% Risk Score`
+                  : '0% Clean'}
               </div>
               <div className="text-[10px] text-slate-400 font-mono mt-1">
-                {activeHop.isBlacklisted ? 'Flagged on 3 DNSBLs' : 'No Blacklists'}
+                {(activeHop.isTorExitNode || activeHop.is_tor)
+                  ? 'Official Tor Directory'
+                  : activeHop.isBlacklisted
+                  ? 'Flagged on 3 DNSBLs'
+                  : 'No Blacklists'}
               </div>
             </div>
           </div>

@@ -171,11 +171,18 @@ export function MapView({ analysis }: MapViewProps) {
           <div style="margin-bottom: 3px;"><strong>ISP / Org:</strong> ${hop.org || 'Unknown'}</div>
           <div style="margin-bottom: 3px;"><strong>MaxMind API DB:</strong> <span style="color: #0369A1; font-weight: bold;">${hop.lookupMethod || 'MaxMind GeoIP2 City Precision'}</span></div>
           ${
+            hop.isTorExitNode || hop.is_tor
+              ? `<div style="margin-top: 4px; padding: 4px 6px; background: #FFE4E6; color: #BE123C; border: 1px solid #FDA4AF; border-radius: 4px; font-weight: bold; font-size: 11px; display: flex; align-items: center; gap: 4px;">
+                  <span>🧅</span> <span>CONFIRMED TOR EXIT NODE</span>
+                </div>`
+              : ''
+          }
+          ${
             hop.abuseScore !== undefined
               ? `<div style="margin-top: 6px; padding-top: 4px; border-top: 1px solid #E2E8F0; font-weight: bold; color: ${
                   hop.abuseScore > 40 ? '#E11D48' : '#059669'
                 }; font-size: 11px;">
-                  Abuse & Threat Rating: ${hop.abuseScore}/100 ${hop.isProxyOrVpn ? '(PROXY / TOR DETECTED)' : ''}
+                  Abuse & Threat Rating: ${hop.abuseScore}/100 ${hop.isProxyOrVpn ? '(PROXY DETECTED)' : ''}
                 </div>`
               : ''
           }
@@ -500,15 +507,22 @@ export function MapView({ analysis }: MapViewProps) {
                     </span>
                   </div>
 
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                      hop.isProxyOrVpn
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {hop.isProxyOrVpn ? 'PROXY / TOR' : 'DIRECT NET'}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {(hop.isTorExitNode || hop.is_tor) && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40 animate-pulse">
+                        🧅 TOR EXIT NODE
+                      </span>
+                    )}
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        hop.isProxyOrVpn
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}
+                    >
+                      {hop.isProxyOrVpn ? 'PROXY / VPN' : 'DIRECT NET'}
+                    </span>
+                  </div>
                 </div>
               </div>
             );

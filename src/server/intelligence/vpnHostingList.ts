@@ -12,8 +12,14 @@ import path from 'path';
 import axios from 'axios';
 import { isIpInCidr } from '../maxmindService';
 
-const X4B_VPN_URL = 'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/ipv4.txt';
-const X4B_DC_URL = 'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/datacenter/ipv4.txt';
+const X4B_VPN_URLS = [
+  'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt',
+  'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/ipv4.txt'
+];
+const X4B_DC_URLS = [
+  'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt',
+  'https://raw.githubusercontent.com/X4BNet/lists_vpn/main/ipv4.txt'
+];
 
 const LOCAL_VPN_FILE = path.join(process.cwd(), 'data/threat-lists/vpn-ipv4.txt');
 const LOCAL_DC_FILE = path.join(process.cwd(), 'data/threat-lists/datacenter-ipv4.txt');
@@ -117,51 +123,67 @@ function loadLocalFallback() {
 export async function refreshVpnHostingList(): Promise<void> {
   try {
     // 1. Fetch VPN list
-    try {
-      const vpnRes = await axios.get(X4B_VPN_URL, {
-        timeout: 12000,
-        headers: { 'User-Agent': 'TraceXMail-SOC-Forensics/2.5' }
-      });
-      if (vpnRes.data && typeof vpnRes.data === 'string') {
-        const parsed = loadLinesFromText(vpnRes.data);
-        if (parsed.length > 0) {
-          vpnCidrs.length = 0;
-          vpnCidrs.push(...parsed);
+    let vpnLoaded = false;
+    for (const vpnUrl of X4B_VPN_URLS) {
+      try {
+        const vpnRes = await axios.get(vpnUrl, {
+          timeout: 12000,
+          headers: { 'User-Agent': 'TraceXMail-SOC-Forensics/2.5' }
+        });
+        if (vpnRes.data && typeof vpnRes.data === 'string') {
+          const parsed = loadLinesFromText(vpnRes.data);
+          if (parsed.length > 0) {
+            vpnCidrs.length = 0;
+            vpnCidrs.push(...parsed);
 
-          try {
-            const dir = path.dirname(LOCAL_VPN_FILE);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(LOCAL_VPN_FILE, parsed.join('\n'), 'utf8');
-          } catch {}
-          console.log(`[VpnHostingList] Loaded ${parsed.length} VPN CIDR prefixes from X4BNet.`);
+            try {
+              const dir = path.dirname(LOCAL_VPN_FILE);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(LOCAL_VPN_FILE, parsed.join('\n'), 'utf8');
+            } catch {}
+            console.log(`[VpnHostingList] Loaded ${parsed.length} VPN CIDR prefixes from X4BNet.`);
+            vpnLoaded = true;
+            break;
+          }
         }
+      } catch (err: any) {
+        // Try next candidate URL
       }
-    } catch (err: any) {
-      console.warn('[VpnHostingList] VPN list sync failed:', err?.message, '- using local cache.');
+    }
+    if (!vpnLoaded && vpnCidrs.length === 0) {
+      console.warn('[VpnHostingList] VPN list remote sync failed - using local cache.');
     }
 
     // 2. Fetch Datacenter list
-    try {
-      const dcRes = await axios.get(X4B_DC_URL, {
-        timeout: 12000,
-        headers: { 'User-Agent': 'TraceXMail-SOC-Forensics/2.5' }
-      });
-      if (dcRes.data && typeof dcRes.data === 'string') {
-        const parsed = loadLinesFromText(dcRes.data);
-        if (parsed.length > 0) {
-          dcCidrs.length = 0;
-          dcCidrs.push(...parsed);
+    let dcLoaded = false;
+    for (const dcUrl of X4B_DC_URLS) {
+      try {
+        const dcRes = await axios.get(dcUrl, {
+          timeout: 12000,
+          headers: { 'User-Agent': 'TraceXMail-SOC-Forensics/2.5' }
+        });
+        if (dcRes.data && typeof dcRes.data === 'string') {
+          const parsed = loadLinesFromText(dcRes.data);
+          if (parsed.length > 0) {
+            dcCidrs.length = 0;
+            dcCidrs.push(...parsed);
 
-          try {
-            const dir = path.dirname(LOCAL_DC_FILE);
-            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-            fs.writeFileSync(LOCAL_DC_FILE, parsed.join('\n'), 'utf8');
-          } catch {}
-          console.log(`[VpnHostingList] Loaded ${parsed.length} Datacenter/Hosting CIDR prefixes from X4BNet.`);
+            try {
+              const dir = path.dirname(LOCAL_DC_FILE);
+              if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+              fs.writeFileSync(LOCAL_DC_FILE, parsed.join('\n'), 'utf8');
+            } catch {}
+            console.log(`[VpnHostingList] Loaded ${parsed.length} Datacenter/Hosting CIDR prefixes from X4BNet.`);
+            dcLoaded = true;
+            break;
+          }
         }
+      } catch (err: any) {
+        // Try next candidate URL
       }
-    } catch (err: any) {
-      console.warn('[VpnHostingList] Datacenter list sync failed:', err?.message, '- using local cache.');
+    }
+    if (!dcLoaded && dcCidrs.length === 0) {
+      console.warn('[VpnHostingList] Datacenter list remote sync failed - using local cache.');
     }
   } catch (err: any) {
     console.warn('[VpnHostingList] Refresh error:', err?.message);

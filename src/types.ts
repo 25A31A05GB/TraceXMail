@@ -39,6 +39,8 @@ export interface EmailHop {
   scope?: 'PRIVATE_LAN' | 'PUBLIC_INTERNET' | 'LOOPBACK' | 'LINK_LOCAL' | 'UNMAPPED';
   subnetDescription?: string;
   infrastructureType?: string;
+  isAnonymousProxy?: boolean;
+  isTorExitNode?: boolean;
   is_vpn?: boolean;
   is_tor?: boolean;
   is_open_relay?: boolean;
@@ -327,12 +329,30 @@ export interface EmailAnalysis {
   ai_narrative?: AINarrative | null;
   graph?: any;
   isOfflineFallback?: boolean;
+  deliveryStage?: 'pre-delivery-hold' | 'post-delivery-alert';
+  senderBaselineAnomaly?: {
+    description: string;
+    expectedAsn?: string;
+    actualAsn?: string;
+    expectedTimezone?: string;
+    actualTimezone?: string;
+    expectedCountry?: string;
+    actualCountry?: string;
+  } | string | null;
+  correlationEvidence?: Array<{
+    rule: string;
+    strength: 'STRONG' | 'MEDIUM' | 'WEAK';
+    description: string;
+    value: string;
+    autoMergeEligible?: boolean;
+  }>;
 }
 
 export interface EvidenceCardData {
   caseId: string;
   evidenceId: string;
   timestamp: string;
+  deliveryStage?: 'pre-delivery-hold' | 'post-delivery-alert';
   verdict: {
     text: string;
     status: 'bad' | 'warn' | 'good' | string;
@@ -411,6 +431,21 @@ export interface EvidenceCardData {
       mlClassification: { score: number; max: number; reasons: string[] };
       heuristics: { score: number; max: number; reasons: string[] };
     };
+  };
+  senderBaselineAnomaly?: {
+    description: string;
+    expectedAsn?: string;
+    actualAsn?: string;
+    expectedTimezone?: string;
+    actualTimezone?: string;
+    expectedCountry?: string;
+    actualCountry?: string;
+  } | string | null;
+  deepAnalysis?: {
+    attackNarrative?: string;
+    counterfactuals?: any[];
+    complianceFlags?: any[];
+    senderBaselineAnomaly?: any;
   };
 }
 

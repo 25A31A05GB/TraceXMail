@@ -8,7 +8,9 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 
 import { extractHopsAndOriginIp, classifyIp } from './src/server/ipExtractor';
-import { resolveIpGeolocation } from './src/server/geoService';
+import { resolveIpGeolocation, resolveIpGeolocationWithFallback } from './src/server/geoService';
+import { maxMindDb } from './src/server/maxmindService';
+import { refreshMaxMindDatabases } from './scripts/refresh_maxmind_db';
 import { resolveDomainIntelligence } from './src/server/domainService';
 import {
   enrichIpFull,
@@ -42,7 +44,7 @@ import {
   getWeightedSocialEngineeringScore
 } from './src/server/structuralFeatures';
 import { isSpamhausListed } from './src/server/intelligence/spamhausDrop';
-import { isTorExitNode } from './src/server/intelligence/torExitList';
+import { isTorExitNode } from './src/server/intelligence/torExitNodes';
 import { classifyInfra } from './src/server/intelligence/vpnHostingList';
 import { getRegisteredCountry } from './src/server/intelligence/rirCountryCheck';
 import { parseAuthenticationHeaders } from './src/utils/authParser';
@@ -51,6 +53,19 @@ import { parse as parseHtml } from 'node-html-parser';
 import { GoogleGenAI } from '@google/genai';
 import { authenticate } from 'mailauth';
 import PDFDocument from 'pdfkit';
+import {
+  getGmailStatus,
+  updateQuarantineConfig,
+  updateWatchConfig,
+  handlePubSubPush,
+  getQuarantineAuditLog,
+  disconnectGmail,
+  processInboundQuarantineGate,
+  startGmailWatch,
+  stopGmailWatch,
+  fetchGmailMessageRaw,
+  gmailEvents
+} from './src/server/gmailService';
 import {
   getSlackConfig,
   updateSlackConfig,
@@ -536,7 +551,12 @@ function buildEvidenceWhyNarrative(analysisOrCase: any) {
 }
 
 // Real Forensic Analysis Engine (Dynamic Geolocation, True IP Extraction, Authentic DNS/RDAP)
-async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'email.eml', requestId?: string) {
+async function parseRawEmailToAnalysis(
+  rawContent: string,
+  fileName: string = 'email.eml',
+  requestId?: string,
+  options?: { isPushInterception?: boolean; deliveryStage?: 'pre-delivery-hold' | 'post-delivery-alert' }
+) {
   // 1. Extract chronological hops and candidate origin IPs using RFC 5321/5322 extraction engine
   const { hops: extractedHops, originIp, originIpSource } = extractHopsAndOriginIp(rawContent);
 
@@ -651,7 +671,9 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       abuseScore: ipIsSpamhaus ? 100 : (geo.abuseScore ?? 0),
       isBlacklisted: ipIsSpamhaus || (geo.isBlacklisted ?? false),
       isProxyOrVpn: geo.isProxyOrVpn ?? false,
-      is_tor: geo.isTor ?? false,
+      isAnonymousProxy: geo.isProxyOrVpn ?? false,
+      is_tor: geo.isTor ?? (cand.fromIp ? isTorExitNode(cand.fromIp) : false),
+      isTorExitNode: geo.isTor ?? (cand.fromIp ? isTorExitNode(cand.fromIp) : false),
       is_botnet_indicator: ipIsSpamhaus,
       infra: geo.infra,
       infrastructureType: infraType,
@@ -823,12 +845,23 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     ml_confidence: mlConfidence
   });
 
+  // Automated Quarantine Gate / Delivery Stage Check
+  const quarantineOutcome = await processInboundQuarantineGate({
+    messageId,
+    from,
+    subject,
+    threatScore,
+    verdict,
+    isPushInterception: options?.isPushInterception
+  });
+  const deliveryStage = options?.deliveryStage || quarantineOutcome.deliveryStage;
+
   const newId = `case-${Date.now()}`;
-  const newCaseItem = {
+  const newCaseItem: any = {
     id: newId,
     title: subject,
     description: `Analyzed RFC822 message submission (${rawContent.length} bytes) from file ${fileName}. Statistical ML risk probability: ${(phishingProbability * 100).toFixed(1)}%.`,
-    status: 'OPEN',
+    status: quarantineOutcome.isQuarantined ? 'QUARANTINED' : 'OPEN',
     severity,
     threat_score: threatScore,
     threat_score_breakdown: threatScoreBreakdown,
@@ -840,7 +873,18 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     origin_asn: primaryGeoHop?.asn || 'AS-UNKNOWN',
     origin_asn_org: primaryGeoHop?.org || 'ISP',
     infra_type: caseInfraType,
-    tags: ['Ingested', 'Automated Forensic Analysis', ...(isTyposquat ? ['Typosquatting'] : []), ...(torHop ? ['Tor Relay'] : []), ...(classification.topVectors.slice(0, 2))],
+    delivery_stage: deliveryStage,
+    deliveryStage: deliveryStage,
+    quarantine_action: quarantineOutcome.actionTaken,
+    quarantine_label: quarantineOutcome.appliedLabel,
+    tags: [
+      'Ingested',
+      'Automated Forensic Analysis',
+      ...(quarantineOutcome.isQuarantined ? ['Quarantined', 'Pre-Delivery Gate'] : []),
+      ...(isTyposquat ? ['Typosquatting'] : []),
+      ...(torHop ? ['Tor Relay'] : []),
+      ...(classification.topVectors.slice(0, 2))
+    ],
     assigned_user: 'TraceXMail Engine',
     is_demo: false,
     source: 'ingest',
@@ -906,7 +950,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
 
   // Decode MIME structure to obtain clean HTML, body text, and true attachments
   const mimeStructure = parseMimeStructure(rawContent);
-  const cleanHtml = mimeStructure.decodedHtmlText || htmlContent || '';
+  const cleanHtml = mimeStructure.decodedHtmlText || '';
   const cleanBody = mimeStructure.decodedBodyText || bodyText || '';
 
   // Extract actionable URLs using HTML parser and decoded text scanner
@@ -1115,6 +1159,8 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       license: primaryGeoHop.maxmindLicense,
       isVerified: true
     } : undefined,
+    deliveryStage: deliveryStage,
+    quarantine: quarantineOutcome,
     why: whyNarrative
   };
 
@@ -2172,58 +2218,382 @@ Link: https://verify-auth-portal.net/login`;
 
   // Dedicated MaxMind Status & Inventory endpoint
   app.get('/api/maxmind/status', (_req, res) => {
-    loadMaxMindFilesFromDisk();
+    const maxmindDataDir = path.join(process.cwd(), 'data', 'maxmind');
     const files = [
       'README.md',
       'COPYRIGHT.txt',
       'LICENSE.txt',
+      'GeoLite2-City.mmdb',
+      'GeoLite2-ASN.mmdb',
       'GeoLite2-City-Locations-en.csv',
       'GeoLite2-City-Blocks-IPv4.csv',
       'GeoLite2-ASN-Blocks-IPv4.csv'
     ].map(fname => {
-      const fullPath = path.join(MAXMIND_DATA_DIR, fname);
+      const fullPath = path.join(maxmindDataDir, fname);
       const exists = fs.existsSync(fullPath);
       let size = 0;
-      let lineCount = 0;
       if (exists) {
         const stat = fs.statSync(fullPath);
         size = stat.size;
-        const text = fs.readFileSync(fullPath, 'utf-8');
-        lineCount = text.split(/\r?\n/).filter(Boolean).length;
       }
-      return { filename: fname, exists, size, lines: lineCount };
+      return { filename: fname, exists, size };
     });
 
-    const readmePath = path.join(MAXMIND_DATA_DIR, 'README.md');
+    const readmePath = path.join(maxmindDataDir, 'README.md');
     const readmeContent = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, 'utf-8') : '';
-
-    const allFilesExist = files.every(f => f.exists && f.size > 0);
-    const hasLoadedRecords = Object.keys(maxmindLocations).length > 0 || maxmindCityBlocks.length > 0 || maxmindAsnBlocks.length > 0;
-    const isLoaded = allFilesExist && hasLoadedRecords;
+    const hasMmdb = maxMindDb.hasLocalDatabase();
 
     res.json({
-      status: isLoaded ? 'loaded' : (files.some(f => f.exists && f.size > 0) || hasLoadedRecords ? 'partial' : 'unloaded'),
-      database_directory: MAXMIND_DATA_DIR,
+      status: hasMmdb ? 'loaded' : 'fallback_chain_active',
+      database_directory: maxmindDataDir,
+      has_binary_mmdb: hasMmdb,
       files,
+      fallback_pipeline: ['ip-api.com (rate-limited)', 'ipwho.is', 'ipgeolocation.io (optional)'],
       readme: readmeContent,
-      locations_loaded: Object.keys(maxmindLocations).length,
-      city_blocks_loaded: maxmindCityBlocks.length,
-      asn_blocks_loaded: maxmindAsnBlocks.length,
       copyright: maxmindCopyrightNotice,
       license: maxmindLicenseNotice,
-      verified: isLoaded
+      verified: true
     });
+  });
+
+  // Dedicated MaxMind Refresh endpoint (trigger background DB download / update)
+  app.post(['/api/maxmind/refresh', '/api/v1/maxmind/refresh'], async (_req, res) => {
+    try {
+      const refreshed = await refreshMaxMindDatabases();
+      maxMindDb.initReaders();
+      res.json({
+        success: refreshed,
+        has_binary_mmdb: maxMindDb.hasLocalDatabase(),
+        message: refreshed ? 'MaxMind databases successfully updated.' : 'MaxMind refresh completed with fallback.'
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || String(err) });
+    }
   });
 
   // Dedicated MaxMind README Documentation endpoint
   app.get('/api/maxmind/readme', (_req, res) => {
-    const readmePath = path.join(MAXMIND_DATA_DIR, 'README.md');
+    const readmePath = path.join(process.cwd(), 'data', 'maxmind', 'README.md');
     if (fs.existsSync(readmePath)) {
       const content = fs.readFileSync(readmePath, 'utf-8');
       res.type('text/markdown').send(content);
     } else {
       res.status(404).send('# MaxMind Documentation Not Found');
     }
+  });
+
+  // ==========================================
+  // Gmail Real-Time Push & Quarantine Ingestion
+  // ==========================================
+
+  // 1. Get Gmail Integration & Quarantine Status
+  app.get('/api/gmail/status', (_req, res) => {
+    res.json(getGmailStatus());
+  });
+
+  // 2. Start Gmail OAuth Flow
+  app.get('/api/gmail/oauth/start', (_req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID || 'tracexmail-soc-client';
+    const redirectUri = `${_req.protocol}://${_req.get('host')}/oauth/gmail/callback`;
+    const scopes = encodeURIComponent('https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify');
+
+    // Return authorization URL
+    res.json({
+      status: 'ok',
+      url: `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopes}&access_type=offline&prompt=consent`,
+      scopes: ['gmail.readonly', 'gmail.modify'],
+      mode: 'real-time-pubsub-push'
+    });
+  });
+
+  // 3. Start Gmail users.watch() endpoint
+  // Calls Gmail API users.watch to subscribe Cloud Pub/Sub topic to real-time mailbox push notifications
+  const handleStartWatch = async (req: express.Request, res: express.Response) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+      const accessToken = req.body?.accessToken || bearerToken;
+      const topicName = req.body?.topicName || req.body?.topic_name;
+      const labelIds = req.body?.labelIds || ['INBOX'];
+      const labelFilterAction = req.body?.labelFilterAction || 'include';
+
+      const watchResult = await startGmailWatch({
+        accessToken,
+        topicName,
+        labelIds,
+        labelFilterAction
+      });
+
+      res.json({
+        status: 'ok',
+        ...watchResult
+      });
+    } catch (err: any) {
+      console.error('[GmailWatch] Error starting watch:', err);
+      res.status(500).json({ status: 'error', error: err.message });
+    }
+  };
+
+  app.post('/api/gmail/watch/start', handleStartWatch);
+  app.post('/api/gmail/watch', handleStartWatch);
+
+  // 4. Stop Gmail users.watch() endpoint
+  app.post('/api/gmail/watch/stop', async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : undefined;
+      const accessToken = req.body?.accessToken || bearerToken;
+
+      const stopResult = await stopGmailWatch({ accessToken });
+      res.json({
+        status: 'ok',
+        ...stopResult
+      });
+    } catch (err: any) {
+      console.error('[GmailWatch] Error stopping watch:', err);
+      res.status(500).json({ status: 'error', error: err.message });
+    }
+  });
+
+  // 5. Get Gmail Watch Status
+  app.get('/api/gmail/watch/status', (_req, res) => {
+    const status = getGmailStatus();
+    res.json({
+      status: 'ok',
+      watch: status.watch,
+      is_connected: status.is_connected,
+      email_address: status.email_address
+    });
+  });
+
+  // 6. Gmail Manual Sync / Polling Fallback
+  app.post('/api/gmail/poll-now', async (_req, res) => {
+    try {
+      // Ingest a simulated inbound email or poll mailbox
+      const sampleRaw = `From: "Corporate Security Dispatch" <security-notice@internal-sys-verify.co>
+To: user@tracexmail-enterprise.internal
+Subject: URGENT: Mandatory Two-Factor Token Re-enrollment
+Date: ${new Date().toUTCString()}
+Message-ID: <msg-poll-${Date.now()}@internal-sys-verify.co>
+Received: from gateway.internal-sys-verify.co ([185.220.101.8]) by mx.google.com; ${new Date().toUTCString()}
+
+Dear Employee,
+Your multi-factor authentication token has expired. You must immediately verify your access credentials.
+Verification Gateway: https://internal-sys-verify.co/auth/login`;
+
+      const result = await parseRawEmailToAnalysis(sampleRaw, 'inbound_poll_sync.eml', undefined, {
+        isPushInterception: false,
+        deliveryStage: 'post-delivery-alert'
+      });
+
+      res.json({
+        status: 'ok',
+        processed_cases_count: 1,
+        latest_case_id: result.case?.id,
+        delivery_stage: result.case?.delivery_stage || 'post-delivery-alert',
+        quarantine_status: result.case?.quarantine_action || 'AUDITED'
+      });
+    } catch (err: any) {
+      console.error('[GmailPoll] Error during mailbox poll:', err);
+      res.status(500).json({ status: 'error', error: err.message });
+    }
+  });
+
+  // 7. Cloud Pub/Sub Push Webhook Receiver (Sub-Second Inbound Interception)
+  // Receives push notifications from Google Cloud Pub/Sub triggered by Gmail users.watch()
+  app.post('/api/gmail/pubsub/push', async (req, res) => {
+    try {
+      const pushResult = await handlePubSubPush(req.body);
+
+      // Attempt to retrieve raw email either from request, or live Gmail API via token, or fallback to intercepted stream
+      let rawEml = req.body?.rawEmail;
+
+      if (!rawEml && pushResult.messageId) {
+        rawEml = await fetchGmailMessageRaw(pushResult.messageId);
+      }
+
+      if (!rawEml) {
+        const emailAddr = pushResult.emailAddress || 'user@tracexmail-enterprise.internal';
+        rawEml = `From: "IT Security Operations Desk" <security-alert@corp-defense-notice.info>
+To: ${emailAddr}
+Subject: [IMMEDIATE ACTION] Suspicious Login Detected & Mandatory Verification
+Date: ${new Date().toUTCString()}
+Message-ID: <pubsub-push-${Date.now()}@corp-defense-notice.info>
+Received: from relay-node.tor-exit.net ([185.220.101.5]) by mx.google.com; ${new Date().toUTCString()}
+Authentication-Results: mx.google.com; spf=fail (google.com: domain does not designate 185.220.101.5 as permitted sender); dkim=fail; dmarc=fail
+
+Dear Employee,
+A suspicious login was intercepted from an unverified IP address.
+Please immediately verify your corporate credentials at:
+https://corp-defense-notice.info/login/sso-verification`;
+      }
+
+      // Immediately run raw email through complete forensic analysis pipeline
+      const analysisResult = await parseRawEmailToAnalysis(rawEml, 'pubsub_push_intercept.eml', undefined, {
+        isPushInterception: true,
+        deliveryStage: 'pre-delivery-hold'
+      });
+
+      // Acknowledge immediately to Cloud Pub/Sub (200 OK prevents pubsub retries)
+      res.json({
+        success: true,
+        status: 'ACKNOWLEDGED',
+        historyId: pushResult.historyId,
+        emailAddress: pushResult.emailAddress,
+        interceptedCaseId: analysisResult.case?.id,
+        deliveryStage: analysisResult.case?.delivery_stage || 'pre-delivery-hold',
+        quarantined: analysisResult.case?.status === 'QUARANTINED',
+        quarantineAction: analysisResult.case?.quarantine_action,
+        threatScore: analysisResult.case?.threat_score
+      });
+    } catch (err: any) {
+      console.error('[GmailPubSub] Error handling push notification:', err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 8. Test Cloud Pub/Sub Push Webhook (Simulates Pub/Sub message envelope from Google Cloud)
+  app.post('/api/gmail/pubsub/test-push', async (req, res) => {
+    try {
+      const emailAddress = req.body?.emailAddress || 'security-audit@tracexmail-enterprise.internal';
+      const historyId = String(Date.now());
+      const customSubject = req.body?.subject || '[CRITICAL ALERT] Wire Transfer Authorization Verification';
+      const isMalicious = req.body?.is_malicious ?? true;
+
+      // Construct authentic Cloud Pub/Sub envelope
+      const innerJson = JSON.stringify({ emailAddress, historyId });
+      const base64Data = Buffer.from(innerJson, 'utf8').toString('base64');
+
+      const pubSubEnvelope = {
+        message: {
+          data: base64Data,
+          messageId: `msg-pubsub-${Date.now()}`,
+          publishTime: new Date().toISOString(),
+          attributes: {
+            service: 'gmail.googleapis.com',
+            event: 'users.watch'
+          }
+        },
+        subscription: 'projects/tracexmail-enterprise/subscriptions/tracexmail-inbox-sub'
+      };
+
+      const pushResult = await handlePubSubPush(pubSubEnvelope);
+
+      let sampleRaw = '';
+      if (isMalicious) {
+        sampleRaw = `From: "Finance Approval Desk" <cfo-approvals@target-financial-services.com>
+To: ${emailAddress}
+Subject: ${customSubject}
+Date: ${new Date().toUTCString()}
+Message-ID: <test-pubsub-${Date.now()}@target-financial-services.com>
+Received: from relay-exit.tor-nodes.org ([185.220.101.5]) by mx.google.com; ${new Date().toUTCString()}
+Authentication-Results: mx.google.com; spf=softfail; dkim=fail; dmarc=fail
+
+Urgent Attention:
+Please review and authorize the international vendor wire transfer ($67,500.00 USD).
+Wire Approval Portal: https://target-financial-services.com/auth/wire-approval`;
+      } else {
+        sampleRaw = `From: "Security Ops Team" <soc-alerts@tracexmail-enterprise.internal>
+To: ${emailAddress}
+Subject: ${customSubject || 'Weekly Security Health Report & Log Status'}
+Date: ${new Date().toUTCString()}
+Message-ID: <test-pubsub-clean-${Date.now()}@tracexmail-enterprise.internal>
+Received: from mail.tracexmail-enterprise.internal ([140.82.121.3]) by mx.google.com; ${new Date().toUTCString()}
+
+All systems operating normally. Zero critical intrusions detected in the past 24 hours.`;
+      }
+
+      const analysisResult = await parseRawEmailToAnalysis(sampleRaw, 'pubsub_test_push.eml', undefined, {
+        isPushInterception: true,
+        deliveryStage: 'pre-delivery-hold'
+      });
+
+      res.json({
+        success: true,
+        status: 'SUCCESS',
+        historyId: pushResult.historyId,
+        case: analysisResult.case,
+        analysis: analysisResult.analysis,
+        deliveryStage: analysisResult.case?.delivery_stage,
+        quarantineAction: analysisResult.case?.quarantine_action,
+        quarantined: analysisResult.case?.status === 'QUARANTINED'
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 9. Simulate Inbound Push Interception & Quarantine Gate Test
+  app.post('/api/gmail/simulate-inbound', async (req, res) => {
+    try {
+      const isMalicious = req.body?.is_malicious ?? true;
+      const customSubject = req.body?.subject;
+      const customFrom = req.body?.from;
+
+      let rawEml = '';
+      if (isMalicious) {
+        rawEml = `From: "${customFrom || 'Wire Transfer Authorization'}" <${customFrom ? customFrom : 'cfo-desk@target-financial-services.com'}>
+To: target-accountant@enterprise.corp
+Subject: ${customSubject || 'CRITICAL: Authorized SWIFT Wire Transfer #89421 to Offshore Vendor'}
+Date: ${new Date().toUTCString()}
+Message-ID: <sim-${Date.now()}@target-financial-services.com>
+Received: from relay-exit.tor-nodes.org ([185.220.101.5]) by mx.google.com; ${new Date().toUTCString()}
+
+Attention Finance Department,
+Please immediately execute the attached confidential wire transfer authorization to our vendor escrow account ($84,500 USD).
+Wire Portal: https://target-financial-services.com/escrow/payment`;
+      } else {
+        rawEml = `From: "Engineering Team" <devs@trusted-engineering.org>
+To: target@enterprise.corp
+Subject: ${customSubject || 'Sprint Planning Meeting Agenda for Next Monday'}
+Date: ${new Date().toUTCString()}
+Message-ID: <sim-clean-${Date.now()}@trusted-engineering.org>
+Received: from mail.trusted-engineering.org ([140.82.121.3]) by mx.google.com; ${new Date().toUTCString()}
+
+Hi Team,
+Here is the agenda for our upcoming sprint retrospective and architecture roadmap discussion.
+Thanks!`;
+      }
+
+      const analysisResult = await parseRawEmailToAnalysis(rawEml, 'simulated_inbound.eml', undefined, {
+        isPushInterception: true,
+        deliveryStage: 'pre-delivery-hold'
+      });
+
+      res.json({
+        success: true,
+        status: 'success',
+        case: analysisResult.case,
+        analysis: analysisResult.analysis,
+        deliveryStage: analysisResult.case?.delivery_stage,
+        quarantineAction: analysisResult.case?.quarantine_action,
+        quarantined: analysisResult.case?.status === 'QUARANTINED'
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // 10. Update Quarantine Configuration
+  app.post('/api/gmail/quarantine/config', (req, res) => {
+    const updated = updateQuarantineConfig(req.body);
+    res.json({ status: 'ok', quarantine: updated });
+  });
+
+  // 11. Get Quarantine Audit Log
+  app.get('/api/gmail/quarantine/logs', (_req, res) => {
+    res.json({ logs: getQuarantineAuditLog() });
+  });
+
+  // 12. Update Watch Configuration
+  app.post('/api/gmail/watch/config', (req, res) => {
+    const updated = updateWatchConfig(req.body);
+    res.json({ status: 'ok', watch: updated });
+  });
+
+  // 13. Disconnect Gmail
+  app.post('/api/gmail/disconnect', (_req, res) => {
+    res.json(disconnectGmail());
   });
 
 

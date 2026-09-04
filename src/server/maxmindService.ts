@@ -1,23 +1,25 @@
 /**
  * MaxMind GeoLite2 Local Database Engine for TraceXMail
+ * Powered by official binary .mmdb format (O(log N) binary radix search tree)
  * Provides sub-millisecond offline lookup for City, Region, Country, Coordinates,
  * ASN, and Organization without external third-party API dependencies.
  */
 
 import fs from 'fs';
 import path from 'path';
+import maxmind, { CityResponse, AsnResponse, Reader } from 'maxmind';
 
 export interface MaxMindCityRecord {
   city?: {
-    names: { en: string };
+    names: { en: string; [key: string]: string };
   };
   continent?: {
     code: string;
-    names: { en: string };
+    names: { en: string; [key: string]: string };
   };
   country?: {
     iso_code: string;
-    names: { en: string };
+    names: { en: string; [key: string]: string };
     is_in_european_union?: boolean;
   };
   location?: {
@@ -28,7 +30,7 @@ export interface MaxMindCityRecord {
   };
   subdivisions?: Array<{
     iso_code: string;
-    names: { en: string };
+    names: { en: string; [key: string]: string };
   }>;
   postal?: {
     code: string;
@@ -42,16 +44,23 @@ export interface MaxMindCityRecord {
     is_anonymous_proxy?: boolean;
     is_tor_exit_node?: boolean;
     is_hosting_provider?: boolean;
+    is_satellite_provider?: boolean;
   };
 }
 
+export interface MaxMindAsnRecord {
+  autonomous_system_number?: number;
+  autonomous_system_organization?: string;
+  ip_address?: string;
+}
+
 // Helper for IPv4 CIDR calculations
-function ipToNumber(ip: string): number {
+export function ipToNumber(ip: string): number {
   return ip.split('.').reduce((acc, octet) => ((acc << 8) + parseInt(octet, 10)) >>> 0, 0);
 }
 
 // Helper for IPv6 BigInt calculations
-function ipv6ToBigInt(ip: string): bigint | null {
+export function ipv6ToBigInt(ip: string): bigint | null {
   try {
     let str = ip.toLowerCase().trim();
     if (str.includes('%')) {
@@ -123,532 +132,165 @@ export function isIpInCidr(ip: string, cidr: string): boolean {
   }
 }
 
-// Global IP prefix database representing comprehensive MaxMind GeoLite2 distributions
-interface SubnetEntry {
-  prefix: string; // e.g. "185.220.101" or "8.8.8"
-  city: string;
-  region: string;
-  regionCode: string;
-  country: string;
-  countryCode: string;
-  continentCode: string;
-  continentName: string;
-  lat: number;
-  lng: number;
-  timeZone: string;
-  asn: number;
-  asnOrg: string;
-  isTor?: boolean;
-  isHosting?: boolean;
-  isEu?: boolean;
-}
-
-// High-fidelity subnet ranges compiled from GeoLite2 City & ASN databases
-const GEOLITE2_SUBNETS: SubnetEntry[] = [
-  // Tor Exit Nodes / Bulletproof Relays
-  {
-    prefix: '185.220.101',
-    city: 'Sofia',
-    region: 'Sofia-Grad',
-    regionCode: '22',
-    country: 'Bulgaria',
-    countryCode: 'BG',
-    continentCode: 'EU',
-    continentName: 'Europe',
-    lat: 42.6977,
-    lng: 23.3219,
-    timeZone: 'Europe/Sofia',
-    asn: 200548,
-    asnOrg: 'Zettahost Cyber Ltd',
-    isTor: true,
-    isHosting: true,
-    isEu: true
-  },
-  {
-    prefix: '185.220.100',
-    city: 'Frankfurt am Main',
-    region: 'Hesse',
-    regionCode: 'HE',
-    country: 'Germany',
-    countryCode: 'DE',
-    continentCode: 'EU',
-    continentName: 'Europe',
-    lat: 50.1109,
-    lng: 8.6821,
-    timeZone: 'Europe/Berlin',
-    asn: 208294,
-    asnOrg: 'Calyx Institute Tor Exit Node',
-    isTor: true,
-    isHosting: true,
-    isEu: true
-  },
-  {
-    prefix: '194.26.29',
-    city: 'Amsterdam',
-    region: 'North Holland',
-    regionCode: 'NH',
-    country: 'Netherlands',
-    countryCode: 'NL',
-    continentCode: 'EU',
-    continentName: 'Europe',
-    lat: 52.3676,
-    lng: 4.9041,
-    timeZone: 'Europe/Amsterdam',
-    asn: 49453,
-    asnOrg: 'Global Layer B.V.',
-    isTor: true,
-    isHosting: true,
-    isEu: true
-  },
-  {
-    prefix: '89.144.20',
-    city: 'Bucharest',
-    region: 'Bucuresti',
-    regionCode: 'B',
-    country: 'Romania',
-    countryCode: 'RO',
-    continentCode: 'EU',
-    continentName: 'Europe',
-    lat: 44.4268,
-    lng: 26.1025,
-    timeZone: 'Europe/Bucharest',
-    asn: 9009,
-    asnOrg: 'M247 Europe SRL',
-    isTor: false,
-    isHosting: true,
-    isEu: true
-  },
-  // Major Cloud Providers / Hyperscalers
-  {
-    prefix: '198.51.100',
-    city: 'Council Bluffs',
-    region: 'Iowa',
-    regionCode: 'IA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 41.2619,
-    lng: -95.8608,
-    timeZone: 'America/Chicago',
-    asn: 15169,
-    asnOrg: 'Google LLC',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '8.8.8',
-    city: 'Mountain View',
-    region: 'California',
-    regionCode: 'CA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 37.4223,
-    lng: -122.0848,
-    timeZone: 'America/Los_Angeles',
-    asn: 15169,
-    asnOrg: 'Google LLC Public DNS',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '1.1.1',
-    city: 'San Francisco',
-    region: 'California',
-    regionCode: 'CA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 37.7749,
-    lng: -122.4194,
-    timeZone: 'America/Los_Angeles',
-    asn: 13335,
-    asnOrg: 'Cloudflare Inc',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '52.',
-    city: 'Ashburn',
-    region: 'Virginia',
-    regionCode: 'VA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 39.0438,
-    lng: -77.4874,
-    timeZone: 'America/New_York',
-    asn: 16509,
-    asnOrg: 'Amazon.com Inc / AWS us-east-1',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '54.',
-    city: 'Seattle',
-    region: 'Washington',
-    regionCode: 'WA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 47.6062,
-    lng: -122.3321,
-    timeZone: 'America/Los_Angeles',
-    asn: 16509,
-    asnOrg: 'Amazon.com Inc / AWS',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '40.',
-    city: 'Redmond',
-    region: 'Washington',
-    regionCode: 'WA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 47.674,
-    lng: -122.1215,
-    timeZone: 'America/Los_Angeles',
-    asn: 8075,
-    asnOrg: 'Microsoft Corporation',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '20.',
-    city: 'Des Moines',
-    region: 'Iowa',
-    regionCode: 'IA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 41.5868,
-    lng: -93.625,
-    timeZone: 'America/Chicago',
-    asn: 8075,
-    asnOrg: 'Microsoft Azure Cloud',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '104.244',
-    city: 'San Francisco',
-    region: 'California',
-    regionCode: 'CA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 37.7749,
-    lng: -122.4194,
-    timeZone: 'America/Los_Angeles',
-    asn: 13414,
-    asnOrg: 'Twitter / X Corp',
-    isHosting: false,
-    isEu: false
-  },
-  {
-    prefix: '157.240',
-    city: 'Menlo Park',
-    region: 'California',
-    regionCode: 'CA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 37.4529,
-    lng: -122.1817,
-    timeZone: 'America/Los_Angeles',
-    asn: 32934,
-    asnOrg: 'Meta Platforms Inc',
-    isHosting: false,
-    isEu: false
-  },
-  {
-    prefix: '17.',
-    city: 'Cupertino',
-    region: 'California',
-    regionCode: 'CA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 37.323,
-    lng: -122.0322,
-    timeZone: 'America/Los_Angeles',
-    asn: 714,
-    asnOrg: 'Apple Inc',
-    isHosting: false,
-    isEu: false
-  },
-  {
-    prefix: '185.199',
-    city: 'San Francisco',
-    region: 'California',
-    regionCode: 'CA',
-    country: 'United States',
-    countryCode: 'US',
-    continentCode: 'NA',
-    continentName: 'North America',
-    lat: 37.7749,
-    lng: -122.4194,
-    timeZone: 'America/Los_Angeles',
-    asn: 36459,
-    asnOrg: 'GitHub Inc',
-    isHosting: true,
-    isEu: false
-  },
-  {
-    prefix: '81.18.87',
-    city: 'Warsaw',
-    region: 'Mazovia',
-    regionCode: 'MZ',
-    country: 'Poland',
-    countryCode: 'PL',
-    continentCode: 'EU',
-    continentName: 'Europe',
-    lat: 52.2297,
-    lng: 21.0122,
-    timeZone: 'Europe/Warsaw',
-    asn: 12741,
-    asnOrg: 'Netia S.A. Broadband',
-    isTor: false,
-    isHosting: false,
-    isEu: true
-  }
-];
-
 export class MaxMindDatabase {
-  private mmdbReader: any = null;
-  private csvLoaded = false;
-  private csvLocations: Map<number, any> = new Map();
-  private csvCityBlocks: Array<{ cidr: string; geonameId: number; lat: number; lng: number; isAnonProxy: boolean }> = [];
-  private csvAsnBlocks: Array<{ cidr: string; asn: number; asnOrg: string }> = [];
+  private cityReader: Reader<CityResponse> | null = null;
+  private asnReader: Reader<AsnResponse> | null = null;
+  private isLoaded = false;
 
   constructor() {
-    this.tryInitMmdb();
-    this.tryInitCsv();
-
-    if (!this.mmdbReader && !this.csvLoaded) {
-      console.warn(
-        '[MaxMind WARNING] No GeoLite2 database (.mmdb at data/geolite2/GeoLite2-City.mmdb) ' +
-        'or CSV datasets (data/maxmind/GeoLite2-City-Locations-en.csv, GeoLite2-City-Blocks-IPv4.csv, GeoLite2-ASN-Blocks-IPv4.csv) ' +
-        'found on disk. TraceXMail is operating on hardcoded fallback fixture subnets. ' +
-        'Place official GeoLite2 database files at data/geolite2/ or data/maxmind/ for full global IP resolution.'
-      );
-    }
+    this.initReaders();
   }
 
-  private tryInitMmdb() {
-    try {
-      const dbPath = path.join(process.cwd(), 'data/geolite2/GeoLite2-City.mmdb');
-      if (fs.existsSync(dbPath)) {
-        // Real binary MaxMind MMDB reader
-        const maxmind = require('maxmind');
-        this.mmdbReader = maxmind.openSync(dbPath);
-        console.log('[MaxMind] Loaded binary GeoLite2 database from disk.');
-      }
-    } catch {
-      this.mmdbReader = null;
-    }
-  }
+  /**
+   * Initializes or reloads binary MMDB readers from disk.
+   */
+  public initReaders(): void {
+    const cityPaths = [
+      process.env.MAXMIND_CITY_DB_PATH,
+      path.join(process.cwd(), 'data', 'maxmind', 'GeoLite2-City.mmdb'),
+      path.join(process.cwd(), 'data', 'geolite2', 'GeoLite2-City.mmdb'),
+      path.join(process.cwd(), 'GeoLite2-City.mmdb')
+    ].filter(Boolean) as string[];
 
-  private tryInitCsv() {
-    try {
-      const locPath = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Locations-en.csv');
-      const cityPath4 = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Blocks-IPv4.csv');
-      const cityPath6 = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Blocks-IPv6.csv');
-      const asnPath4 = path.join(process.cwd(), 'data/maxmind/GeoLite2-ASN-Blocks-IPv4.csv');
-      const asnPath6 = path.join(process.cwd(), 'data/maxmind/GeoLite2-ASN-Blocks-IPv6.csv');
+    const asnPaths = [
+      process.env.MAXMIND_ASN_DB_PATH,
+      path.join(process.cwd(), 'data', 'maxmind', 'GeoLite2-ASN.mmdb'),
+      path.join(process.cwd(), 'data', 'geolite2', 'GeoLite2-ASN.mmdb'),
+      path.join(process.cwd(), 'GeoLite2-ASN.mmdb')
+    ].filter(Boolean) as string[];
 
-      if (fs.existsSync(locPath)) {
-        // Parse Locations CSV
-        const locLines = fs.readFileSync(locPath, 'utf8').split('\n');
-        for (let i = 1; i < locLines.length; i++) {
-          const line = locLines[i].trim();
-          if (!line) continue;
-          const cols = line.split(',');
-          const geonameId = parseInt(cols[0], 10);
-          if (!isNaN(geonameId)) {
-            this.csvLocations.set(geonameId, {
-              continentCode: cols[2] || 'EU',
-              continentName: cols[3] || 'Europe',
-              countryCode: cols[4] || 'US',
-              countryName: cols[5] || 'United States',
-              subdivisionCode: cols[6] || '',
-              subdivisionName: cols[7] || '',
-              cityName: cols[10] || '',
-              timeZone: cols[12] || 'UTC',
-              isEu: cols[13] === '1'
-            });
-          }
+    // 1. Initialize City MMDB Reader
+    let loadedCityPath: string | null = null;
+    for (const p of cityPaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const buffer = fs.readFileSync(p);
+          this.cityReader = new Reader<CityResponse>(buffer);
+          loadedCityPath = p;
+          break;
+        } catch (err) {
+          console.warn(`[MaxMind] Error reading MMDB at ${p}:`, err);
         }
-
-        // Helper to parse city blocks CSV
-        const loadCityBlocks = (filePath: string) => {
-          if (!fs.existsSync(filePath)) return;
-          const lines = fs.readFileSync(filePath, 'utf8').split('\n');
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            const cols = line.split(',');
-            const network = cols[0];
-            const geonameId = parseInt(cols[1], 10);
-            const lat = parseFloat(cols[7]);
-            const lng = parseFloat(cols[8]);
-            if (network && !isNaN(geonameId)) {
-              this.csvCityBlocks.push({
-                cidr: network,
-                geonameId,
-                lat: isNaN(lat) ? 0 : lat,
-                lng: isNaN(lng) ? 0 : lng,
-                isAnonProxy: cols[4] === '1'
-              });
-            }
-          }
-        };
-
-        // Helper to parse ASN blocks CSV
-        const loadAsnBlocks = (filePath: string) => {
-          if (!fs.existsSync(filePath)) return;
-          const lines = fs.readFileSync(filePath, 'utf8').split('\n');
-          for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            const cols = line.split(',');
-            const network = cols[0];
-            const asn = parseInt(cols[1], 10);
-            const asnOrg = cols.slice(2).join(',');
-            if (network && !isNaN(asn)) {
-              this.csvAsnBlocks.push({ cidr: network, asn, asnOrg });
-            }
-          }
-        };
-
-        loadCityBlocks(cityPath4);
-        loadCityBlocks(cityPath6);
-        loadAsnBlocks(asnPath4);
-        loadAsnBlocks(asnPath6);
-
-        this.csvLoaded = true;
-        console.log(`[MaxMind] Loaded GeoLite2 CSV datasets (${this.csvCityBlocks.length} city blocks IPv4+IPv6, ${this.csvLocations.size} locations, ${this.csvAsnBlocks.length} ASN blocks).`);
       }
-    } catch (err) {
-      console.warn('[MaxMind] CSV dataset init fallback:', err);
+    }
+
+    // 2. Initialize ASN MMDB Reader
+    let loadedAsnPath: string | null = null;
+    for (const p of asnPaths) {
+      if (fs.existsSync(p)) {
+        try {
+          const buffer = fs.readFileSync(p);
+          this.asnReader = new Reader<AsnResponse>(buffer);
+          loadedAsnPath = p;
+          break;
+        } catch (err) {
+          console.warn(`[MaxMind] Error reading ASN MMDB at ${p}:`, err);
+        }
+      }
+    }
+
+    if (loadedCityPath || loadedAsnPath) {
+      this.isLoaded = true;
+      console.log(`[MaxMind] Loaded binary MMDB databases (City: ${loadedCityPath ? 'active' : 'not found'}, ASN: ${loadedAsnPath ? 'active' : 'not found'}).`);
+    } else {
+      this.isLoaded = false;
+      console.log('[MaxMind] No local .mmdb files found on disk. Operating with live fallback chain.');
     }
   }
 
   /**
-   * Deterministically resolves city, region, country, and ASN for any IP address.
+   * Returns true if a local binary database is loaded and active.
+   */
+  public hasLocalDatabase(): boolean {
+    return Boolean(this.cityReader);
+  }
+
+  /**
+   * Looks up ASN information for an IP address.
+   */
+  public lookupAsn(ip: string): MaxMindAsnRecord | null {
+    if (!ip || !this.asnReader) return null;
+    try {
+      const res = this.asnReader.get(ip);
+      if (res) {
+        return {
+          autonomous_system_number: res.autonomous_system_number,
+          autonomous_system_organization: res.autonomous_system_organization,
+          ip_address: res.ip_address
+        };
+      }
+    } catch {
+      // Ignored
+    }
+    return null;
+  }
+
+  /**
+   * Looks up City & Location information for an IP address using binary MMDB reader.
    */
   public lookupCity(ip: string): MaxMindCityRecord | null {
     if (!ip) return null;
 
-    // 1. Binary MMDB Lookup (if binary database mounted)
-    if (this.mmdbReader) {
+    let cityRecord: MaxMindCityRecord | null = null;
+
+    // 1. MMDB City Lookup
+    if (this.cityReader) {
       try {
-        const res = this.mmdbReader.get(ip);
-        if (res) return res as MaxMindCityRecord;
-      } catch {}
-    }
-
-    // 2. CSV Dataset Lookup (if CSV datasets loaded)
-    if (this.csvLoaded) {
-      const cityBlock = this.csvCityBlocks.find(b => isIpInCidr(ip, b.cidr));
-
-      if (cityBlock) {
-        const loc = this.csvLocations.get(cityBlock.geonameId);
-        const asnBlock = this.csvAsnBlocks.find(a => isIpInCidr(ip, a.cidr));
-
-        if (loc) {
-          return {
-            city: { names: { en: loc.cityName } },
+        const res = this.cityReader.get(ip);
+        if (res && res.country) {
+          cityRecord = {
+            city: res.city ? { names: { en: res.city.names?.en || '' } } : undefined,
+            continent: res.continent ? { code: res.continent.code, names: { en: res.continent.names?.en || '' } } : undefined,
             country: {
-              iso_code: loc.countryCode,
-              names: { en: loc.countryName },
-              is_in_european_union: loc.isEu
+              iso_code: res.country.iso_code || '',
+              names: { en: res.country.names?.en || '' },
+              is_in_european_union: Boolean(res.country.is_in_european_union)
             },
-            subdivisions: [
-              {
-                iso_code: loc.subdivisionCode,
-                names: { en: loc.subdivisionName }
-              }
-            ],
-            continent: {
-              code: loc.continentCode,
-              names: { en: loc.continentName }
-            },
-            location: {
-              latitude: cityBlock.lat,
-              longitude: cityBlock.lng,
-              time_zone: loc.timeZone,
-              accuracy_radius: 20
-            },
-            traits: {
-              autonomous_system_number: asnBlock ? asnBlock.asn : 13335,
-              autonomous_system_organization: asnBlock ? asnBlock.asnOrg : 'Autonomous Transit Provider',
-              isp: asnBlock ? asnBlock.asnOrg : 'Autonomous Transit Provider',
-              organization: asnBlock ? asnBlock.asnOrg : 'Autonomous Transit Provider',
-              is_tor_exit_node: Boolean(cityBlock.isAnonProxy),
-              is_hosting_provider: Boolean(cityBlock.isAnonProxy)
-            }
+            location: res.location ? {
+              latitude: res.location.latitude,
+              longitude: res.location.longitude,
+              time_zone: res.location.time_zone,
+              accuracy_radius: res.location.accuracy_radius
+            } : undefined,
+            subdivisions: res.subdivisions?.map(s => ({
+              iso_code: s.iso_code || '',
+              names: { en: s.names?.en || '' }
+            })),
+            postal: res.postal ? { code: res.postal.code || '' } : undefined,
+            traits: res.traits ? {
+              autonomous_system_number: res.traits.autonomous_system_number,
+              autonomous_system_organization: res.traits.autonomous_system_organization,
+              isp: res.traits.isp,
+              organization: res.traits.organization,
+              is_anonymous: res.traits.is_anonymous,
+              is_anonymous_proxy: res.traits.is_anonymous_proxy,
+              is_tor_exit_node: res.traits.is_tor_exit_node,
+              is_hosting_provider: res.traits.is_hosting_provider,
+              is_satellite_provider: res.traits.is_satellite_provider
+            } : undefined
           };
         }
+      } catch {
+        // Ignored
       }
     }
 
-    // 3. High-precision compiled GeoLite2 Subnet Engine (IPv4 & IPv6)
-    const matched = GEOLITE2_SUBNETS.find(sub => 
-      ip.toLowerCase().startsWith(sub.prefix.toLowerCase()) || 
-      (!ip.includes(':') && isIpInCidr(ip, `${sub.prefix}.0/24`))
-    );
-    if (matched) {
-      return {
-        city: { names: { en: matched.city } },
-        country: {
-          iso_code: matched.countryCode,
-          names: { en: matched.country },
-          is_in_european_union: matched.isEu || false
-        },
-        subdivisions: [
-          {
-            iso_code: matched.regionCode,
-            names: { en: matched.region }
-          }
-        ],
-        continent: {
-          code: matched.continentCode,
-          names: { en: matched.continentName }
-        },
-        location: {
-          latitude: matched.lat,
-          longitude: matched.lng,
-          time_zone: matched.timeZone,
-          accuracy_radius: 20
-        },
-        traits: {
-          autonomous_system_number: matched.asn,
-          autonomous_system_organization: matched.asnOrg,
-          isp: matched.asnOrg,
-          organization: matched.asnOrg,
-          is_tor_exit_node: Boolean(matched.isTor),
-          is_hosting_provider: Boolean(matched.isHosting)
-        }
-      };
+    // 2. Enrich with ASN if separate ASN reader loaded
+    if (cityRecord) {
+      const asnInfo = this.lookupAsn(ip);
+      if (asnInfo && (!cityRecord.traits || !cityRecord.traits.autonomous_system_number)) {
+        cityRecord.traits = {
+          ...cityRecord.traits,
+          autonomous_system_number: asnInfo.autonomous_system_number,
+          autonomous_system_organization: asnInfo.autonomous_system_organization,
+          isp: asnInfo.autonomous_system_organization,
+          organization: asnInfo.autonomous_system_organization
+        };
+      }
     }
 
-    // 4. Return null for unmapped public addresses without guessing
-    return null;
+    return cityRecord;
   }
 }
 
 export const maxMindDb = new MaxMindDatabase();
-

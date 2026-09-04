@@ -13,6 +13,7 @@ import {
   vtUrlLookupCache,
   vtFileLookupCache
 } from './virustotal';
+import { isTorExitNode, checkTorExitNode, refreshTorExitNodes, getTorExitNodeStatus, torExitNodeCache } from './torExitNodes';
 import { geoIpCache, asnCache, dnsCache, rdapCache, threatIntelCache } from './cache';
 import { providerRateLimiter } from './rateLimiter';
 import { createProvenanceMetadata, MAXMIND_COPYRIGHT_NOTICE, MAXMIND_LICENSE_NOTICE } from './provenance';
@@ -84,8 +85,8 @@ export async function enrichIpFull(ipAddress: string): Promise<IpEnrichmentResul
     resolvePtrSafe(validation.ip)
   ]);
 
-  // Tor check using deterministic exit node indicators
-  const isTor = Boolean(geo.isAnonymousProxy) || (reverseDns.ptr?.includes('tor-exit') ?? false);
+  // Tor check using deterministic exit node indicators and official Tor Project directory
+  const isTor = Boolean(geo.isTorExitNode) || isTorExitNode(validation.ip) || Boolean(geo.isAnonymousProxy) || (reverseDns.ptr?.includes('tor-exit') ?? false);
 
   return {
     ip: validation.ip,
@@ -95,11 +96,12 @@ export async function enrichIpFull(ipAddress: string): Promise<IpEnrichmentResul
     reverseDns,
     threat: {
       lookupStatus: geo.lookupStatus === 'success' ? 'success' : geo.lookupStatus,
-      abuseConfidenceScore: isTor ? 85 : (geo.lookupStatus === 'success' ? 0 : null),
+      abuseConfidenceScore: isTor ? 95 : (geo.lookupStatus === 'success' ? 0 : null),
       isTor,
-      isProxyOrVpn: Boolean(geo.isAnonymousProxy),
+      isTorExitNode: isTor,
+      isProxyOrVpn: Boolean(geo.isAnonymousProxy) || isTor,
       isBlacklisted: isTor,
-      source: geo.provider,
+      source: isTor ? 'Tor Project Directory / MaxMind' : geo.provider,
       reason: geo.reason
     },
     provenance: createProvenanceMetadata({
@@ -115,6 +117,7 @@ export * from './types';
 export * from './errors';
 export * from './provenance';
 export * from './virustotal';
+export * from './torExitNodes';
 export {
   validateAndClassifyIp,
   resolveGeoIp,
@@ -131,6 +134,11 @@ export {
   getVirusTotalStatus,
   vtUrlLookupCache,
   vtFileLookupCache,
+  isTorExitNode,
+  checkTorExitNode,
+  refreshTorExitNodes,
+  getTorExitNodeStatus,
+  torExitNodeCache,
   geoIpCache,
   asnCache,
   dnsCache,

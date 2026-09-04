@@ -1,54 +1,69 @@
 // Real Geolocation and Network Intelligence Service for TraceXMail
-// Powered by MaxMind GeoLite2 (City + ASN) and authoritative reverse DNS PTR resolution.
+// Multi-Tiered Architecture:
+// 1. Local MaxMind GeoLite2 binary (.mmdb) — fastest, offline, unlimited
+// 2. Fallback Chain: ip-api.com -> ipwho.is -> ipgeolocation.io
 // Strictly demarcates RFC 1918 private subnets without fabricating coordinates.
 
 import dns from 'dns';
+import axios from 'axios';
 import { classifyIp, ClassifiedIp } from './ipExtractor';
 import { maxMindDb } from './maxmindService';
 import { isTorExitNode } from './intelligence/torExitList';
 import { classifyInfra } from './intelligence/vpnHostingList';
 import { getRegisteredCountry } from './intelligence/rirCountryCheck';
+import { providerRateLimiter } from './intelligence/rateLimiter';
 
 export interface GeoLocationResult {
   ip: string;
   isPrivate: boolean;
   isRfc1918: boolean;
   classification: ClassifiedIp;
-  city?: string;
-  country?: string;
-  countryCode?: string;
+  city?: string | null;
+  country?: string | null;
+  countryCode?: string | null;
   rirCountry?: string | null;
   countryMismatch?: boolean;
-  region?: string;
-  continentCode?: string;
-  continentName?: string;
-  timeZone?: string;
-  isInEuropeanUnion?: boolean;
-  lat?: number;
-  lng?: number;
-  accuracyRadius?: number;
-  asn?: string;
-  org?: string;
-  isp?: string;
-  reverseDns?: string;
+  region?: string | null;
+  continentCode?: string | null;
+  continentName?: string | null;
+  timeZone?: string | null;
+  isInEuropeanUnion?: boolean | null;
+  lat?: number | null;
+  lng?: number | null;
+  accuracyRadius?: number | null;
+  asn?: string | null;
+  org?: string | null;
+  isp?: string | null;
+  reverseDns?: string | null;
   isTor?: boolean;
   isProxyOrVpn?: boolean;
   infra?: 'vpn' | 'hosting' | null;
   abuseScore?: number;
   isBlacklisted?: boolean;
-  source: string;
+  source: 'maxmind-local' | 'ip-api' | 'ipwho' | 'ipgeolocation' | 'unavailable' | 'RFC_1918_CLASSIFIER' | string;
   lookupMethod: string;
+  lookupStatus?: 'success' | 'unavailable' | 'rate_limited' | 'not_applicable';
 }
 
-// In-memory cache for ultra-fast repeated queries
-const GEO_CACHE = new Map<string, GeoLocationResult>();
+interface CacheEntry {
+  result: GeoLocationResult;
+  expiresAt: number;
+}
+
+// In-memory cache with 24-hour TTL for public IPs (permanent for RFC 1918)
+const GEO_CACHE = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Resolves Reverse DNS PTR for an IP address.
+ * Resolves Reverse DNS PTR for an IP address with 600ms timeout.
  */
 async function resolvePtr(ip: string): Promise<string | undefined> {
   try {
-    const ptrs = await dns.promises.reverse(ip);
+    const ptrPromise = dns.promises.reverse(ip);
+    const timeoutPromise = new Promise<string[]>((_, reject) =>
+      setTimeout(() => reject(new Error('DNS Timeout')), 600)
+    );
+    const ptrs = await Promise.race([ptrPromise, timeoutPromise]);
     return ptrs.length > 0 ? ptrs[0] : undefined;
   } catch {
     return undefined;
@@ -56,32 +71,181 @@ async function resolvePtr(ip: string): Promise<string | undefined> {
 }
 
 /**
- * Resolves live MaxMind GeoLite2 geolocation for any IP address.
+ * Fallback Provider 1: ip-api.com (free, no key, 45 req/min rate limited)
  */
-export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResult> {
-  if (!ip || ip === 'UNKNOWN') {
+async function fetchFromIpApi(ip: string): Promise<Partial<GeoLocationResult> | null> {
+  // Check sliding window rate limit: max 45 requests per 60 seconds
+  const allowed = providerRateLimiter.checkSlidingWindow('ip-api', 45, 60000);
+  if (!allowed) {
+    console.log(`[Geo Fallback] ip-api.com rate limit reached (45/min). Skipping to next fallback provider for ${ip}`);
+    return null;
+  }
+
+  try {
+    const url = `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query`;
+    const response = await axios.get(url, {
+      timeout: 800,
+      headers: { 'User-Agent': 'TraceXMail-Forensic-Engine/1.0' }
+    });
+
+    const data = response.data;
+    if (data && data.status === 'success' && data.country) {
+      let asnStr = data.as || undefined;
+      if (asnStr && asnStr.includes(' ')) {
+        asnStr = asnStr.split(' ')[0];
+      }
+
+      return {
+        city: data.city || null,
+        country: data.country || null,
+        countryCode: data.countryCode || null,
+        region: data.regionName || data.region || null,
+        timeZone: data.timezone || null,
+        lat: typeof data.lat === 'number' ? data.lat : null,
+        lng: typeof data.lon === 'number' ? data.lon : null,
+        accuracyRadius: 25,
+        asn: asnStr,
+        org: data.org || data.isp || null,
+        isp: data.isp || data.org || null,
+        source: 'ip-api',
+        lookupMethod: 'ip-api.com Live API',
+        lookupStatus: 'success'
+      };
+    }
+  } catch {
+    // Timeout or network error - failover gracefully
+  }
+  return null;
+}
+
+/**
+ * Fallback Provider 2: ipwho.is (free, no key)
+ */
+async function fetchFromIpWhoIs(ip: string): Promise<Partial<GeoLocationResult> | null> {
+  try {
+    const url = `https://ipwho.is/${encodeURIComponent(ip)}`;
+    const response = await axios.get(url, {
+      timeout: 800,
+      headers: { 'User-Agent': 'TraceXMail-Forensic-Engine/1.0' }
+    });
+
+    const data = response.data;
+    if (data && data.success === true && data.country) {
+      const asnNum = data.connection?.asn;
+      const asnStr = asnNum ? `AS${asnNum}` : undefined;
+
+      return {
+        city: data.city || null,
+        country: data.country || null,
+        countryCode: data.country_code || null,
+        region: data.region || null,
+        continentCode: data.continent_code || null,
+        continentName: data.continent || null,
+        timeZone: data.timezone?.id || null,
+        isInEuropeanUnion: Boolean(data.is_eu),
+        lat: typeof data.latitude === 'number' ? data.latitude : null,
+        lng: typeof data.longitude === 'number' ? data.longitude : null,
+        accuracyRadius: 25,
+        asn: asnStr,
+        org: data.connection?.org || data.connection?.isp || null,
+        isp: data.connection?.isp || data.connection?.org || null,
+        source: 'ipwho',
+        lookupMethod: 'ipwho.is Live API',
+        lookupStatus: 'success'
+      };
+    }
+  } catch {
+    // Timeout or network error - failover gracefully
+  }
+  return null;
+}
+
+/**
+ * Fallback Provider 3: ipgeolocation.io (uses optional IPGEO_API_KEY)
+ */
+async function fetchFromIpGeoLocationIo(ip: string): Promise<Partial<GeoLocationResult> | null> {
+  const apiKey = process.env.IPGEO_API_KEY?.trim();
+  if (!apiKey) return null;
+
+  try {
+    const url = `https://api.ipgeolocation.io/ipgeo?apiKey=${encodeURIComponent(apiKey)}&ip=${encodeURIComponent(ip)}`;
+    const response = await axios.get(url, {
+      timeout: 800,
+      headers: { 'User-Agent': 'TraceXMail-Forensic-Engine/1.0' }
+    });
+
+    const data = response.data;
+    if (data && data.country_name) {
+      let asnStr = data.asn ? String(data.asn) : undefined;
+      if (asnStr && !asnStr.startsWith('AS')) {
+        asnStr = `AS${asnStr}`;
+      }
+
+      const latNum = parseFloat(data.latitude);
+      const lngNum = parseFloat(data.longitude);
+
+      return {
+        city: data.city || null,
+        country: data.country_name || null,
+        countryCode: data.country_code2 || null,
+        region: data.state_prov || null,
+        continentCode: data.continent_code || null,
+        continentName: data.continent_name || null,
+        timeZone: data.time_zone?.name || null,
+        lat: isNaN(latNum) ? null : latNum,
+        lng: isNaN(lngNum) ? null : lngNum,
+        accuracyRadius: 25,
+        asn: asnStr,
+        org: data.organization || data.isp || null,
+        isp: data.isp || data.organization || null,
+        source: 'ipgeolocation',
+        lookupMethod: 'ipgeolocation.io Live API',
+        lookupStatus: 'success'
+      };
+    }
+  } catch {
+    // Timeout or network error
+  }
+  return null;
+}
+
+/**
+ * Resolves IP Geolocation with multi-tier fallback chain:
+ * 1. Local MaxMind .mmdb
+ * 2. ip-api.com (rate limited)
+ * 3. ipwho.is
+ * 4. ipgeolocation.io (with key)
+ * 5. Honest 'unavailable' without fabrication
+ */
+export async function resolveIpGeolocationWithFallback(ip?: string): Promise<GeoLocationResult> {
+  if (!ip || ip === 'UNKNOWN' || ip === '127.0.0.1' && !ip.includes('.')) {
     return {
       ip: ip || 'UNKNOWN',
       isPrivate: false,
       isRfc1918: false,
       classification: classifyIp(undefined),
-      city: 'Unknown Origin',
-      country: 'Unverified Infrastructure',
-      countryCode: 'UNMAPPED',
+      city: null,
+      country: null,
+      countryCode: null,
       rirCountry: null,
       countryMismatch: false,
-      source: 'UNRESOLVED_NO_IP',
+      source: 'unavailable',
+      lookupStatus: 'not_applicable',
       lookupMethod: 'NO_IP_PROVIDED'
     };
   }
 
-  // Check cache first
+  const now = Date.now();
+
+  // 1. Check in-memory cache with TTL validation
   const cached = GEO_CACHE.get(ip);
-  if (cached) return cached;
+  if (cached && (cached.result.isPrivate || cached.expiresAt > now)) {
+    return cached.result;
+  }
 
   const classification = classifyIp(ip);
 
-  // 1. Private RFC 1918 / Loopback / APIPA
+  // 2. Private RFC 1918 / Loopback / APIPA
   if (classification.isPrivate) {
     const result: GeoLocationResult = {
       ip,
@@ -98,158 +262,182 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
       org: classification.description,
       isp: 'Corporate Intranet / Data Center Segment',
       reverseDns: 'Local Internal Hostname / No Public PTR',
-      lat: undefined,
-      lng: undefined,
+      lat: null,
+      lng: null,
       abuseScore: 0,
       isBlacklisted: false,
       isProxyOrVpn: false,
       isTor: false,
       infra: null,
       source: 'RFC_1918_CLASSIFIER',
+      lookupStatus: 'not_applicable',
       lookupMethod: 'RFC 1918 Private Subnet Demarcation'
     };
-    GEO_CACHE.set(ip, result);
+    GEO_CACHE.set(ip, { result, expiresAt: now + CACHE_TTL_MS });
     return result;
   }
 
-  // 2. Query MaxMind GeoLite2-City & ASN engine + Independent Signals (Tor, VPN/Hosting, RIR)
-  const maxmindRecord = maxMindDb.lookupCity(ip);
-  const reverseDns = await resolvePtr(ip);
+  // 3. Independent Network Signals (Tor, VPN/Hosting infra, RIR country, Reverse DNS)
+  const [reverseDns, rirCountry] = await Promise.all([
+    resolvePtr(ip),
+    Promise.resolve(getRegisteredCountry(ip))
+  ]);
+
   const torSignal = isTorExitNode(ip);
   const infraSignal = classifyInfra(ip);
-  const rirCountry = getRegisteredCountry(ip);
 
-  if (maxmindRecord) {
-    const isTor = Boolean(maxmindRecord.traits?.is_tor_exit_node) || torSignal;
-    const isProxyOrVpn = isTor || Boolean(maxmindRecord.traits?.is_anonymous_proxy) || infraSignal === 'vpn';
-    const isHosting = Boolean(maxmindRecord.traits?.is_hosting_provider) || infraSignal === 'hosting';
-    const maxmindCc = maxmindRecord.country?.iso_code;
+  // 4. Primary Tier: Local MaxMind binary .mmdb lookup
+  let resolvedData: Partial<GeoLocationResult> | null = null;
+  const maxmindRecord = maxMindDb.lookupCity(ip);
+
+  if (maxmindRecord && (maxmindRecord.country?.names?.en || maxmindRecord.country?.iso_code)) {
+    resolvedData = {
+      city: maxmindRecord.city?.names?.en || null,
+      country: maxmindRecord.country?.names?.en || null,
+      countryCode: maxmindRecord.country?.iso_code || null,
+      region: maxmindRecord.subdivisions?.[0]?.names?.en || maxmindRecord.subdivisions?.[0]?.iso_code || null,
+      continentCode: maxmindRecord.continent?.code || null,
+      continentName: maxmindRecord.continent?.names?.en || null,
+      timeZone: maxmindRecord.location?.time_zone || null,
+      isInEuropeanUnion: Boolean(maxmindRecord.country?.is_in_european_union),
+      lat: maxmindRecord.location?.latitude ?? null,
+      lng: maxmindRecord.location?.longitude ?? null,
+      accuracyRadius: maxmindRecord.location?.accuracy_radius || 20,
+      asn: maxmindRecord.traits?.autonomous_system_number ? `AS${maxmindRecord.traits.autonomous_system_number}` : undefined,
+      org: maxmindRecord.traits?.autonomous_system_organization || maxmindRecord.traits?.organization || null,
+      isp: maxmindRecord.traits?.isp || maxmindRecord.traits?.autonomous_system_organization || null,
+      source: 'maxmind-local',
+      lookupMethod: 'MaxMind GeoLite2 Local Database',
+      lookupStatus: 'success'
+    };
+  }
+
+  // 5. Secondary Tier: Fallback Chain (if local DB had no match or was unmapped)
+  if (!resolvedData) {
+    // Try Fallback 1: ip-api.com
+    resolvedData = await fetchFromIpApi(ip);
+
+    // Try Fallback 2: ipwho.is
+    if (!resolvedData) {
+      resolvedData = await fetchFromIpWhoIs(ip);
+    }
+
+    // Try Fallback 3: ipgeolocation.io
+    if (!resolvedData) {
+      resolvedData = await fetchFromIpGeoLocationIo(ip);
+    }
+  }
+
+  // 6. Assemble complete GeoLocationResult
+  if (resolvedData && (resolvedData.country || resolvedData.countryCode)) {
+    const isTor = Boolean(resolvedData.isTor) || torSignal;
+    const isProxyOrVpn = isTor || Boolean(resolvedData.isProxyOrVpn) || infraSignal === 'vpn';
+    const isHosting = infraSignal === 'hosting';
+
+    const countryCode = resolvedData.countryCode || null;
     const countryMismatch = Boolean(
-      maxmindCc &&
-      maxmindCc !== 'XX' &&
+      countryCode &&
+      countryCode !== 'XX' &&
+      countryCode !== 'LAN' &&
       rirCountry &&
       rirCountry !== 'ZZ' &&
-      maxmindCc.toUpperCase() !== rirCountry.toUpperCase()
+      countryCode.toUpperCase() !== rirCountry.toUpperCase()
     );
 
     const abuseScore = isTor ? 88 : (infraSignal === 'vpn' ? 50 : (isHosting ? 25 : 0));
 
-    const result: GeoLocationResult = {
+    const finalResult: GeoLocationResult = {
       ip,
       isPrivate: false,
       isRfc1918: false,
       classification,
-      city: maxmindRecord.city?.names?.en || 'Unknown City',
-      country: maxmindRecord.country?.names?.en || 'Unknown Country',
-      countryCode: maxmindRecord.country?.iso_code || 'XX',
+      city: resolvedData.city || null,
+      country: resolvedData.country || null,
+      countryCode,
       rirCountry,
       countryMismatch,
-      region: maxmindRecord.subdivisions?.[0]?.names?.en || maxmindRecord.subdivisions?.[0]?.iso_code || 'Unknown Region',
-      continentCode: maxmindRecord.continent?.code || 'XX',
-      continentName: maxmindRecord.continent?.names?.en || 'Global',
-      timeZone: maxmindRecord.location?.time_zone,
-      isInEuropeanUnion: Boolean(maxmindRecord.country?.is_in_european_union),
-      lat: maxmindRecord.location?.latitude,
-      lng: maxmindRecord.location?.longitude,
-      accuracyRadius: maxmindRecord.location?.accuracy_radius || 25,
-      asn: maxmindRecord.traits?.autonomous_system_number ? `AS${maxmindRecord.traits.autonomous_system_number}` : undefined,
-      org: maxmindRecord.traits?.autonomous_system_organization || maxmindRecord.traits?.organization || 'Unknown ASN',
-      isp: maxmindRecord.traits?.isp || maxmindRecord.traits?.autonomous_system_organization || 'Internet Service Provider',
-      reverseDns: reverseDns || (isTor ? `tor-exit-${ip.replace(/\./g, '-')}.torproject.org` : undefined),
+      region: resolvedData.region || null,
+      continentCode: resolvedData.continentCode || null,
+      continentName: resolvedData.continentName || null,
+      timeZone: resolvedData.timeZone || null,
+      isInEuropeanUnion: resolvedData.isInEuropeanUnion ?? null,
+      lat: resolvedData.lat ?? null,
+      lng: resolvedData.lng ?? null,
+      accuracyRadius: resolvedData.accuracyRadius || 25,
+      asn: resolvedData.asn || null,
+      org: resolvedData.org || null,
+      isp: resolvedData.isp || resolvedData.org || null,
+      reverseDns: reverseDns || (isTor ? `tor-exit-${ip.replace(/\./g, '-')}.torproject.org` : null),
       isTor,
       isProxyOrVpn,
       infra: infraSignal || (isTor ? 'vpn' : isHosting ? 'hosting' : null),
       abuseScore,
       isBlacklisted: isTor,
-      source: 'MAXMIND_GEOLITE2_CITY',
-      lookupMethod: 'MaxMind GeoLite2-City Database Engine'
+      source: (resolvedData.source as any) || 'unavailable',
+      lookupMethod: resolvedData.lookupMethod || 'Live Geolocation Resolution',
+      lookupStatus: 'success'
     };
 
-    GEO_CACHE.set(ip, result);
-    return result;
+    GEO_CACHE.set(ip, { result: finalResult, expiresAt: now + CACHE_TTL_MS });
+    return finalResult;
   }
 
-  // 3. Unresolved fallback with explicit IPv6 demarcation
-  const isIpv6 = ip.includes(':');
-  let fallbackCity = 'External Relay';
-  let fallbackCountry = 'Global Public Network';
-  let fallbackCountryCode = 'XX';
-  let fallbackOrg = 'Autonomous Public Gateway';
-  let fallbackAsn: string | undefined = undefined;
-
-  if (isIpv6) {
-    fallbackCity = 'Public IPv6 Relay (Unmapped Subnet)';
-    fallbackCountry = 'IPv6 Global Routing Space';
-    fallbackCountryCode = 'V6';
-    fallbackOrg = 'IPv6 Transit Provider';
-
-    if (reverseDns) {
-      if (reverseDns.includes('google.com') || reverseDns.includes('1e100.net')) {
-        fallbackOrg = 'Google LLC';
-        fallbackAsn = 'AS15169';
-        fallbackCity = 'Mountain View (Google Relay)';
-        fallbackCountry = 'United States';
-        fallbackCountryCode = 'US';
-      } else if (reverseDns.includes('outlook.com') || reverseDns.includes('microsoft.com')) {
-        fallbackOrg = 'Microsoft Corporation';
-        fallbackAsn = 'AS8075';
-        fallbackCity = 'Redmond (Microsoft Relay)';
-        fallbackCountry = 'United States';
-        fallbackCountryCode = 'US';
-      } else if (reverseDns.includes('linkedin.com')) {
-        fallbackOrg = 'LinkedIn Corporation';
-        fallbackAsn = 'AS55113';
-        fallbackCity = 'Sunnyvale (LinkedIn Relay)';
-        fallbackCountry = 'United States';
-        fallbackCountryCode = 'US';
-      }
-    }
-  }
-
+  // 7. Strict Anti-Fabrication Final Unresolved State
+  // If all local and remote lookups fail, never guess or fabricate. Return honest null fields.
   const isTor = torSignal;
   const isProxyOrVpn = isTor || infraSignal === 'vpn';
-  const countryMismatch = Boolean(
-    fallbackCountryCode &&
-    fallbackCountryCode !== 'XX' &&
-    fallbackCountryCode !== 'V6' &&
-    rirCountry &&
-    fallbackCountryCode.toUpperCase() !== rirCountry.toUpperCase()
-  );
 
-  const fallbackResult: GeoLocationResult = {
+  const unmappedResult: GeoLocationResult = {
     ip,
     isPrivate: false,
     isRfc1918: false,
     classification,
-    city: fallbackCity,
-    country: fallbackCountry,
-    countryCode: fallbackCountryCode,
+    city: null,
+    country: null,
+    countryCode: null,
     rirCountry,
-    countryMismatch,
-    org: fallbackOrg,
-    isp: fallbackOrg,
-    asn: fallbackAsn,
-    reverseDns,
+    countryMismatch: false,
+    region: null,
+    continentCode: null,
+    continentName: null,
+    timeZone: null,
+    isInEuropeanUnion: null,
+    lat: null,
+    lng: null,
+    accuracyRadius: null,
+    asn: null,
+    org: null,
+    isp: null,
+    reverseDns: reverseDns || null,
     isTor,
     isProxyOrVpn,
     infra: infraSignal || (isTor ? 'vpn' : null),
     abuseScore: isTor ? 88 : (infraSignal === 'vpn' ? 50 : 0),
     isBlacklisted: isTor,
-    source: isIpv6 ? 'MAXMIND_IPV6_ROUTING' : 'MAXMIND_FALLBACK',
-    lookupMethod: isIpv6 ? 'IPv6 Global Subnet Resolution' : 'Standard Public Gateway Classification'
+    source: 'unavailable',
+    lookupMethod: 'Unmapped Public Address (All Providers Unavailable)',
+    lookupStatus: 'unavailable'
   };
 
-  GEO_CACHE.set(ip, fallbackResult);
-  return fallbackResult;
+  // Cache unmapped lookups with shorter 10-minute TTL to re-attempt later
+  GEO_CACHE.set(ip, { result: unmappedResult, expiresAt: now + 10 * 60 * 1000 });
+  return unmappedResult;
 }
 
 /**
- * Batch resolve hops with MaxMind Geolocation.
+ * Standard alias matching the existing interface for seamless backward-compatibility.
+ */
+export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResult> {
+  return resolveIpGeolocationWithFallback(ip);
+}
+
+/**
+ * Batch resolve hops with MaxMind Geolocation and fallback chain.
  */
 export async function enrichHopsWithGeolocation(hops: Array<{ fromIp?: string; byIp?: string }>): Promise<GeoLocationResult[]> {
   const tasks = hops.map(async (hop) => {
     const targetIp = hop.fromIp || hop.byIp;
-    return resolveIpGeolocation(targetIp);
+    return resolveIpGeolocationWithFallback(targetIp);
   });
   return Promise.all(tasks);
 }

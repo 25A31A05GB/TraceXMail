@@ -19,6 +19,10 @@ import { extractHopsAndOriginIp, classifyIp } from '../src/server/ipExtractor';
 import { parseRawEml } from '../src/utils/parser';
 import { analyzeTyposquatting } from '../src/server/domainService';
 import { classifyEmailForensics } from '../src/server/classifier';
+import { generateAttackNarrative } from '../src/utils/attackNarrative';
+import { computeCounterfactuals } from '../src/utils/counterfactual';
+import { mapComplianceFlags } from '../src/utils/complianceMapping';
+import { SAMPLE_ANALYSES } from '../src/data/samples';
 
 let testsPassed = 0;
 let testsFailed = 0;
@@ -218,6 +222,69 @@ Received: from client.internal.lan (unknown [192.168.10.50]) by mail-relay.strip
     assert(content.includes('Received:'), `${filename} contains Received hops`);
     assert(content.includes('Authentication-Results:'), `${filename} contains Authentication-Results`);
   }
+
+  // --------------------------------------------------------------------------
+  // Test Group 10: Deep Analysis Forensic Synthesis (Narratives, Counterfactuals, Compliance)
+  // --------------------------------------------------------------------------
+  console.log('\n[Group 10: Deep Analysis Pure Synthesis Engines]');
+
+  // 1. Attack Narrative Synthesis
+  const irsSample = SAMPLE_ANALYSES.find(s => s.id === 'sample-irs-fraud') || SAMPLE_ANALYSES[0];
+  const cleanLegitAnalysis = {
+    headers: {
+      from: '"Tech Newsletter" <news@tech-insights.io>',
+      fromEmail: 'news@tech-insights.io',
+      subject: 'Weekly Developer Digest - Issue #42',
+      returnPath: 'bounce@tech-insights.io',
+      replyTo: 'editor@tech-insights.io'
+    },
+    auth: {
+      spf: { status: 'PASS' },
+      dkim: { status: 'PASS' },
+      dmarc: { status: 'PASS' }
+    },
+    threatScore: 5,
+    classification: 'LEGITIMATE',
+    riskScore: 5,
+    heuristics: []
+  };
+
+  const irsNarrative = generateAttackNarrative(irsSample);
+  assert(typeof irsNarrative === 'string' && irsNarrative.length > 50, 'Attack narrative generated for malicious sample');
+  assert(!irsNarrative.includes('undefined') && !irsNarrative.includes('null') && !irsNarrative.includes('NaN'), 'Attack narrative has zero undefined/null/NaN values');
+
+  const legitNarrative = generateAttackNarrative(cleanLegitAnalysis);
+  assert(typeof legitNarrative === 'string' && legitNarrative.includes('alignment'), 'Legitimate sample receives clean non-malicious narrative');
+
+  // Graceful degradation on empty object
+  const emptyNarrative = generateAttackNarrative({});
+  assert(typeof emptyNarrative === 'string' && emptyNarrative.length > 0, 'Graceful narrative degradation on empty analysis');
+  const nullNarrative = generateAttackNarrative(null);
+  assert(typeof nullNarrative === 'string' && nullNarrative.includes('No forensic telemetry'), 'Graceful narrative degradation on null analysis');
+
+  // 2. Counterfactual Simulation
+  const irsCounterfactuals = computeCounterfactuals(irsSample);
+  assert(Array.isArray(irsCounterfactuals) && irsCounterfactuals.length === 5, 'Generated 5 forensic pillar counterfactuals');
+  assert(irsCounterfactuals.some(c => c.isDecisive), 'Identified decisive forensic pillar in counterfactuals');
+  
+  for (const cf of irsCounterfactuals) {
+    assert(cf.scoreIfFlipped >= 0 && cf.scoreIfFlipped <= 100, `Counterfactual score [${cf.scoreIfFlipped}] bounded [0, 100]`);
+    assert(Boolean(cf.verdictIfFlipped), `Counterfactual verdict populated: ${cf.verdictIfFlipped}`);
+    assert(Boolean(cf.actionText), `Counterfactual actionText populated: ${cf.actionText}`);
+  }
+
+  // Graceful degradation on empty/null
+  const emptyCf = computeCounterfactuals(null);
+  assert(Array.isArray(emptyCf) && emptyCf.length === 0, 'Graceful empty array on null counterfactual input');
+
+  // 3. Compliance Flag Mapping
+  const citibankSample = SAMPLE_ANALYSES.find(s => s.id === 'sample-citibank-wire') || irsSample;
+  const citibankFlags = mapComplianceFlags(citibankSample);
+  assert(Array.isArray(citibankFlags) && citibankFlags.length > 0, 'Regulatory breach flags mapped for financial/wire phish');
+  assert(citibankFlags.some(f => f.regime.includes('CERT-In')), 'CERT-In mandatory reporting flag triggered for high severity phish');
+
+  const legitFlags = mapComplianceFlags(cleanLegitAnalysis);
+  assert(Array.isArray(legitFlags) && legitFlags.length === 0, 'Zero compliance breach flags mapped for legitimate email');
 
   // --------------------------------------------------------------------------
   // Final Test Summary

@@ -60,7 +60,12 @@ async function runIntelligenceTests() {
   // Unmapped public IP that does not match local sample blocks
   const unmappedPublic = await resolveGeoIp('193.0.0.1');
   assert(unmappedPublic.city === null, 'Unmapped public IP returns null city (NEVER fake Tokyo/London/Sofia)');
-  assert(unmappedPublic.latitude === null && unmappedPublic.longitude === null, 'Unmapped public IP returns null coordinates');
+  assert(
+    unmappedPublic.lookupStatus === 'unavailable'
+      ? (unmappedPublic.latitude === null && unmappedPublic.longitude === null)
+      : (typeof unmappedPublic.latitude === 'number' && unmappedPublic.city === null),
+    'Unmapped public IP returns null coordinates or authentic un-fabricated country coords'
+  );
   assert(unmappedPublic.lookupStatus === 'unavailable' || unmappedPublic.lookupStatus === 'success', 'Unmapped public IP has explicit forensic lookup status');
   assert(unmappedPublic.provenance !== undefined, 'Unmapped public IP includes full provenance metadata');
 
