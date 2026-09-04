@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { EmailAnalysis, EvidenceCardData } from '../types';
-import { Printer, Copy, Check, ExternalLink, X, Tag, ChevronDown, ChevronUp, AlertCircle, AlertTriangle, Scale, ShieldAlert, CheckCircle2, Crosshair, Sparkles, AlertOctagon } from 'lucide-react';
+import { Printer, Copy, Check, ExternalLink, X, Tag, ChevronDown, ChevronUp, AlertCircle, AlertTriangle, Scale, ShieldAlert, CheckCircle2, Crosshair, Sparkles, AlertOctagon, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { sha256Sync, generateEvidenceId } from '../utils/crypto';
 import { resolveOrigin, formatOriginLocation, formatOriginIp } from '../utils/originResolution';
 import { getStandardizedVerdict } from '../utils/verdict';
 import { generateAttackNarrative } from '../utils/attackNarrative';
 import { computeCounterfactuals, CounterfactualFactor } from '../utils/counterfactual';
 import { mapComplianceFlags, ComplianceFlag } from '../utils/complianceMapping';
+import { exportEvidenceAsPdf, exportEvidenceAsImage } from '../utils/exportEvidence';
 
 /**
  * Pure mapping helper that converts an EmailAnalysis object to the EvidenceCardData schema.
@@ -283,6 +284,8 @@ export function EvidenceTagCard({
   const [counterfactualsOpen, setCounterfactualsOpen] = useState(true);
   const [complianceOpen, setComplianceOpen] = useState(true);
   const [senderAnomalyOpen, setSenderAnomalyOpen] = useState(true);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingImage, setExportingImage] = useState(false);
 
   // Compute final case card data from analysis or direct data prop
   const cardData: EvidenceCardData = directData || (analysis ? mapAnalysisToEvidenceCardData(analysis) : {
@@ -371,6 +374,36 @@ export function EvidenceTagCard({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleExportPdf = async () => {
+    if (!cardRef.current) return;
+    setExportingPdf(true);
+    try {
+      const filename = `TraceXMail-Evidence-${cardData.evidenceId || cardData.caseId || 'artifact'}.pdf`;
+      await exportEvidenceAsPdf(cardRef.current, filename, {
+        caseId: cardData.caseId,
+        evidenceId: cardData.evidenceId,
+        title: cardData.subject
+      });
+    } catch (err) {
+      console.error('Failed to export Evidence as PDF:', err);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportImage = async () => {
+    if (!cardRef.current) return;
+    setExportingImage(true);
+    try {
+      const filename = `TraceXMail-Evidence-${cardData.evidenceId || cardData.caseId || 'artifact'}.png`;
+      await exportEvidenceAsImage(cardRef.current, filename);
+    } catch (err) {
+      console.error('Failed to export Evidence as Image:', err);
+    } finally {
+      setExportingImage(false);
+    }
   };
 
   const handleCopySummary = () => {
