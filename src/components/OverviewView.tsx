@@ -48,6 +48,7 @@ import { lookupMaxMindGeo } from '../utils/maxmindService';
 import { WhyAffordance } from './WhyAffordance';
 import { RelationshipGraphView } from './RelationshipGraphView';
 import { PlainLanguageSummaryCard } from './PlainLanguageSummaryCard';
+import { getStandardizedVerdict } from '../utils/verdict';
 import { JargonTooltip } from './JargonTooltip';
 
 interface AICaseSummaryProps {
@@ -255,6 +256,7 @@ export function OverviewView({
   onOpenNewModal,
   onOpenReportModal,
 }: OverviewViewProps) {
+  const stdVerdict = getStandardizedVerdict(analysis);
   const [copiedLink, setCopiedLink] = useState<string | null>(null);
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
   const [reverifying, setReverifying] = useState<boolean>(false);
@@ -388,7 +390,7 @@ export function OverviewView({
       return rawIntel;
     }
     const detectedDomain = analysis.headers.fromEmail?.split('@')[1] || analysis.auth?.spf?.domain || 'sender-domain.com';
-    const isPhish = analysis.verdict === 'MALICIOUS PHISH' || (analysis.riskScore !== undefined && analysis.riskScore >= 75);
+    const isPhish = stdVerdict.isMalicious;
     const hasSpf = Boolean(analysis.auth?.spf?.record);
     const hasDmarc = Boolean(analysis.auth?.dmarc?.policy);
 
@@ -1588,29 +1590,17 @@ export function OverviewView({
                 ML Probability Score
               </span>
               <span
-                className={`text-xs font-bold font-mono ${
-                  analysis.riskScore > 70
-                    ? 'text-rose-500'
-                    : analysis.riskScore > 30
-                    ? 'text-amber-400'
-                    : 'text-emerald-400'
-                }`}
+                className={`text-xs font-bold font-mono ${stdVerdict.colors.text}`}
               >
-                {(analysis.mlConfidence * 100).toFixed(1)}% {analysis.verdict}
+                {analysis.mlConfidence ? `${(analysis.mlConfidence * 100).toFixed(1)}% ` : ''}{stdVerdict.verdict} ({stdVerdict.score}/100)
               </span>
             </div>
 
             {/* Progress bar */}
             <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
               <div
-                className={`h-full transition-all duration-500 ${
-                  analysis.riskScore > 70
-                    ? 'bg-rose-600'
-                    : analysis.riskScore > 30
-                    ? 'bg-amber-500'
-                    : 'bg-emerald-500'
-                }`}
-                style={{ width: `${Math.max(analysis.riskScore, 4)}%` }}
+                className={`h-full transition-all duration-500 ${stdVerdict.colors.bar}`}
+                style={{ width: `${Math.max(stdVerdict.score, 4)}%` }}
               ></div>
             </div>
 

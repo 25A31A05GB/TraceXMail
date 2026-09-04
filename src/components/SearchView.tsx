@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 interface SearchViewProps {
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
@@ -56,7 +57,8 @@ export function SearchView({
     return dataset.filter(analysis => {
       // Verdict check
       if (verdictFilter !== 'ALL') {
-        if (analysis.threatVerdict !== verdictFilter) return false;
+        const std = getStandardizedVerdict(analysis);
+        if (std.category !== verdictFilter && std.verdict !== verdictFilter && std.severity !== verdictFilter) return false;
       }
       // Auth check
       if (authFilter !== 'ALL') {
@@ -181,8 +183,7 @@ export function SearchView({
           </div>
         ) : (
           filteredResults.map((analysis) => {
-            const isMalicious = analysis.threatVerdict === 'MALICIOUS';
-            const isSuspicious = analysis.threatVerdict === 'SUSPICIOUS';
+            const stdVerdict = getStandardizedVerdict(analysis);
 
             return (
               <div
@@ -192,14 +193,8 @@ export function SearchView({
               >
                 <div className="space-y-1.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2.5">
-                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider ${
-                      isMalicious
-                        ? 'bg-red-950 border border-red-800 text-red-400'
-                        : isSuspicious
-                        ? 'bg-amber-950 border border-amber-800 text-amber-400'
-                        : 'bg-emerald-950 border border-emerald-800 text-emerald-400'
-                    }`}>
-                      {analysis.threatVerdict}
+                    <span className={`px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border ${stdVerdict.colors.badge}`}>
+                      {stdVerdict.verdict}
                     </span>
 
                     <span className="text-xs font-mono text-slate-400">
@@ -219,7 +214,7 @@ export function SearchView({
                   <div className="flex flex-wrap items-center gap-4 text-xs text-slate-400 font-mono">
                     <span className="truncate">From: {analysis.from}</span>
                     <span>•</span>
-                    <span>Score: {analysis.threatScore}/100</span>
+                    <span>Score: {stdVerdict.score}/100</span>
                     <span>•</span>
                     <span>{analysis.hops?.length || 0} Hops</span>
                   </div>

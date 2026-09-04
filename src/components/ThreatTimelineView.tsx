@@ -28,6 +28,7 @@ import {
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { forensicApi } from '../lib/api';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 interface ThreatTimelineViewProps {
   analysis: EmailAnalysis;
@@ -128,6 +129,7 @@ export function ThreatTimelineView({
     const seenIds = new Set<string>();
 
     // 1. Add current analysis entry
+    const curStd = getStandardizedVerdict(analysis);
     const currentIncident: TimelineIncident = {
       id: analysis.id,
       date: analysis.analyzedAt || analysis.headers.date || new Date().toUTCString(),
@@ -142,13 +144,13 @@ export function ThreatTimelineView({
       asn: analysis.hops[0]?.asn || 'Unmapped ASN',
       asnOrg: analysis.hops[0]?.org || 'Unmapped Provider',
       location: analysis.hops[0]?.city ? `${analysis.hops[0].city}, ${analysis.hops[0].countryCode || ''}` : 'Relay Location: Unresolved',
-      verdict: analysis.verdict,
-      threatScore: analysis.riskScore,
+      verdict: curStd.verdict,
+      threatScore: curStd.score,
       spfStatus: (analysis.auth.spf.status as any) || 'FAIL',
       dkimStatus: (analysis.auth.dkim.status as any) || 'FAIL',
       dmarcStatus: (analysis.auth.dmarc.status as any) || 'REJECT',
       campaignName: 'Active Targeted Phishing Wave',
-      attackVector: analysis.verdict === 'MALICIOUS PHISH' ? 'Credential Harvesting & Domain Spoofing' : 'Suspicious Email Communication',
+      attackVector: curStd.isMalicious ? 'Credential Harvesting & Domain Spoofing' : 'Suspicious Email Communication',
       iocs: analysis.urls.map(u => u.domain).concat(analysis.attachments.map(a => a.filename)),
       heuristics: analysis.heuristics.map(h => h.title),
       isCurrentAnalysis: true,
@@ -172,6 +174,7 @@ export function ThreatTimelineView({
 
         if (matchesDomain || matchesIp || sample.headers.fromEmail === currentSenderEmail) {
           seenIds.add(sample.id);
+          const sampleStd = getStandardizedVerdict(sample);
           list.push({
             id: sample.id,
             date: sample.analyzedAt || sample.headers.date,
@@ -186,13 +189,13 @@ export function ThreatTimelineView({
             asn: sample.hops[0]?.asn || 'Unmapped ASN',
             asnOrg: sample.hops[0]?.org || 'Unmapped Provider',
             location: sample.hops[0]?.city ? `${sample.hops[0].city}, ${sample.hops[0].countryCode || ''}` : 'Relay Location: Unresolved',
-            verdict: sample.verdict,
-            threatScore: sample.riskScore,
+            verdict: sampleStd.verdict,
+            threatScore: sampleStd.score,
             spfStatus: (sample.auth.spf.status as any) || 'FAIL',
             dkimStatus: (sample.auth.dkim.status as any) || 'FAIL',
             dmarcStatus: (sample.auth.dmarc.status as any) || 'REJECT',
             campaignName: 'Historical Campaign Investigation',
-            attackVector: sample.verdict === 'MALICIOUS PHISH' ? 'Credential Phishing' : 'Standard Delivery',
+            attackVector: sampleStd.isMalicious ? 'Credential Phishing' : 'Standard Delivery',
             iocs: sample.urls.map(u => u.domain),
             heuristics: sample.heuristics.map(h => h.title),
             isCurrentAnalysis: false,
@@ -348,9 +351,9 @@ export function ThreatTimelineView({
 
       // Severity filter
       if (severityFilter === 'CRITICAL_HIGH') {
-        if (inc.threatScore < 70 && inc.verdict !== 'MALICIOUS PHISH') return false;
+        if (inc.threatScore < 70 && !inc.verdict.includes('MALICIOUS')) return false;
       } else if (severityFilter === 'MALICIOUS_ONLY') {
-        if (inc.verdict !== 'MALICIOUS PHISH') return false;
+        if (!inc.verdict.includes('MALICIOUS') && inc.threatScore < 80) return false;
       }
 
       return true;
@@ -360,7 +363,7 @@ export function ThreatTimelineView({
   // Analytics metrics calculations
   const metrics = useMemo(() => {
     const totalCount = incidents.length;
-    const maliciousCount = incidents.filter(i => i.verdict === 'MALICIOUS PHISH').length;
+    const maliciousCount = incidents.filter(i => i.verdict.includes('MALICIOUS') || i.threatScore >= 80).length;
     const maxThreat = incidents.reduce((max, i) => Math.max(max, i.threatScore), 0);
     const uniqueIPs = new Set(incidents.map(i => i.originIp).filter(Boolean)).size;
     const uniqueASNs = new Set(incidents.map(i => i.asn).filter(Boolean)).size;
@@ -623,8 +626,8 @@ export function ThreatTimelineView({
           ) : (
             <div className="relative pl-6 space-y-6 border-l-2 border-slate-700/80 ml-4">
               {filteredIncidents.map((inc, index) => {
-                const isMalicious = inc.verdict === 'MALICIOUS PHISH';
-                const isSuspicious = inc.verdict === 'SUSPICIOUS';
+                const isMalicious = inc.verdict.includes('MALICIOUS') || inc.threatScore >= 80;
+                const isSuspicious = inc.verdict.includes('SUSPICIOUS') || (inc.threatScore >= 50 && !isMalicious);
 
                 return (
                   <div key={inc.id} className="relative group">

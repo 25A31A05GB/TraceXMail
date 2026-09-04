@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
   ShieldCheck, 
@@ -12,11 +12,13 @@ import {
   Shield,
   Scale,
   EyeOff,
-  FlaskConical
+  FlaskConical,
+  UserCheck
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { PrivacyConfig } from '../utils/privacyCompliance';
+import { subscribeSession, SessionUser } from '../lib/api';
 
 interface HeaderProps {
   currentAnalysis: EmailAnalysis;
@@ -40,6 +42,13 @@ export function Header({
   onToggleDemoCases
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+
+  useEffect(() => {
+    return subscribeSession((sess) => {
+      setSessionUser(sess.user);
+    });
+  }, []);
 
   const getVerdictBadge = (verdict: string) => {
     switch (verdict?.toUpperCase()) {
@@ -131,6 +140,19 @@ export function Header({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2.5">
+        {/* Active Authenticated Session Badge */}
+        <div
+          className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-emerald-950/40 border-emerald-700/60 text-emerald-300 text-xs shadow-sm"
+          title={`Active Verified Session: ${sessionUser?.email || 'analyst@acmedefense.sec'}\nRole: ${sessionUser?.role || 'analyst'} (JWT in-memory)\nPII Access: Full Forensic Clearance`}
+        >
+          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+          <span className="text-slate-400 font-sans text-[11px]">Identity:</span>
+          <span className="font-semibold text-emerald-300 font-sans">
+            {sessionUser?.label || 'Demo Analyst Session'}
+          </span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+        </div>
+
         {onToggleDemoCases && (
           <button
             onClick={onToggleDemoCases}

@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { JargonTooltip } from './JargonTooltip';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 interface PlainLanguageSummaryCardProps {
   analysis: EmailAnalysis;
@@ -23,14 +24,11 @@ export function PlainLanguageSummaryCard({
   onToggleTechnicalDetails,
   isTechnicalExpanded = true
 }: PlainLanguageSummaryCardProps) {
-  const threatScore = typeof analysis.threatScore === 'number' && analysis.threatScore >= 0
-    ? analysis.threatScore
-    : (typeof analysis.riskScore === 'number' ? analysis.riskScore : 0);
-
-  const verdictRaw = (analysis.threatVerdict || analysis.verdict || 'SUSPICIOUS').toUpperCase();
-  const isMalicious = verdictRaw.includes('PHISH') || verdictRaw.includes('FRAUD') || verdictRaw.includes('IMPERSONAT') || verdictRaw.includes('MALICIOUS') || threatScore >= 70;
-  const isSuspicious = !isMalicious && (verdictRaw.includes('SUSPICIOUS') || threatScore >= 35);
-  const isSafe = !isMalicious && !isSuspicious;
+  const stdVerdict = getStandardizedVerdict(analysis);
+  const threatScore = stdVerdict.score;
+  const isMalicious = stdVerdict.isMalicious;
+  const isSuspicious = stdVerdict.isSuspicious;
+  const isSafe = stdVerdict.isSafe;
 
   // Cryptographic authentication checks
   const spfPass = analysis.auth?.spf?.status === 'PASS';

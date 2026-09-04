@@ -1,6 +1,7 @@
 import React, { useState, useEffect, FormEvent } from 'react';
 import {
   ShieldAlert,
+  Shield,
   Search,
   Filter,
   Plus,
@@ -29,6 +30,7 @@ import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
 import { mapBackendCaseToAnalysis } from '../utils/parser';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 interface CasesViewProps {
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
@@ -53,6 +55,7 @@ export function CasesView({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
+  const [maskPii, setMaskPii] = useState<boolean>(false);
 
   // Create Case Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -151,7 +154,10 @@ export function CasesView({
     setLoading(true);
     setFetchError(null);
     try {
-      const data = await forensicApi.getCases({ exclude_demo: !showDemoCases });
+      const data = await forensicApi.getCases({ 
+        exclude_demo: !showDemoCases,
+        mask_pii: maskPii ? true : undefined
+      });
       if (Array.isArray(data)) {
         setCases(data);
       } else {
@@ -166,10 +172,10 @@ export function CasesView({
     }
   };
 
-  // Trigger refetch on mount, explicit refresh signal, showDemoCases toggle, or new WebSocket alert activity
+  // Trigger refetch on mount, explicit refresh signal, showDemoCases toggle, maskPii toggle, or new WebSocket alert activity
   useEffect(() => {
     fetchCases();
-  }, [alerts, lastCreatedCaseId, refreshSignal, showDemoCases]);
+  }, [alerts, lastCreatedCaseId, refreshSignal, showDemoCases, maskPii]);
 
   // Periodic safety net polling interval (15s)
   useEffect(() => {
@@ -253,19 +259,22 @@ export function CasesView({
       console.warn('API error creating case, applying SAMPLE_ANALYSES fallback pattern:', err);
       // Fallback pattern matching the existing error resilience
       const chosenSamples = SAMPLE_ANALYSES.filter(s => selectedEmailIds.includes(s.id));
-      const fallbackMembers = (chosenSamples.length > 0 ? chosenSamples : SAMPLE_ANALYSES.slice(0, 2)).map(s => ({
-        id: s.id,
-        email_id: s.id,
-        subject: s.headers?.subject || 'Sample Phishing Email',
-        sender: s.headers?.from || 'Unknown Sender',
-        from: s.headers?.from || 'Unknown Sender',
-        recipient: s.headers?.to || '',
-        to: s.headers?.to || '',
-        date: s.headers?.date || new Date().toISOString(),
-        threat_score: s.riskScore || 85,
-        threat_verdict: s.verdict || 'MALICIOUS',
-        filename: (s as any).filename || `${s.id}.eml`
-      }));
+      const fallbackMembers = (chosenSamples.length > 0 ? chosenSamples : SAMPLE_ANALYSES.slice(0, 2)).map(s => {
+        const std = getStandardizedVerdict(s);
+        return {
+          id: s.id,
+          email_id: s.id,
+          subject: s.headers?.subject || 'Sample Phishing Email',
+          sender: s.headers?.from || 'Unknown Sender',
+          from: s.headers?.from || 'Unknown Sender',
+          recipient: s.headers?.to || '',
+          to: s.headers?.to || '',
+          date: s.headers?.date || new Date().toISOString(),
+          threat_score: std.score,
+          threat_verdict: std.verdict,
+          filename: (s as any).filename || `${s.id}.eml`
+        };
+      });
 
       const fallbackCase = {
         id: `CASE-FB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
@@ -396,6 +405,7 @@ export function CasesView({
     } catch (err) {
       console.warn('Fallback adding email to case locally:', err);
       const matchSample = SAMPLE_ANALYSES.find(s => s.id === memberId);
+      const matchStd = matchSample ? getStandardizedVerdict(matchSample) : null;
       const newMemberObj = {
         id: memberId,
         email_id: memberId,
@@ -405,8 +415,8 @@ export function CasesView({
         recipient: matchSample?.headers?.to || '',
         to: matchSample?.headers?.to || '',
         date: matchSample?.headers?.date || new Date().toISOString(),
-        threat_score: matchSample?.riskScore || 75,
-        threat_verdict: matchSample?.verdict || 'SUSPICIOUS'
+        threat_score: matchStd ? matchStd.score : 75,
+        threat_verdict: matchStd ? matchStd.verdict : 'SUSPICIOUS'
       };
       const updatedMembers = [...(selectedCaseDetail.members || []), newMemberObj];
       const updatedSuggested = (selectedCaseDetail.suggested_members || []).filter((s: any) => s.email_id !== memberId);
@@ -532,6 +542,19 @@ export function CasesView({
             </button>
           )}
 
+          <button
+            onClick={() => setMaskPii(!maskPii)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-mono transition-colors cursor-pointer ${
+              maskPii
+                ? 'bg-purple-950/70 border-purple-600 text-purple-300'
+                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+            }`}
+            title="Audit toggle: Forces query param mask_pii=true to test compliance masking on case records"
+          >
+            <Shield className={`w-3.5 h-3.5 ${maskPii ? 'text-purple-400' : 'text-slate-500'}`} />
+            <span>PII Masking: <strong>{maskPii ? 'MASKED' : 'CLEAR'}</strong></span>
+          </button>
+
           <Filter className="w-4 h-4 text-slate-400" />
           <select
             value={sourceFilter}
@@ -611,8 +634,9 @@ export function CasesView({
                 filteredCases.map((c, i) => {
                   const title = c.title || c.name || c.headers?.subject || c.subject || 'Untitled Forensic Case';
                   const desc = c.analyst_notes || c.description || c.headers?.from || c.from || 'Standard message analysis';
-                  const threatScore = c.threat_score ?? c.riskScore ?? c.threatScore ?? 85;
-                  const severity = (c.severity || c.threat || c.verdict || 'HIGH').toUpperCase();
+                  const stdVerdict = getStandardizedVerdict(c);
+                  const threatScore = stdVerdict.score;
+                  const severity = (c.severity || c.threat || stdVerdict.severity || 'HIGH').toUpperCase();
                   const status = (c.status || 'open').toLowerCase();
                   const totalLinked = c.total_emails ?? (c.members?.length || c.email_ids?.length || 1);
                   const suggestedCount = c.suggested_members?.length || 0;
@@ -702,9 +726,7 @@ export function CasesView({
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-2 bg-slate-800 rounded-full overflow-hidden">
                             <div
-                              className={`h-full ${
-                                threatScore > 75 ? 'bg-rose-500' : threatScore > 40 ? 'bg-amber-500' : 'bg-emerald-500'
-                              }`}
+                              className={`h-full ${stdVerdict.colors.bar}`}
                               style={{ width: `${Math.min(threatScore, 100)}%` }}
                             ></div>
                           </div>
@@ -950,9 +972,14 @@ export function CasesView({
                           </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                          <span className="px-1.5 py-0.5 bg-slate-800 text-slate-300 text-[10px] rounded">
-                            Score {sample.riskScore}/100
-                          </span>
+                          {(() => {
+                            const sampleStd = getStandardizedVerdict(sample);
+                            return (
+                              <span className={`px-1.5 py-0.5 text-[10px] rounded border ${sampleStd.colors.badge}`}>
+                                {sampleStd.verdict} ({sampleStd.score}/100)
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     );

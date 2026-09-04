@@ -56,6 +56,8 @@ import { forensicApi, DashboardStats, HealthResponse } from '../lib/api';
 import { EmailAnalysis } from '../types';
 import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
 import { SAMPLE_ANALYSES } from '../data/samples';
+import { getStandardizedVerdict } from '../utils/verdict';
+import { NetworkIntelligenceCard } from './NetworkIntelligenceCard';
 
 interface DashboardViewProps {
   onSelectAnalysis?: (analysis: EmailAnalysis) => void;
@@ -790,6 +792,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
 
       {/* ANALYST FORENSIC TRIAGE CONSOLE: Fraud Score, Spoofing, Trace Path, Geolocation & Attribution */}
       {(() => {
+        const focusVerdict = getStandardizedVerdict(activeFocusAnalysis);
         const focusOriginHop = activeFocusAnalysis.hops?.find(h => h.isOrigin) || activeFocusAnalysis.hops?.[0];
         const originIp = focusOriginHop?.fromIp || '185.220.101.5';
         const isSpfPass = activeFocusAnalysis.auth?.spf?.status === 'PASS';
@@ -872,23 +875,18 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                   </div>
 
                   <div className="flex items-baseline gap-2">
-                    <span className={`text-3xl font-black font-mono ${
-                      activeFocusAnalysis.riskScore >= 70 ? 'text-rose-400' : activeFocusAnalysis.riskScore >= 30 ? 'text-amber-400' : 'text-emerald-400'
-                    }`}>
-                      {activeFocusAnalysis.riskScore}
+                    <span className={`text-3xl font-black font-mono ${focusVerdict.colors.text}`}>
+                      {focusVerdict.score}
                     </span>
                     <span className="text-xs text-slate-500 font-mono">/ 100</span>
                   </div>
 
-                  <div className="mt-2">
-                    <span className={`inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                      activeFocusAnalysis.verdict === 'MALICIOUS PHISH' || activeFocusAnalysis.verdict === 'MALICIOUS'
-                        ? 'bg-rose-950/80 text-rose-300 border-rose-700/60'
-                        : activeFocusAnalysis.verdict === 'SUSPICIOUS'
-                        ? 'bg-amber-950/80 text-amber-300 border-amber-700/60'
-                        : 'bg-emerald-950/80 text-emerald-300 border-emerald-700/60'
-                    }`}>
-                      {activeFocusAnalysis.verdict}
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span className={`inline-block text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${focusVerdict.colors.badge}`}>
+                      {focusVerdict.verdict}
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-400">
+                      {focusVerdict.severityLabel}
                     </span>
                   </div>
                 </div>
@@ -896,7 +894,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                 <div className="mt-4 pt-3 border-t border-slate-800/80 text-[11px] space-y-1 font-mono text-slate-400">
                   <div className="flex justify-between">
                     <span>NLP Deception:</span>
-                    <span className="text-slate-200 font-bold">{activeFocusAnalysis.riskScore >= 60 ? '94.2%' : '12.0%'}</span>
+                    <span className="text-slate-200 font-bold">{focusVerdict.score >= 60 ? '94.2%' : '12.0%'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>ML Confidence:</span>
@@ -1831,6 +1829,11 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Analyst Workstation & Network Intelligence Telemetry */}
+      <div className="mt-6">
+        <NetworkIntelligenceCard />
       </div>
     </div>
   )}

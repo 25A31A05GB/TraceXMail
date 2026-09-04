@@ -473,9 +473,29 @@ const IV_LENGTH = 12; // 96-bit standard for GCM
 const AUTH_TAG_LENGTH = 16;
 const ENCRYPTED_PREFIX = 'enc:aes-gcm:v1:';
 
+let processLocalEncryptionKey: string | null = null;
+
+function resolveMasterSecret(): string {
+  if (process.env.TOKEN_ENCRYPTION_KEY) {
+    return process.env.TOKEN_ENCRYPTION_KEY;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[FATAL SECURITY] TOKEN_ENCRYPTION_KEY environment variable is required in production mode for AES-256-GCM field encryption and JWT signing. Server refused to start.'
+    );
+  }
+  if (!processLocalEncryptionKey) {
+    processLocalEncryptionKey = crypto.randomBytes(32).toString('hex');
+    console.warn(
+      '\x1b[33m[SECURITY WARNING] TOKEN_ENCRYPTION_KEY is unset! Generated a random process-local key. Nothing encrypted with it will survive a restart.\x1b[0m'
+    );
+  }
+  return processLocalEncryptionKey;
+}
+
 function getEncryptionKey(): Buffer {
-  const envKey = process.env.TOKEN_ENCRYPTION_KEY || 'tracexmail-master-token-key-256bit-safe';
-  return crypto.createHash('sha256').update(envKey).digest();
+  const secret = resolveMasterSecret();
+  return crypto.createHash('sha256').update(secret).digest();
 }
 
 /**
@@ -548,14 +568,13 @@ export const decryptToken = decryptSensitiveField;
 // 7. MULTI-TENANT RBAC & TOKEN AUTHENTICATION
 // ============================================================================
 
-const JWT_SECRET = process.env.TOKEN_ENCRYPTION_KEY || 'tracexmail-auth-jwt-secret-key-32bytes';
-
 export function signUserToken(payload: {
   userId: string;
   email: string;
   organizationId: string;
   role: UserRole;
 }): string {
+  const secret = resolveMasterSecret();
   return jwt.sign(
     {
       sub: payload.userId,
@@ -563,14 +582,15 @@ export function signUserToken(payload: {
       organization_id: payload.organizationId,
       role: payload.role
     },
-    JWT_SECRET,
+    secret,
     { expiresIn: '24h' }
   );
 }
 
 export function verifyUserToken(token: string): UserContext | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const secret = resolveMasterSecret();
+    const decoded = jwt.verify(token, secret) as any;
     if (decoded && decoded.role && ['admin', 'analyst', 'read_only'].includes(decoded.role)) {
       return {
         userId: decoded.sub || 'user_anon',
@@ -587,28 +607,38 @@ export function verifyUserToken(token: string): UserContext | null {
 }
 
 /**
- * Pre-configured API keys for quick SOC service integration
+ * Pre-configured API keys for quick SOC service integration.
+ * Keys are only live if explicitly set via environment variables.
+ * Unset means that tier is simply disabled.
  */
-const KNOWN_API_KEYS: Record<string, { userId: string; email: string; organizationId: string; role: UserRole }> = {
-  'tracexmail_admin_test_key_soc': {
-    userId: 'usr_admin_01',
-    email: 'admin@acmedefense.sec',
-    organizationId: 'org_acme_soc_01',
-    role: 'admin'
-  },
-  'tracexmail_analyst_test_key_soc': {
-    userId: 'usr_analyst_01',
-    email: 'analyst@acmedefense.sec',
-    organizationId: 'org_acme_soc_01',
-    role: 'analyst'
-  },
-  'tracexmail_readonly_test_key_soc': {
-    userId: 'usr_reader_01',
-    email: 'auditor@acmedefense.sec',
-    organizationId: 'org_acme_soc_01',
-    role: 'read_only'
+function getKnownApiKeys(): Record<string, { userId: string; email: string; organizationId: string; role: UserRole }> {
+  const keys: Record<string, { userId: string; email: string; organizationId: string; role: UserRole }> = {};
+  if (process.env.TRACEXMAIL_ADMIN_API_KEY) {
+    keys[process.env.TRACEXMAIL_ADMIN_API_KEY] = {
+      userId: 'usr_admin_01',
+      email: 'admin@acmedefense.sec',
+      organizationId: 'org_acme_soc_01',
+      role: 'admin'
+    };
   }
-};
+  if (process.env.TRACEXMAIL_ANALYST_API_KEY) {
+    keys[process.env.TRACEXMAIL_ANALYST_API_KEY] = {
+      userId: 'usr_analyst_01',
+      email: 'analyst@acmedefense.sec',
+      organizationId: 'org_acme_soc_01',
+      role: 'analyst'
+    };
+  }
+  if (process.env.TRACEXMAIL_READONLY_API_KEY) {
+    keys[process.env.TRACEXMAIL_READONLY_API_KEY] = {
+      userId: 'usr_reader_01',
+      email: 'auditor@acmedefense.sec',
+      organizationId: 'org_acme_soc_01',
+      role: 'read_only'
+    };
+  }
+  return keys;
+}
 
 /**
  * Express middleware for role and authentication extraction
@@ -620,11 +650,13 @@ export function authenticateUser(req: Request, _res: Response, next: NextFunctio
 
   let userContext: UserContext | null = null;
 
+  const knownKeys = getKnownApiKeys();
+
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
     userContext = verifyUserToken(token);
-  } else if (apiKeyHeader && KNOWN_API_KEYS[apiKeyHeader]) {
-    const record = KNOWN_API_KEYS[apiKeyHeader];
+  } else if (apiKeyHeader && knownKeys[apiKeyHeader]) {
+    const record = knownKeys[apiKeyHeader];
     userContext = {
       userId: record.userId,
       email: record.email,
@@ -632,8 +664,13 @@ export function authenticateUser(req: Request, _res: Response, next: NextFunctio
       role: record.role,
       authMethod: 'api_key'
     };
-  } else if (roleOverrideHeader && ['admin', 'analyst', 'read_only'].includes(roleOverrideHeader)) {
-    // Allowed in development / authenticated header context
+  } else if (
+    process.env.NODE_ENV !== 'production' &&
+    process.env.ALLOW_DEV_ROLE_HEADER === 'true' &&
+    roleOverrideHeader &&
+    ['admin', 'analyst', 'read_only'].includes(roleOverrideHeader)
+  ) {
+    // Only allowed in non-production AND when explicitly permitted via ALLOW_DEV_ROLE_HEADER=true
     userContext = {
       userId: `usr_${roleOverrideHeader}_session`,
       email: `${roleOverrideHeader}@acmedefense.sec`,

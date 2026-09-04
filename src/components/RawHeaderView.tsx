@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { resolveOrigin } from '../utils/originResolution';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 interface RawHeaderViewProps {
   analysis: EmailAnalysis;
@@ -302,7 +303,7 @@ export function RawHeaderView({ analysis }: RawHeaderViewProps) {
     const originLocation = originHop?.country ? `${originHop.city ? `${originHop.city}, ` : ''}${originHop.country}` : originHop?.isPrivate ? 'Private LAN (RFC 1918)' : 'Unresolved Origin';
 
     const mlConf = analysis.mlConfidence !== undefined ? `${(analysis.mlConfidence * 100).toFixed(1)}%` : '98.4%';
-    const verdict = (analysis.threatVerdict || analysis.verdict || 'SUSPICIOUS').toUpperCase();
+    const stdVerdict = getStandardizedVerdict(analysis);
 
     return {
       spfStatus,
@@ -317,7 +318,9 @@ export function RawHeaderView({ analysis }: RawHeaderViewProps) {
       originIp,
       originLocation,
       mlConf,
-      verdict,
+      verdict: stdVerdict.verdict,
+      verdictColors: stdVerdict.colors,
+      score: stdVerdict.score,
       totalHops: analysis.hops?.length || 0
     };
   }, [analysis]);
@@ -520,8 +523,8 @@ export function RawHeaderView({ analysis }: RawHeaderViewProps) {
             <div className="text-sm font-bold font-mono text-slate-100 flex items-center gap-1">
               <span>{authMetrics.mlConf}</span>
             </div>
-            <div className="text-[10px] text-slate-400 font-mono uppercase truncate" title={authMetrics.verdict}>
-              {authMetrics.verdict}
+            <div className={`text-[10px] font-mono uppercase truncate ${authMetrics.verdictColors.text}`} title={authMetrics.verdict}>
+              {authMetrics.verdict} ({authMetrics.score}/100)
             </div>
           </div>
         </div>

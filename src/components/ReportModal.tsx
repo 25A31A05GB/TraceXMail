@@ -45,6 +45,7 @@ import {
   generateForensicMarkdownReport, 
   MAXMIND_README_CONTENT 
 } from '../utils/markdownReport';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -71,6 +72,7 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
 
   if (!isOpen) return null;
 
+  const stdVerdict = getStandardizedVerdict(analysis);
   const purgeInfo = getRetentionPurgeDate(privacyConfig.retentionPolicy, analysis.date);
 
   const displayFrom = enforceMasking ? maskEmail(analysis.from, privacyConfig.maskingMode) : analysis.from;
@@ -178,10 +180,8 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
                 <span className="text-xs px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-cyan-300 font-mono">
                   {analysis.id}
                 </span>
-                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
-                  analysis.threatVerdict === 'MALICIOUS' ? 'bg-red-950 text-red-300 border border-red-800' : 'bg-amber-950 text-amber-300 border border-amber-800'
-                }`}>
-                  {analysis.threatVerdict} ({analysis.threatScore}/100)
+                <span className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold border ${stdVerdict.colors.badge}`}>
+                  {stdVerdict.verdict} ({stdVerdict.score}/100)
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -371,11 +371,11 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
                     Executive Threat &amp; Business Exposure Summary
                   </div>
                   <div className="text-xl font-bold mt-1 text-slate-100 flex items-center gap-2">
-                    <span className={analysis.threatVerdict === 'MALICIOUS' ? 'text-red-400' : 'text-amber-400'}>
-                      {analysis.threatVerdict}
+                    <span className={stdVerdict.colors.text}>
+                      {stdVerdict.verdict}
                     </span>
                     <span className="text-sm font-normal text-slate-400">
-                      (Institutional Risk Rating: {analysis.threatScore >= 80 ? 'CRITICAL EXPOSURE' : 'ELEVATED RISK'})
+                      (Institutional Risk Rating: {stdVerdict.severityLabel})
                     </span>
                   </div>
                 </div>

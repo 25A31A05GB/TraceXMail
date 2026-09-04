@@ -31,3 +31,16 @@ All endpoints bind to port `3000` via Express application gateway.
 ### 1.5 System & Health
 - `GET /api/health`: Health status and active component readiness.
 - `GET /api/audit-logs`: Chronological log of all analyst actions and evidence accesses.
+
+## 2. Network Intelligence & Analyst Telemetry
+
+### 2.1 Telemetry Endpoints
+- `GET /api/network-info`: Retrieves public IP, IP version (IPv4/IPv6), approximate location, network organization/ISP, ASN, and hosting server location.
+  - **Query Params:** `force_refresh=true` (bypasses 10-minute in-memory cache).
+  - **Returns:** Structured JSON with `isApproximate: true` and disclaimer.
+- `GET /api/network/ping`: Lightweight round-trip latency endpoint with zero-cache headers.
+  - **Returns:** `{"status": "ok", "timestamp": 1788538543227}`.
+- `GET /api/network/bandwidth-payload`: Controlled 512 KB payload for on-demand download throughput measurement.
+  - **Returns:** 524,288 raw bytes with `application/octet-stream` and no-cache directives.
+
+See `docs/NETWORK_INTELLIGENCE.md` for methodology, privacy safeguards, and rate limits.

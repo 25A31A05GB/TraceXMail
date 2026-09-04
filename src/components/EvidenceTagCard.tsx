@@ -3,6 +3,7 @@ import { EmailAnalysis, EvidenceCardData } from '../types';
 import { Printer, Copy, Check, ExternalLink, X, Tag, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { sha256Sync, generateEvidenceId } from '../utils/crypto';
 import { resolveOrigin, formatOriginLocation, formatOriginIp } from '../utils/originResolution';
+import { getStandardizedVerdict } from '../utils/verdict';
 
 /**
  * Pure mapping helper that converts an EmailAnalysis object to the EvidenceCardData schema.
@@ -30,48 +31,12 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   const rawSubject = analysis.headers?.subject || analysis.subject || analysis.name || '(No Subject)';
   const subjectDisplay = rawSubject.startsWith('"') && rawSubject.endsWith('"') ? rawSubject : `"${rawSubject}"`;
 
-  // Verdict & Trust score calculations
-  const rawVerdict = (analysis.threatVerdict || analysis.verdict || '').toUpperCase();
-  const isMalicious = rawVerdict.includes('PHISH') || rawVerdict.includes('FRAUD') || rawVerdict.includes('IMPERSONAT') || rawVerdict.includes('MALICIOUS');
-  const isSuspicious = rawVerdict.includes('SUSPICIOUS') || rawVerdict.includes('WARN');
-  const isClean = rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN');
-
-  // Accurately use backend threatScore directly without independent re-derivation or artificial overrides
-  let threatScore: number | null = null;
-  let hasValidThreatScore = false;
-  if (typeof analysis.threatScore === 'number' && !isNaN(analysis.threatScore) && analysis.threatScore >= 0) {
-    threatScore = analysis.threatScore;
-    hasValidThreatScore = true;
-  } else if (typeof analysis.riskScore === 'number' && !isNaN(analysis.riskScore) && analysis.riskScore >= 0) {
-    threatScore = analysis.riskScore;
-    hasValidThreatScore = true;
-  }
-
-  let stampWord = 'PHISH';
-  let stampStatus: 'bad' | 'warn' | 'good' = 'bad';
-
-  if (isClean && !isMalicious && !isSuspicious) {
-    stampWord = 'LEGITIMATE';
-    stampStatus = 'good';
-  } else if (isSuspicious && !isMalicious) {
-    stampWord = 'SUSPICIOUS';
-    stampStatus = 'warn';
-  } else if (rawVerdict.includes('FRAUD')) {
-    stampWord = 'FRAUD';
-    stampStatus = 'bad';
-  } else if (rawVerdict.includes('IMPERSONAT')) {
-    stampWord = 'IMPERSONATED';
-    stampStatus = 'bad';
-  } else {
-    stampWord = 'PHISH';
-    stampStatus = 'bad';
-  }
-
-  const trustScoreLabel = hasValidThreatScore && threatScore !== null
-    ? (stampStatus === 'good' 
-        ? `${Math.max(0, Math.min(100, 100 - threatScore))}/100 TRUST` 
-        : `${threatScore}/100 THREAT (${Math.max(0, Math.min(100, 100 - threatScore))}/100 TRUST)`)
-    : 'Score unavailable';
+  // Standardized verdict, threat score, and status resolution from backend
+  const stdVerdict = getStandardizedVerdict(analysis);
+  const threatScore = stdVerdict.score;
+  const stampWord = stdVerdict.stamp.word;
+  const stampStatus = stdVerdict.stamp.status;
+  const trustScoreLabel = stdVerdict.trustScoreLabel;
 
   // Identity Rows
   const identityRows = [
@@ -209,11 +174,7 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
   const fullHash = analysis.sha256 || analysis.sha256Hash || analysis.custodyHash || (analysis.rawEml ? sha256Sync(analysis.rawEml) : sha256Sync(analysis.id || JSON.stringify(analysis)));
   const shortHash = fullHash.length > 26 ? `${fullHash.slice(0, 19)}...${fullHash.slice(-4)}` : fullHash;
   
-  const socAction = stampStatus === 'bad'
-    ? 'BLOCK SENDER & PURGE INBOX' 
-    : stampStatus === 'warn'
-    ? 'ISOLATE AT GATEWAY & USER ALERT' 
-    : 'ALLOW TRANSMISSION (CLEAN)';
+  const socAction = stdVerdict.recommendedAction;
 
   return {
     caseId,
@@ -569,7 +530,7 @@ export function EvidenceTagCard({
               <div className="gauge-top">
                 <span>{cardData.score.label}</span>
                 <span>
-                  <b style={{ color: cardData.score.good ? 'var(--green)' : 'var(--red)' }}>
+                  <b style={{ color: cardData.score.good ? 'var(--ec-green)' : 'var(--ec-red)' }}>
                     {cardData.score.resultText}
                   </b>{' '}
                   {cardData.score.resultLabel}
@@ -675,31 +636,31 @@ export function EvidenceTagCard({
         <div className="flex flex-col items-center max-w-full my-auto">
           {/* Action Bar */}
           <div className="w-full max-w-[520px] flex items-center justify-between mb-3 px-1 text-xs">
-            <div className="flex items-center gap-2 text-[#E7E4DA] font-mono font-medium">
-              <span className="w-2 h-2 rounded-full bg-[#C68A34] animate-pulse" />
+            <div className="flex items-center gap-2 text-[#F2EFE7] font-mono font-medium">
+              <span className="w-2 h-2 rounded-full bg-[#CC9A4A] animate-pulse" />
               <span>FORENSIC EVIDENCE CARD</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleCopySummary}
-                className="px-2.5 py-1 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-[#E7E4DA] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-2.5 py-1 rounded bg-[#171B24] hover:bg-[#2B3140] border border-[#2B3140] text-[#F2EFE7] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Copy Text Summary"
               >
-                {copied ? <Check className="w-3 h-3 text-[#2E8B63]" /> : <Copy className="w-3 h-3 text-[#C68A34]" />}
+                {copied ? <Check className="w-3 h-3 text-[#3FCC93]" /> : <Copy className="w-3 h-3 text-[#CC9A4A]" />}
                 <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
               <button
                 onClick={handlePrint}
-                className="px-2.5 py-1 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-[#E7E4DA] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                className="px-2.5 py-1 rounded bg-[#171B24] hover:bg-[#2B3140] border border-[#2B3140] text-[#F2EFE7] text-[11px] font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
                 title="Print Evidence Tag Card"
               >
-                <Printer className="w-3 h-3 text-[#E7E4DA]" />
+                <Printer className="w-3 h-3 text-[#F2EFE7]" />
                 <span>Print</span>
               </button>
               {onClose && (
                 <button
                   onClick={onClose}
-                  className="p-1 rounded bg-[#1D2027] hover:bg-[#2A2D34] border border-[#2A2D34] text-[#6E7480] hover:text-[#E7E4DA] transition-colors cursor-pointer"
+                  className="p-1 rounded bg-[#171B24] hover:bg-[#2B3140] border border-[#2B3140] text-[#7C8494] hover:text-[#F2EFE7] transition-colors cursor-pointer"
                   title="Close Card View"
                 >
                   <X className="w-4 h-4" />

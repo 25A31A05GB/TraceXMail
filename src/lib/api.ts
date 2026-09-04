@@ -7,9 +7,94 @@ import axios, { AxiosInstance } from 'axios';
 
 const DEFAULT_ORG_ID = 'org_acme_soc_01';
 
-const API_URL = (
+export const API_URL = (
   (import.meta as any).env?.VITE_API_URL || ''
 ).replace(/\/$/, '');
+
+export interface SessionUser {
+  userId: string;
+  email: string;
+  organizationId: string;
+  role: 'admin' | 'analyst' | 'read_only' | string;
+  label?: string;
+  authMethod?: string;
+}
+
+// In-Memory Session Storage (Complies with security audit: NEVER store in localStorage)
+let memorySessionToken: string | null = null;
+let memorySessionUser: SessionUser | null = null;
+let sessionInitPromise: Promise<{ token: string; user: SessionUser | null }> | null = null;
+
+type SessionListener = (session: { token: string | null; user: SessionUser | null }) => void;
+const sessionListeners = new Set<SessionListener>();
+
+export function getSessionToken(): string | null {
+  return memorySessionToken;
+}
+
+export function getSessionUser(): SessionUser | null {
+  return memorySessionUser;
+}
+
+export function setSession(token: string | null, user: SessionUser | null) {
+  memorySessionToken = token;
+  memorySessionUser = user;
+  sessionListeners.forEach(fn => fn({ token, user }));
+}
+
+export function subscribeSession(listener: SessionListener): () => void {
+  sessionListeners.add(listener);
+  listener({ token: memorySessionToken, user: memorySessionUser });
+  return () => {
+    sessionListeners.delete(listener);
+  };
+}
+
+/**
+ * Lightweight session acquisition:
+ * Obtains a default demo analyst JWT session on first load if no token exists in memory.
+ */
+export async function initializeSession(role: 'admin' | 'analyst' | 'read_only' = 'analyst'): Promise<{ token: string; user: SessionUser | null }> {
+  if (memorySessionToken && memorySessionUser && memorySessionUser.role === role) {
+    return { token: memorySessionToken, user: memorySessionUser };
+  }
+
+  if (sessionInitPromise) {
+    return sessionInitPromise;
+  }
+
+  sessionInitPromise = (async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/auth/session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-organization-id': DEFAULT_ORG_ID
+        },
+        body: JSON.stringify({ role, organization_id: DEFAULT_ORG_ID })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        memorySessionToken = data.token;
+        memorySessionUser = data.user;
+        sessionListeners.forEach(fn => fn({ token: memorySessionToken, user: memorySessionUser }));
+        return { token: data.token, user: data.user };
+      }
+    } catch (err) {
+      console.warn('[Session] Failed initializing default demo session:', err);
+    } finally {
+      sessionInitPromise = null;
+    }
+    return { token: '', user: null };
+  })();
+
+  return sessionInitPromise;
+}
+
+// Auto-trigger session initialization in background on client startup
+if (typeof window !== 'undefined') {
+  initializeSession().catch(console.warn);
+}
 
 export const apiClient: AxiosInstance = axios.create({
   baseURL: `${API_URL}/api`,
@@ -20,6 +105,20 @@ export const apiClient: AxiosInstance = axios.create({
   },
 });
 
+// Request interceptor: attaches the verified JWT token to all outbound Axios calls
+apiClient.interceptors.request.use(async (config) => {
+  if (!memorySessionToken) {
+    await initializeSession();
+  }
+  if (memorySessionToken) {
+    config.headers.set('Authorization', `Bearer ${memorySessionToken}`);
+  }
+  if (!config.headers.has('x-organization-id')) {
+    config.headers.set('x-organization-id', DEFAULT_ORG_ID);
+  }
+  return config;
+});
+
 // Response interceptor for unified error logging
 apiClient.interceptors.response.use(
   (response) => response,
@@ -28,6 +127,29 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+/**
+ * Centralized fetch wrapper that automatically injects the active session's
+ * Authorization: Bearer <token> and organization headers.
+ */
+export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  if (!memorySessionToken) {
+    await initializeSession();
+  }
+
+  const headers = new Headers(init?.headers);
+  if (memorySessionToken && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${memorySessionToken}`);
+  }
+  if (!headers.has('x-organization-id')) {
+    headers.set('x-organization-id', DEFAULT_ORG_ID);
+  }
+
+  return fetch(input, {
+    ...init,
+    headers
+  });
+}
 
 export interface HealthResponse {
   status: string;
@@ -441,4 +563,52 @@ export const forensicApi = {
     });
     return res.data;
   },
+
+  // Network Intelligence (Client / Session Telemetry)
+  getNetworkInfo: async (forceRefresh = false): Promise<NetworkInfoData> => {
+    const res = await apiClient.get('/network-info', {
+      params: forceRefresh ? { force_refresh: 'true' } : undefined,
+      headers: { 'Cache-Control': 'no-cache' }
+    });
+    return res.data;
+  },
+
+  measureLatency: async (): Promise<number> => {
+    const start = performance.now();
+    await fetch(`${API_URL}/api/network/ping`, { cache: 'no-store' });
+    const end = performance.now();
+    return Math.max(1, Math.round(end - start));
+  },
+
+  measureBandwidth: async (): Promise<{ durationMs: number; bytes: number; mbps: number }> => {
+    const start = performance.now();
+    const response = await fetch(`${API_URL}/api/network/bandwidth-payload`, { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`Bandwidth test failed with status ${response.status}`);
+    }
+    const buffer = await response.arrayBuffer();
+    const end = performance.now();
+    const durationMs = Math.max(1, end - start);
+    const durationSec = durationMs / 1000;
+    const bytes = buffer.byteLength;
+    const bits = bytes * 8;
+    const mbps = Number(((bits / durationSec) / (1024 * 1024)).toFixed(2));
+    return { durationMs: Math.round(durationMs), bytes, mbps };
+  },
 };
+
+export interface NetworkInfoData {
+  ip: string;
+  ipVersion: 'IPv4' | 'IPv6' | 'Unknown';
+  city: string;
+  region: string;
+  country: string;
+  organization: string;
+  asn: string;
+  serverLocation: string;
+  source: string;
+  isApproximate: boolean;
+  disclaimer: string;
+  cached?: boolean;
+}
+

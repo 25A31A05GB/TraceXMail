@@ -11,7 +11,8 @@
     "clean": "rm -rf dist server.js",
     "test:forensics": "tsx scripts/test_forensics.ts",
     "test:intelligence": "tsx scripts/test_intelligence.ts",
-    "test": "tsx scripts/test_forensics.ts && tsx scripts/test_intelligence.ts",
+    "test:network": "tsx scripts/test_network_intelligence.ts",
+    "test": "tsx scripts/test_forensics.ts && tsx scripts/test_intelligence.ts && tsx scripts/test_network_intelligence.ts",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

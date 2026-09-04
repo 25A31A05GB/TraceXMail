@@ -54,12 +54,18 @@ import {
   encryptSensitiveField,
   decryptSensitiveField,
   authenticateUser,
+  signUserToken,
   requireAuth,
   requireRole,
   IN_MEMORY_AUDIT_LOGS,
   type UserContext,
   type AuthenticatedRequest
 } from './src/server/compliance';
+import {
+  handleGetNetworkInfo,
+  handlePingNetwork,
+  handleGetBandwidthPayload
+} from './src/server/networkIntelligenceService';
 
 // Multer memory storage for uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -379,6 +385,30 @@ function maskCasePii(caseItem: any): any {
   }
   if (copy.assigned_user) {
     copy.assigned_user = 'Analyst (Masked)';
+  }
+  if (copy.from) {
+    copy.from = copy.from.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]');
+  }
+  if (copy.to) {
+    copy.to = copy.to.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]');
+  }
+  if (copy.origin_ip) {
+    copy.origin_ip = '[REDACTED_IP]';
+  }
+  if (copy.headers) {
+    const h = { ...copy.headers };
+    if (h.from) h.from = h.from.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]');
+    if (h.to) h.to = h.to.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]');
+    copy.headers = h;
+  }
+  if (Array.isArray(copy.members)) {
+    copy.members = copy.members.map((m: any) => ({
+      ...m,
+      sender: m.sender ? m.sender.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]') : m.sender,
+      from: m.from ? m.from.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]') : m.from,
+      recipient: m.recipient ? m.recipient.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]') : m.recipient,
+      to: m.to ? m.to.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, '[REDACTED_EMAIL]') : m.to,
+    }));
   }
   if (Array.isArray(copy.tags)) {
     copy.tags = copy.tags.map((t: string) => (t.includes('@') ? '[REDACTED_TAG]' : t));
@@ -1012,11 +1042,95 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Configure reverse proxy trust appropriately for Cloud Run / production load balancers
+  app.set('trust proxy', true);
+
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
   app.use(authenticateUser);
 
   // REST API Endpoints
+
+  // Network Intelligence Endpoints (Workstation / Analyst Session Profile)
+  app.get('/api/network-info', handleGetNetworkInfo);
+  app.get('/api/network/ping', handlePingNetwork);
+  app.get('/api/network/bandwidth-payload', handleGetBandwidthPayload);
+
+  // Authentication & Session Management
+  // Lightweight Session / Identity Provisioning for Frontend Demo & SOC Analysts
+  app.post('/api/auth/session', (req, res) => {
+    const requestedRole = (req.body?.role === 'admin' || req.body?.role === 'read_only') ? req.body.role : 'analyst';
+    const orgId = (req.body?.organization_id as string) || 'org_acme_soc_01';
+    const email = requestedRole === 'admin'
+      ? 'admin@acmedefense.sec'
+      : requestedRole === 'read_only'
+        ? 'auditor@acmedefense.sec'
+        : 'analyst@acmedefense.sec';
+
+    const userId = `usr_${requestedRole}_demo`;
+
+    const token = signUserToken({
+      userId,
+      email,
+      organizationId: orgId,
+      role: requestedRole
+    });
+
+    res.json({
+      status: 'authenticated',
+      token,
+      user: {
+        userId,
+        email,
+        organizationId: orgId,
+        role: requestedRole,
+        label: requestedRole === 'admin'
+          ? 'Demo Admin Session'
+          : requestedRole === 'read_only'
+            ? 'Demo Auditor (Read-Only) Session'
+            : 'Demo Analyst Session'
+      },
+      expires_in: '24h'
+    });
+  });
+
+  app.get('/api/auth/session', (req, res) => {
+    const user = (req as AuthenticatedRequest).user;
+    if (user) {
+      return res.json({
+        status: 'authenticated',
+        user: {
+          ...user,
+          label: user.role === 'admin'
+            ? 'Demo Admin Session'
+            : user.role === 'read_only'
+              ? 'Demo Auditor (Read-Only) Session'
+              : 'Demo Analyst Session'
+        }
+      });
+    }
+
+    // Default to issuing a demo analyst token for client initialization
+    const token = signUserToken({
+      userId: 'usr_analyst_demo',
+      email: 'analyst@acmedefense.sec',
+      organizationId: 'org_acme_soc_01',
+      role: 'analyst'
+    });
+
+    res.json({
+      status: 'authenticated',
+      token,
+      user: {
+        userId: 'usr_analyst_demo',
+        email: 'analyst@acmedefense.sec',
+        organizationId: 'org_acme_soc_01',
+        role: 'analyst',
+        label: 'Demo Analyst Session'
+      },
+      expires_in: '24h'
+    });
+  });
 
   // System Health
   app.get('/api/health', (_req, res) => {
@@ -1103,8 +1217,10 @@ async function startServer() {
   // - Supports exclude_demo / real_only query filters
   app.get('/api/cases', async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
-    const isReadOnly = user?.role === 'read_only';
-    const shouldMask = isReadOnly || req.query.mask_pii === 'true';
+    // Default-deny masking policy: unauthenticated/anonymous requests (!user) must receive masked PII by default for security.
+    // Authenticated callers with 'read_only' role also receive masked PII.
+    // The existing 'mask_pii=true' query parameter still explicitly forces this behavior even for privileged roles.
+    const shouldMask = !user || user.role === 'read_only' || req.query.mask_pii === 'true';
     const excludeDemo = req.query.exclude_demo === 'true' || req.query.real_only === 'true';
     const orgId = (req.query.organization_id as string) || user?.organizationId;
 
@@ -1145,8 +1261,10 @@ async function startServer() {
 
   app.get('/api/cases/:caseId', async (req, res) => {
     const user = (req as AuthenticatedRequest).user;
-    const isReadOnly = user?.role === 'read_only';
-    const shouldMask = isReadOnly || req.query.mask_pii === 'true';
+    // Default-deny masking policy: unauthenticated/anonymous requests (!user) must receive masked PII by default for security.
+    // Authenticated callers with 'read_only' role also receive masked PII.
+    // The existing 'mask_pii=true' query parameter still explicitly forces this behavior even for privileged roles.
+    const shouldMask = !user || user.role === 'read_only' || req.query.mask_pii === 'true';
     const caseId = req.params.caseId;
 
     const supabase = getSupabaseClient();
@@ -1293,10 +1411,12 @@ async function startServer() {
 
   // Case Evidence Retrieval with Decryption and RBAC Masking
   app.get('/api/cases/:caseId/evidence', requireAuth, async (req, res) => {
-    const user = (req as AuthenticatedRequest).user!;
+    const user = (req as AuthenticatedRequest).user;
     const { caseId } = req.params;
-    const isReadOnly = user.role === 'read_only';
-    const shouldMask = isReadOnly || req.query.mask_pii === 'true';
+    // Default-deny masking policy: unauthenticated/anonymous requests (!user) must receive masked PII by default for security.
+    // Authenticated callers with 'read_only' role also receive masked PII.
+    // The existing 'mask_pii=true' query parameter still explicitly forces this behavior even for privileged roles.
+    const shouldMask = !user || user.role === 'read_only' || req.query.mask_pii === 'true';
 
     const supabase = getSupabaseClient();
     if (supabase) {
