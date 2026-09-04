@@ -1,6 +1,6 @@
-# Model Card: TraceXMail 5-Class Forensic Email Classifier
-**Model Name:** TraceXMail Forensic Email Classifier v2.2  
-**Architecture:** Cosine Centroid Vector Space Model with Temperature-Scaled Softmax Calibration  
+# Model Card: TraceXMail 5-Class Forensic Email Classifier & Multi-Layer NLP Pipeline
+**Model Name:** TraceXMail Forensic Classifier & Layered NLP Pipeline v2.5  
+**Architecture:** Multi-Layer Defense-in-Depth Pipeline (Layer 0 Centroid-Cosine TF-IDF Baseline + Layer 1 Gemini text-embedding-004 Semantic Similarity + Layer 2 Structured LLM Linguistic Forensics [HYPOTHESIS] + Layer 3 Weighted Lexicons & Checksum-Validated Financial Entity Extraction)  
 **Developers:** TraceXMail Core Engineering Team (SIH 2026 — Problem Statement 26106)  
 **Standard:** Modeled after Mitchell et al. (*Model Cards for Model Reporting*, FAT* 2019)  
 **Date:** September 2026  
@@ -8,20 +8,69 @@
 
 ---
 
-## 1. Model Details
+## 1. Multi-Layer Forensic Pipeline Architecture
 
-- **Model Overview:** The TraceXMail Forensic Classifier is a specialized 5-class natural language and header telemetry inference engine designed to categorize email artifacts into five distinct operational classes:
-  1. `Legitimate` (Benign enterprise and infrastructure mail)
-  2. `Phishing` (Credential harvesting, malicious landing pages, malware delivery)
-  3. `Impersonated` (Brand lookalikes, executive display-name spoofing, deceptive sender identity)
-  4. `Fraud-related` (Business Email Compromise [BEC], wire diversion, gift card fraud)
-  5. `Suspicious` (Unsolicited mass marketing, graymail, high-pressure cold outbound)
-- **Algorithm:**
-  - **Vector Space:** Sublinear Term Frequency ($\text{TF} = 1 + \ln(\text{count})$) $\times$ Inverse Document Frequency ($\text{IDF} = \ln\left(\frac{N+1}{\text{DF}+1}\right) + 1$).
-  - **Normalization:** Euclidean hypersphere projection ($\|v\|_2 = 1.0$) for document length invariance.
-  - **Classification:** Normalized Class Mean Centroids with Cosine Similarity $\cos(\theta) = \mathbf{w}_c \cdot \mathbf{x}$.
-  - **Probability Calibration:** Temperature-scaled Softmax ($T = 12.0$) producing calibrated posterior probabilities $P(y = c \mid \mathbf{x}) = \frac{e^{T \cdot s_c}}{\sum_k e^{T \cdot s_k}}$.
-- **Inference Runtime:** Synchronized native inference in both Python (`scripts/evaluate_classifier.py`) and TypeScript/Node.js (`src/server/classifier.ts`).
+The TraceXMail classification and NLP stack operates as a layered, defense-in-depth pipeline where each layer produces distinct, separately labeled evidence without silently overriding the baseline:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       Inbound Email Message Body & Headers                  │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │
+         ┌─────────────────────────────┼─────────────────────────────┐
+         ▼                             ▼                             ▼
+┌──────────────────┐          ┌──────────────────┐          ┌──────────────────┐
+│     LAYER 0      │          │     LAYER 1      │          │     LAYER 2      │
+│ Deterministic    │          │ Semantic Embed   │          │ Structured LLM   │
+│ Centroid-Cosine  │          │ Gemini text-     │          │ Linguistic       │
+│ TF-IDF + Identity│          │ embedding-004    │          │ Forensics        │
+│ Baseline         │          │ Reference Match  │          │ [HYPOTHESIS]     │
+└────────┬─────────┘          └────────┬─────────┘          └────────┬─────────┘
+         │                             │                             │
+         │                             │                             │
+         └─────────────────────────────┼─────────────────────────────┘
+                                       │
+                                       ▼
+                              ┌──────────────────┐
+                              │     LAYER 3      │
+                              │ Always-On Free   │
+                              │ Deterministic    │
+                              │ Weighted Lexicon │
+                              │ & Entity Extr.   │
+                              └────────┬─────────┘
+                                       │
+                                       ▼
+                       Combined Layered Forensic Evidence
+                       (Separately Tagged & Explainable)
+```
+
+### Layer Breakdown
+
+1. **Layer 0 — Centroid-Cosine TF-IDF Vector Space Model (Deterministic Baseline):**
+   - **Vector Space:** Sublinear Term Frequency ($\text{TF} = 1 + \ln(\text{count})$) $\times$ Inverse Document Frequency ($\text{IDF} = \ln\left(\frac{N+1}{\text{DF}+1}\right) + 1$).
+   - **Normalization:** Euclidean hypersphere projection ($\|v\|_2 = 1.0$) for document length invariance.
+   - **Classification:** Normalized Class Mean Centroids with Cosine Similarity $\cos(\theta) = \mathbf{w}_c \cdot \mathbf{x}$.
+   - **Probability Calibration:** Temperature-scaled Softmax ($T = 12.0$) producing calibrated posterior probabilities $P(y = c \mid \mathbf{x}) = \frac{e^{T \cdot s_c}}{\sum_k e^{T \cdot s_k}}$.
+   - **Structural Envelope Cues:** Deterministic injection of header mismatch tokens (`feat_brand_display_domain_mismatch`, `feat_lookalike_hyphenated_brand`, `feat_reply_to_mismatch`, `feat_return_path_mismatch`).
+
+2. **Layer 1 — Semantic Embedding Similarity (`src/server/semanticSimilarity.ts`):**
+   - **Embedding Model:** Gemini `text-embedding-004` (768-dimensional dense semantic vectors).
+   - **Corpus:** Curated reference set of canonical phishing, BEC wire fraud, impersonation lures, and enterprise DevOps templates.
+   - **Inference:** Computes cosine similarity between inbound email embeddings and reference clusters.
+   - **Graceful Degradation:** If `GEMINI_API_KEY` is not set, skips layer and returns `status: 'UNAVAILABLE'` without fabricating scores.
+
+3. **Layer 2 — Structured LLM Linguistic Forensics (`src/server/linguisticForensics.ts`):**
+   - **Provider:** Groq (`llama-3.3-70b-versatile`) with automatic fallback to Gemini (`gemini-2.5-flash`).
+   - **Output Format:** Strict JSON Schema validation enforcing categorized social-engineering techniques (`authority_impersonation`, `artificial_urgency`, `fear_appeal`, `scarcity`, `isolation_from_verification`, `pretexting`), register anomaly detection, and extracted entity cues.
+   - **Forensic Constraint:** All Layer 2 outputs are strictly tagged as `evidence_type: 'HYPOTHESIS'`. It supplements SOC evidence fusion without directly driving risk score or overriding baseline classifications.
+
+4. **Layer 3 — Categorized Weighted Lexicons & Financial Entity Extractor (`src/server/structuralFeatures.ts`):**
+   - **Availability:** Always-on, 100% free deterministic floor requiring zero external APIs.
+   - **Categorized Lexicons:** 25+ domain-specific phrases per psychological manipulation vector (`AUTHORITY_CUES`, `URGENCY_CUES`, `FEAR_THREAT_CUES`, `SECRECY_ISOLATION_CUES`, `REWARD_CUES`).
+   - **Checksum-Validated Financial Entity Extraction:**
+     - ISO 13616 Modulo 97-10 check for International Bank Account Numbers (IBAN).
+     - Federal Reserve weights $[3, 7, 1]$ modulo 10 checksum for US 9-digit ABA routing numbers.
+     - Currency and dollar amount extraction pattern matching.
 
 ---
 

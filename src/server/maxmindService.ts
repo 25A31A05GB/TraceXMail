@@ -45,12 +45,71 @@ export interface MaxMindCityRecord {
   };
 }
 
-// Helper for CIDR calculations
+// Helper for IPv4 CIDR calculations
 function ipToNumber(ip: string): number {
   return ip.split('.').reduce((acc, octet) => ((acc << 8) + parseInt(octet, 10)) >>> 0, 0);
 }
 
-function isIpInCidr(ip: string, cidr: string): boolean {
+// Helper for IPv6 BigInt calculations
+function ipv6ToBigInt(ip: string): bigint | null {
+  try {
+    let str = ip.toLowerCase().trim();
+    if (str.includes('%')) {
+      str = str.split('%')[0]; // strip scope id
+    }
+    const doubleColonCount = (str.match(/::/g) || []).length;
+    if (doubleColonCount > 1) return null;
+
+    let parts: string[] = [];
+    if (str.includes('::')) {
+      const [left, right] = str.split('::');
+      const leftParts = left ? left.split(':') : [];
+      const rightParts = right ? right.split(':') : [];
+      const missing = 8 - (leftParts.length + rightParts.length);
+      if (missing < 0) return null;
+      parts = [...leftParts, ...Array(missing).fill('0'), ...rightParts];
+    } else {
+      parts = str.split(':');
+    }
+
+    if (parts.length !== 8) return null;
+
+    let result = 0n;
+    for (let i = 0; i < 8; i++) {
+      const num = parseInt(parts[i] || '0', 16);
+      if (isNaN(num) || num < 0 || num > 0xffff) return null;
+      result = (result << 16n) | BigInt(num);
+    }
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+export function isIpv6InCidr(ip: string, cidr: string): boolean {
+  try {
+    const [range, bitsStr] = cidr.split('/');
+    if (!bitsStr) return ip.toLowerCase().startsWith(range.toLowerCase());
+    const bits = parseInt(bitsStr, 10);
+    if (isNaN(bits) || bits < 0 || bits > 128) return false;
+
+    const ipBig = ipv6ToBigInt(ip);
+    const rangeBig = ipv6ToBigInt(range);
+    if (ipBig === null || rangeBig === null) return false;
+
+    if (bits === 0) return true;
+    const shift = 128n - BigInt(bits);
+    return (ipBig >> shift) === (rangeBig >> shift);
+  } catch {
+    return false;
+  }
+}
+
+export function isIpInCidr(ip: string, cidr: string): boolean {
+  if (!ip || !cidr) return false;
+  if (ip.includes(':') || cidr.includes(':')) {
+    return isIpv6InCidr(ip, cidr);
+  }
   try {
     const [range, bitsStr] = cidr.split('/');
     if (!bitsStr) return ip.startsWith(range);
@@ -377,6 +436,15 @@ export class MaxMindDatabase {
   constructor() {
     this.tryInitMmdb();
     this.tryInitCsv();
+
+    if (!this.mmdbReader && !this.csvLoaded) {
+      console.warn(
+        '[MaxMind WARNING] No GeoLite2 database (.mmdb at data/geolite2/GeoLite2-City.mmdb) ' +
+        'or CSV datasets (data/maxmind/GeoLite2-City-Locations-en.csv, GeoLite2-City-Blocks-IPv4.csv, GeoLite2-ASN-Blocks-IPv4.csv) ' +
+        'found on disk. TraceXMail is operating on hardcoded fallback fixture subnets. ' +
+        'Place official GeoLite2 database files at data/geolite2/ or data/maxmind/ for full global IP resolution.'
+      );
+    }
   }
 
   private tryInitMmdb() {
@@ -396,10 +464,12 @@ export class MaxMindDatabase {
   private tryInitCsv() {
     try {
       const locPath = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Locations-en.csv');
-      const cityPath = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Blocks-IPv4.csv');
-      const asnPath = path.join(process.cwd(), 'data/maxmind/GeoLite2-ASN-Blocks-IPv4.csv');
+      const cityPath4 = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Blocks-IPv4.csv');
+      const cityPath6 = path.join(process.cwd(), 'data/maxmind/GeoLite2-City-Blocks-IPv6.csv');
+      const asnPath4 = path.join(process.cwd(), 'data/maxmind/GeoLite2-ASN-Blocks-IPv4.csv');
+      const asnPath6 = path.join(process.cwd(), 'data/maxmind/GeoLite2-ASN-Blocks-IPv6.csv');
 
-      if (fs.existsSync(locPath) && fs.existsSync(cityPath)) {
+      if (fs.existsSync(locPath)) {
         // Parse Locations CSV
         const locLines = fs.readFileSync(locPath, 'utf8').split('\n');
         for (let i = 1; i < locLines.length; i++) {
@@ -422,32 +492,36 @@ export class MaxMindDatabase {
           }
         }
 
-        // Parse City Blocks CSV
-        const cityLines = fs.readFileSync(cityPath, 'utf8').split('\n');
-        for (let i = 1; i < cityLines.length; i++) {
-          const line = cityLines[i].trim();
-          if (!line) continue;
-          const cols = line.split(',');
-          const network = cols[0];
-          const geonameId = parseInt(cols[1], 10);
-          const lat = parseFloat(cols[7]);
-          const lng = parseFloat(cols[8]);
-          if (network && !isNaN(geonameId)) {
-            this.csvCityBlocks.push({
-              cidr: network,
-              geonameId,
-              lat: isNaN(lat) ? 0 : lat,
-              lng: isNaN(lng) ? 0 : lng,
-              isAnonProxy: cols[4] === '1'
-            });
+        // Helper to parse city blocks CSV
+        const loadCityBlocks = (filePath: string) => {
+          if (!fs.existsSync(filePath)) return;
+          const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            const cols = line.split(',');
+            const network = cols[0];
+            const geonameId = parseInt(cols[1], 10);
+            const lat = parseFloat(cols[7]);
+            const lng = parseFloat(cols[8]);
+            if (network && !isNaN(geonameId)) {
+              this.csvCityBlocks.push({
+                cidr: network,
+                geonameId,
+                lat: isNaN(lat) ? 0 : lat,
+                lng: isNaN(lng) ? 0 : lng,
+                isAnonProxy: cols[4] === '1'
+              });
+            }
           }
-        }
+        };
 
-        // Parse ASN Blocks CSV if available
-        if (fs.existsSync(asnPath)) {
-          const asnLines = fs.readFileSync(asnPath, 'utf8').split('\n');
-          for (let i = 1; i < asnLines.length; i++) {
-            const line = asnLines[i].trim();
+        // Helper to parse ASN blocks CSV
+        const loadAsnBlocks = (filePath: string) => {
+          if (!fs.existsSync(filePath)) return;
+          const lines = fs.readFileSync(filePath, 'utf8').split('\n');
+          for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
             if (!line) continue;
             const cols = line.split(',');
             const network = cols[0];
@@ -457,10 +531,15 @@ export class MaxMindDatabase {
               this.csvAsnBlocks.push({ cidr: network, asn, asnOrg });
             }
           }
-        }
+        };
+
+        loadCityBlocks(cityPath4);
+        loadCityBlocks(cityPath6);
+        loadAsnBlocks(asnPath4);
+        loadAsnBlocks(asnPath6);
 
         this.csvLoaded = true;
-        console.log(`[MaxMind] Loaded GeoLite2 CSV datasets (${this.csvCityBlocks.length} city blocks, ${this.csvLocations.size} locations, ${this.csvAsnBlocks.length} ASN blocks).`);
+        console.log(`[MaxMind] Loaded GeoLite2 CSV datasets (${this.csvCityBlocks.length} city blocks IPv4+IPv6, ${this.csvLocations.size} locations, ${this.csvAsnBlocks.length} ASN blocks).`);
       }
     } catch (err) {
       console.warn('[MaxMind] CSV dataset init fallback:', err);
@@ -526,8 +605,11 @@ export class MaxMindDatabase {
       }
     }
 
-    // 3. High-precision compiled GeoLite2 Subnet Engine
-    const matched = GEOLITE2_SUBNETS.find(sub => ip.startsWith(sub.prefix) || isIpInCidr(ip, `${sub.prefix}.0/24`));
+    // 3. High-precision compiled GeoLite2 Subnet Engine (IPv4 & IPv6)
+    const matched = GEOLITE2_SUBNETS.find(sub => 
+      ip.toLowerCase().startsWith(sub.prefix.toLowerCase()) || 
+      (!ip.includes(':') && isIpInCidr(ip, `${sub.prefix}.0/24`))
+    );
     if (matched) {
       return {
         city: { names: { en: matched.city } },
@@ -563,7 +645,7 @@ export class MaxMindDatabase {
       };
     }
 
-    // 4. Return null for unmapped public addresses (Do NOT invent fake cities or coordinates)
+    // 4. Return null for unmapped public addresses without guessing
     return null;
   }
 }

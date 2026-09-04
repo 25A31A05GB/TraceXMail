@@ -5,6 +5,9 @@
 import dns from 'dns';
 import { classifyIp, ClassifiedIp } from './ipExtractor';
 import { maxMindDb } from './maxmindService';
+import { isTorExitNode } from './intelligence/torExitList';
+import { classifyInfra } from './intelligence/vpnHostingList';
+import { getRegisteredCountry } from './intelligence/rirCountryCheck';
 
 export interface GeoLocationResult {
   ip: string;
@@ -14,6 +17,8 @@ export interface GeoLocationResult {
   city?: string;
   country?: string;
   countryCode?: string;
+  rirCountry?: string | null;
+  countryMismatch?: boolean;
   region?: string;
   continentCode?: string;
   continentName?: string;
@@ -28,6 +33,7 @@ export interface GeoLocationResult {
   reverseDns?: string;
   isTor?: boolean;
   isProxyOrVpn?: boolean;
+  infra?: 'vpn' | 'hosting' | null;
   abuseScore?: number;
   isBlacklisted?: boolean;
   source: string;
@@ -62,6 +68,8 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
       city: 'Unknown Origin',
       country: 'Unverified Infrastructure',
       countryCode: 'UNMAPPED',
+      rirCountry: null,
+      countryMismatch: false,
       source: 'UNRESOLVED_NO_IP',
       lookupMethod: 'NO_IP_PROVIDED'
     };
@@ -83,6 +91,8 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
       city: 'Internal Subnet',
       country: classification.isRfc1918 ? 'Private Network (RFC 1918)' : 'Local Non-Routable Space',
       countryCode: 'LAN',
+      rirCountry: null,
+      countryMismatch: false,
       region: 'Intranet Space',
       asn: 'RFC 1918',
       org: classification.description,
@@ -94,6 +104,7 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
       isBlacklisted: false,
       isProxyOrVpn: false,
       isTor: false,
+      infra: null,
       source: 'RFC_1918_CLASSIFIER',
       lookupMethod: 'RFC 1918 Private Subnet Demarcation'
     };
@@ -101,13 +112,27 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
     return result;
   }
 
-  // 2. Query MaxMind GeoLite2-City & ASN engine
+  // 2. Query MaxMind GeoLite2-City & ASN engine + Independent Signals (Tor, VPN/Hosting, RIR)
   const maxmindRecord = maxMindDb.lookupCity(ip);
   const reverseDns = await resolvePtr(ip);
+  const torSignal = isTorExitNode(ip);
+  const infraSignal = classifyInfra(ip);
+  const rirCountry = getRegisteredCountry(ip);
 
   if (maxmindRecord) {
-    const isTor = Boolean(maxmindRecord.traits?.is_tor_exit_node);
-    const abuseScore = isTor ? 88 : (maxmindRecord.traits?.is_hosting_provider ? 25 : 0);
+    const isTor = Boolean(maxmindRecord.traits?.is_tor_exit_node) || torSignal;
+    const isProxyOrVpn = isTor || Boolean(maxmindRecord.traits?.is_anonymous_proxy) || infraSignal === 'vpn';
+    const isHosting = Boolean(maxmindRecord.traits?.is_hosting_provider) || infraSignal === 'hosting';
+    const maxmindCc = maxmindRecord.country?.iso_code;
+    const countryMismatch = Boolean(
+      maxmindCc &&
+      maxmindCc !== 'XX' &&
+      rirCountry &&
+      rirCountry !== 'ZZ' &&
+      maxmindCc.toUpperCase() !== rirCountry.toUpperCase()
+    );
+
+    const abuseScore = isTor ? 88 : (infraSignal === 'vpn' ? 50 : (isHosting ? 25 : 0));
 
     const result: GeoLocationResult = {
       ip,
@@ -117,6 +142,8 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
       city: maxmindRecord.city?.names?.en || 'Unknown City',
       country: maxmindRecord.country?.names?.en || 'Unknown Country',
       countryCode: maxmindRecord.country?.iso_code || 'XX',
+      rirCountry,
+      countryMismatch,
       region: maxmindRecord.subdivisions?.[0]?.names?.en || maxmindRecord.subdivisions?.[0]?.iso_code || 'Unknown Region',
       continentCode: maxmindRecord.continent?.code || 'XX',
       continentName: maxmindRecord.continent?.names?.en || 'Global',
@@ -128,9 +155,10 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
       asn: maxmindRecord.traits?.autonomous_system_number ? `AS${maxmindRecord.traits.autonomous_system_number}` : undefined,
       org: maxmindRecord.traits?.autonomous_system_organization || maxmindRecord.traits?.organization || 'Unknown ASN',
       isp: maxmindRecord.traits?.isp || maxmindRecord.traits?.autonomous_system_organization || 'Internet Service Provider',
-      reverseDns: reverseDns || (maxmindRecord.traits?.is_tor_exit_node ? `tor-exit-${ip.replace(/\./g, '-')}.torproject.org` : undefined),
+      reverseDns: reverseDns || (isTor ? `tor-exit-${ip.replace(/\./g, '-')}.torproject.org` : undefined),
       isTor,
-      isProxyOrVpn: isTor || Boolean(maxmindRecord.traits?.is_anonymous_proxy),
+      isProxyOrVpn,
+      infra: infraSignal || (isTor ? 'vpn' : isHosting ? 'hosting' : null),
       abuseScore,
       isBlacklisted: isTor,
       source: 'MAXMIND_GEOLITE2_CITY',
@@ -141,18 +169,74 @@ export async function resolveIpGeolocation(ip?: string): Promise<GeoLocationResu
     return result;
   }
 
-  // 3. Unresolved fallback
+  // 3. Unresolved fallback with explicit IPv6 demarcation
+  const isIpv6 = ip.includes(':');
+  let fallbackCity = 'External Relay';
+  let fallbackCountry = 'Global Public Network';
+  let fallbackCountryCode = 'XX';
+  let fallbackOrg = 'Autonomous Public Gateway';
+  let fallbackAsn: string | undefined = undefined;
+
+  if (isIpv6) {
+    fallbackCity = 'Public IPv6 Relay (Unmapped Subnet)';
+    fallbackCountry = 'IPv6 Global Routing Space';
+    fallbackCountryCode = 'V6';
+    fallbackOrg = 'IPv6 Transit Provider';
+
+    if (reverseDns) {
+      if (reverseDns.includes('google.com') || reverseDns.includes('1e100.net')) {
+        fallbackOrg = 'Google LLC';
+        fallbackAsn = 'AS15169';
+        fallbackCity = 'Mountain View (Google Relay)';
+        fallbackCountry = 'United States';
+        fallbackCountryCode = 'US';
+      } else if (reverseDns.includes('outlook.com') || reverseDns.includes('microsoft.com')) {
+        fallbackOrg = 'Microsoft Corporation';
+        fallbackAsn = 'AS8075';
+        fallbackCity = 'Redmond (Microsoft Relay)';
+        fallbackCountry = 'United States';
+        fallbackCountryCode = 'US';
+      } else if (reverseDns.includes('linkedin.com')) {
+        fallbackOrg = 'LinkedIn Corporation';
+        fallbackAsn = 'AS55113';
+        fallbackCity = 'Sunnyvale (LinkedIn Relay)';
+        fallbackCountry = 'United States';
+        fallbackCountryCode = 'US';
+      }
+    }
+  }
+
+  const isTor = torSignal;
+  const isProxyOrVpn = isTor || infraSignal === 'vpn';
+  const countryMismatch = Boolean(
+    fallbackCountryCode &&
+    fallbackCountryCode !== 'XX' &&
+    fallbackCountryCode !== 'V6' &&
+    rirCountry &&
+    fallbackCountryCode.toUpperCase() !== rirCountry.toUpperCase()
+  );
+
   const fallbackResult: GeoLocationResult = {
     ip,
     isPrivate: false,
     isRfc1918: false,
     classification,
-    city: 'External Relay',
-    country: 'Global Public Network',
-    countryCode: 'XX',
+    city: fallbackCity,
+    country: fallbackCountry,
+    countryCode: fallbackCountryCode,
+    rirCountry,
+    countryMismatch,
+    org: fallbackOrg,
+    isp: fallbackOrg,
+    asn: fallbackAsn,
     reverseDns,
-    source: 'MAXMIND_FALLBACK',
-    lookupMethod: 'Standard Public Gateway Classification'
+    isTor,
+    isProxyOrVpn,
+    infra: infraSignal || (isTor ? 'vpn' : null),
+    abuseScore: isTor ? 88 : (infraSignal === 'vpn' ? 50 : 0),
+    isBlacklisted: isTor,
+    source: isIpv6 ? 'MAXMIND_IPV6_ROUTING' : 'MAXMIND_FALLBACK',
+    lookupMethod: isIpv6 ? 'IPv6 Global Subnet Resolution' : 'Standard Public Gateway Classification'
   };
 
   GEO_CACHE.set(ip, fallbackResult);

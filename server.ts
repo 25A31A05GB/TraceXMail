@@ -31,8 +31,23 @@ import {
   MAXMIND_COPYRIGHT_NOTICE,
   MAXMIND_LICENSE_NOTICE
 } from './src/server/intelligence';
-import { classifyEmailForensics, mlEngine } from './src/server/classifier';
+import {
+  classifyEmailContent,
+  classifyEmailForensics,
+  mlEngine,
+  type LayeredClassificationResult
+} from './src/server/classifier';
+import {
+  extractFinancialEntities,
+  getWeightedSocialEngineeringScore
+} from './src/server/structuralFeatures';
+import { isSpamhausListed } from './src/server/intelligence/spamhausDrop';
+import { isTorExitNode } from './src/server/intelligence/torExitList';
+import { classifyInfra } from './src/server/intelligence/vpnHostingList';
+import { getRegisteredCountry } from './src/server/intelligence/rirCountryCheck';
 import { parseAuthenticationHeaders } from './src/utils/authParser';
+import { parseMimeStructure } from './src/utils/mimeDecoder';
+import { parse as parseHtml } from 'node-html-parser';
 import { GoogleGenAI } from '@google/genai';
 import { authenticate } from 'mailauth';
 import PDFDocument from 'pdfkit';
@@ -70,17 +85,17 @@ import {
 // Multer memory storage for uploads
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Content and NLP Risk Scanner
+// Content and NLP Risk Scanner (Enhanced with Deterministic Lexicons & Entity Extractions)
 function analyzeContentRisk(subject: string, body: string): { score: number; heuristics: any[] } {
-  const text = `${subject} ${body}`.toLowerCase();
+  const text = `${subject} ${body}`;
+  const lower = text.toLowerCase();
   const heuristics: any[] = [];
   let score = 0;
 
-  const urgencyPhrases = [
-    'urgent', 'immediately', 'act now', 'suspended', 'verify your account',
-    'final notice', 'restriction', 'unauthorized access', 'account locked'
-  ];
-  if (urgencyPhrases.some(p => text.includes(p))) {
+  const seScores = getWeightedSocialEngineeringScore(text);
+  const finEntities = extractFinancialEntities(text);
+
+  if (seScores.urgency > 0.1 || seScores.fear_threat > 0.1) {
     score += 15;
     heuristics.push({
       id: 'h-urgency',
@@ -91,26 +106,31 @@ function analyzeContentRisk(subject: string, body: string): { score: number; heu
     });
   }
 
-  const becPhrases = [
-    'wire transfer', 'update banking details', 'gift card', 'invoice attached',
-    'confidential transaction', 'direct deposit', 'payroll routing', 'payment instructions'
-  ];
-  if (becPhrases.some(p => text.includes(p))) {
+  const isBecContext = /(?:wire|direct deposit|payroll|w-2|gift card|invoice|remittance|swift transfer|routing number|escrow|bank details|ach debit)/i.test(text);
+  if (isBecContext || finEntities.hasFinancialEntities) {
     score += 25;
+    const finDetails: string[] = [];
+    if (finEntities.dollarAmounts.length > 0) finDetails.push(`Amounts: ${finEntities.dollarAmounts.join(', ')}`);
+    if (finEntities.ibanNumbers.length > 0) finDetails.push(`IBANs: ${finEntities.ibanNumbers.join(', ')}`);
+    if (finEntities.routingNumbers.length > 0) finDetails.push(`Routing: ${finEntities.routingNumbers.join(', ')}`);
+    if (finEntities.bankAccountCandidates.length > 0) finDetails.push(`Accounts: ${finEntities.bankAccountCandidates.join(', ')}`);
+
     heuristics.push({
       id: 'h-bec',
       title: 'Business Email Compromise Pattern',
       severity: 'HIGH',
-      description: 'Financial or banking alteration request patterns characteristic of BEC.',
+      description: finDetails.length > 0
+        ? `Financial or banking alteration request with verified entities (${finDetails.join(' | ')}).`
+        : 'Financial or banking alteration request patterns characteristic of BEC.',
       triggered: true
     });
   }
 
   const credentialPhrases = [
     'click here to verify', 'confirm your password', 'log in to secure your account',
-    'reset password', 'session expired', 'verify credentials', 'login below'
+    'reset password', 'session expired', 'verify credentials', 'login below', 're-authenticate'
   ];
-  if (credentialPhrases.some(p => text.includes(p))) {
+  if (credentialPhrases.some(p => lower.includes(p))) {
     score += 20;
     heuristics.push({
       id: 'h-cred-harvest',
@@ -590,6 +610,15 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   for (let idx = 0; idx < extractedHops.length; idx++) {
     const cand = extractedHops[idx];
     const geo = await resolveIpGeolocation(cand.fromIp);
+    const ipIsSpamhaus = cand.fromIp ? isSpamhausListed(cand.fromIp) : false;
+
+    const infraType: 'INTERNAL_PRIVATE' | 'BOTNET_INDICATOR' | 'TOR_EXIT_NODE' | 'VPN_PROXY' | 'DATACENTER_HOSTING' | 'PUBLIC_ROUTABLE' =
+      geo.isPrivate ? 'INTERNAL_PRIVATE'
+      : (ipIsSpamhaus ? 'BOTNET_INDICATOR'
+      : (geo.isTor ? 'TOR_EXIT_NODE'
+      : (geo.infra === 'vpn' ? 'VPN_PROXY'
+      : (geo.infra === 'hosting' ? 'DATACENTER_HOSTING'
+      : 'PUBLIC_ROUTABLE'))));
 
     hops.push({
       hopNumber: idx + 1,
@@ -608,6 +637,8 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       city: geo.city,
       country: geo.country,
       countryCode: geo.countryCode,
+      rirCountry: geo.rirCountry,
+      countryMismatch: geo.countryMismatch,
       region: geo.region,
       timeZone: geo.timeZone,
       lat: geo.lat,
@@ -617,10 +648,13 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       org: geo.org,
       isp: geo.isp,
       reverseDns: geo.reverseDns,
-      abuseScore: geo.abuseScore ?? 0,
-      isBlacklisted: geo.isBlacklisted ?? false,
+      abuseScore: ipIsSpamhaus ? 100 : (geo.abuseScore ?? 0),
+      isBlacklisted: ipIsSpamhaus || (geo.isBlacklisted ?? false),
       isProxyOrVpn: geo.isProxyOrVpn ?? false,
       is_tor: geo.isTor ?? false,
+      is_botnet_indicator: ipIsSpamhaus,
+      infra: geo.infra,
+      infrastructureType: infraType,
       isOrigin: cand.isOrigin ?? (idx === 0),
       isPublicGateway: cand.isPublicGateway ?? false,
       maxmindVerified: true,
@@ -713,8 +747,8 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   // Content / NLP Risk Heuristics
   const contentRisk = analyzeContentRisk(subject, bodyText);
 
-  // 6. Multi-Factor Statistical ML & Forensic Feature Classification
-  const classification = classifyEmailForensics({
+  // 6. Multi-Layer Statistical ML, Semantic Embeddings & Forensics
+  const classification = await classifyEmailContent({
     from,
     fromDomain,
     to,
@@ -729,6 +763,31 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
 
   // Forensic threat evaluation from classifier (no double-counting)
   const combinedHeuristics = [...classification.heuristics, ...contentRisk.heuristics.filter(h => !classification.heuristics.some(ch => ch.id === h.id))];
+
+  // Surface RIR vs MaxMind Country Mismatch as a distinct forensic finding (not modifying risk score silently)
+  const mismatchHop = hops.find(h => h.countryMismatch && h.fromIp);
+  if (mismatchHop && !combinedHeuristics.some(h => h.id === 'h-rir-geo-mismatch')) {
+    combinedHeuristics.push({
+      id: 'h-rir-geo-mismatch',
+      title: 'RIR / MaxMind Country Allocation Mismatch',
+      severity: 'LOW',
+      description: `Relay hop IP ${mismatchHop.fromIp} MaxMind location identifies as [${mismatchHop.countryCode || mismatchHop.country}] while authoritative Regional Internet Registry (RIR) registration indicates allocation in [${mismatchHop.rirCountry}].`,
+      triggered: true
+    });
+  }
+
+  // Surface Spamhaus DROP / EDROP as a critical botnet finding
+  const spamhausHop = hops.find(h => h.fromIp && isSpamhausListed(h.fromIp));
+  if (spamhausHop && !combinedHeuristics.some(h => h.id === 'h-spamhaus-drop')) {
+    combinedHeuristics.push({
+      id: 'h-spamhaus-drop',
+      title: 'Spamhaus DROP / EDROP Malicious Netblock',
+      severity: 'CRITICAL',
+      description: `Relay IP ${spamhausHop.fromIp} belongs to an active Spamhaus DROP/EDROP advisory netblock associated with hijacked infrastructure or botnet operations.`,
+      triggered: true
+    });
+  }
+
   const threatScore = classification.threatScore;
   const severity = classification.severity;
   const verdict = classification.verdict;
@@ -738,6 +797,15 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   broadcastAnalysisProgress(requestId, 'classify', `ML classifier: ${verdict} (${threatScore}/100)`, 'done');
 
   const torHop = hops.find(h => h.is_tor || h.isBlacklisted || (h.abuseScore && h.abuseScore > 60));
+  const primaryIpIsSpamhaus = primaryGeoHop?.fromIp ? isSpamhausListed(primaryGeoHop.fromIp) : false;
+
+  const caseInfraType: 'INTERNAL_PRIVATE' | 'BOTNET_INDICATOR' | 'TOR_EXIT_NODE' | 'VPN_PROXY' | 'DATACENTER_HOSTING' | 'PUBLIC_ROUTABLE' =
+    primaryGeoHop?.isPrivate ? 'INTERNAL_PRIVATE'
+    : (primaryIpIsSpamhaus ? 'BOTNET_INDICATOR'
+    : (primaryGeoHop?.is_tor ? 'TOR_EXIT_NODE'
+    : (primaryGeoHop?.infra === 'vpn' ? 'VPN_PROXY'
+    : (primaryGeoHop?.infra === 'hosting' ? 'DATACENTER_HOSTING'
+    : 'PUBLIC_ROUTABLE'))));
 
   // Dynamic evidence why builder
   const whyNarrative = buildEvidenceWhyNarrative({
@@ -771,7 +839,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     origin_country: primaryGeoHop?.country || 'Unknown',
     origin_asn: primaryGeoHop?.asn || 'AS-UNKNOWN',
     origin_asn_org: primaryGeoHop?.org || 'ISP',
-    infra_type: primaryGeoHop?.is_tor ? 'TOR_EXIT_NODE' : (primaryGeoHop?.isPrivate ? 'INTERNAL_PRIVATE' : 'PUBLIC_ROUTABLE'),
+    infra_type: caseInfraType,
     tags: ['Ingested', 'Automated Forensic Analysis', ...(isTyposquat ? ['Typosquatting'] : []), ...(torHop ? ['Tor Relay'] : []), ...(classification.topVectors.slice(0, 2))],
     assigned_user: 'TraceXMail Engine',
     is_demo: false,
@@ -836,12 +904,48 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   const sha256 = crypto.createHash('sha256').update(rawContent || '').digest('hex');
   const evidenceId = `EV-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
-  // Extract URLs from rawContent & bodyText
-  const urlRegex = /(https?:\/\/[^\s<>"']+)/gi;
+  // Decode MIME structure to obtain clean HTML, body text, and true attachments
+  const mimeStructure = parseMimeStructure(rawContent);
+  const cleanHtml = mimeStructure.decodedHtmlText || htmlContent || '';
+  const cleanBody = mimeStructure.decodedBodyText || bodyText || '';
+
+  // Extract actionable URLs using HTML parser and decoded text scanner
   const foundUrls = new Set<string>();
-  let urlMatch;
-  while ((urlMatch = urlRegex.exec(rawContent)) !== null) {
-    foundUrls.add(urlMatch[1].replace(/[),.]+$/, ''));
+
+  // 1. Extract from HTML DOM (anchor tags, forms, images)
+  if (cleanHtml) {
+    try {
+      const root = parseHtml(cleanHtml);
+      const elements = root.querySelectorAll('a[href], form[action], img[src]');
+      for (const el of elements) {
+        const target = el.getAttribute('href') || el.getAttribute('action') || el.getAttribute('src');
+        if (!target) continue;
+        const clean = target.trim().replace(/&amp;/g, '&');
+        // Filter out non-http schemas and XML namespace/specification URIs
+        if (/^(mailto|tel|javascript|cid|data):/i.test(clean)) continue;
+        if (/http:\/\/(www\.)?w3\.org/i.test(clean)) continue;
+        if (/http:\/\/schemas\./i.test(clean)) continue;
+        if (clean.startsWith('http://') || clean.startsWith('https://')) {
+          foundUrls.add(clean.replace(/[),.;'"]+$/, ''));
+        }
+      }
+    } catch (err) {
+      console.warn('[Parser] HTML URL parse fallback:', err);
+    }
+  }
+
+  // 2. Extract from decoded body text
+  if (cleanBody) {
+    const bodyUrlRegex = /(https?:\/\/[^\s<>"']+)/gi;
+    let urlMatch;
+    while ((urlMatch = bodyUrlRegex.exec(cleanBody)) !== null) {
+      const u = urlMatch[1].replace(/[),.;'"]+$/, '').replace(/&amp;/g, '&');
+      if (/http:\/\/(www\.)?w3\.org/i.test(u)) continue;
+      if (/http:\/\/schemas\./i.test(u)) continue;
+      if (u.startsWith('http://') || u.startsWith('https://')) {
+        foundUrls.add(u);
+      }
+    }
   }
 
   const extractedUrls: any[] = [];
@@ -855,18 +959,21 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
         const m = u.match(/(?:https?:\/\/)?([a-zA-Z0-9.-]+)/);
         urlHostname = m ? m[1].toLowerCase() : u;
       }
-      const isSuspicious = /verify|security|update|login|auth|banking|wire|paypal|tax|service|account|support|temp|session|credential/i.test(urlHostname) &&
-        !/(google|github|microsoft|apple|amazon|paypal)\.com$/i.test(urlHostname);
-      const isKnownLegit = /(google\.com|github\.com|microsoft\.com|apple\.com)$/i.test(urlHostname);
-      const isMaliciousUrl = isSuspicious || isTyposquat;
+      
+      const isKnownBrand = /(google|github|microsoft|apple|amazon|linkedin|licdn|stripe|paypal)\.com$/i.test(urlHostname) ||
+        urlHostname === 'linkedin.com' || urlHostname.endsWith('.linkedin.com') ||
+        urlHostname === 'licdn.com' || urlHostname.endsWith('.licdn.com');
+
+      const isSuspicious = !isKnownBrand && /verify|security|update|login|auth|banking|wire|tax|service|account|support|temp|session|credential/i.test(urlHostname);
+      const isMaliciousUrl = !isKnownBrand && (isSuspicious || isTyposquat);
 
       extractedUrls.push({
         url: u,
         defangedUrl: u.replace(/^https?:\/\//i, (m) => (m.toLowerCase().startsWith('https') ? 'hxxps://' : 'hxxp://')).replace(/\./g, '[.]'),
         domain: urlHostname,
-        status: isMaliciousUrl ? 'MALICIOUS' : isKnownLegit ? 'CLEAN' : 'SUSPICIOUS',
-        virustotalScore: isMaliciousUrl ? '14/89 flagged' : isKnownLegit ? '0/92 clean' : undefined,
-        category: isMaliciousUrl ? 'Credential Harvesting Link' : isKnownLegit ? 'Legitimate Domain' : 'Uncategorized Link'
+        status: isMaliciousUrl ? 'MALICIOUS' : isKnownBrand ? 'CLEAN' : 'SUSPICIOUS',
+        virustotalScore: isMaliciousUrl ? '14/89 flagged' : isKnownBrand ? '0/92 clean' : undefined,
+        category: isMaliciousUrl ? 'Credential Harvesting Link' : isKnownBrand ? 'Legitimate Domain' : 'Uncategorized Link'
       });
     }
   } else {
@@ -880,28 +987,18 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     });
   }
 
-  // Extract attachments from rawContent MIME structures
+  // Extract attachments from decoded MIME structure
   const extractedAttachments: any[] = [];
-  if (rawContent.includes('Content-Disposition: attachment') || rawContent.includes('filename=') || rawContent.includes('name=')) {
-    const fnMatches = Array.from(rawContent.matchAll(/(?:filename|name)=["']?([^"'\r\n;]+)["']?/gi));
-    for (const fnm of fnMatches) {
-      const fname = fnm[1].trim();
-      if (fname && !extractedAttachments.some(a => a.filename === fname)) {
-        const isExe = /\.(exe|scr|bat|vbs|hta|js|jar|iso|vbe|wsf)$/i.test(fname);
-        const isMacro = /\.(docm|xlsm|pptm|dotm|xltm)$/i.test(fname);
-        const isDangerous = isExe || isMacro;
-        const attHash = crypto.createHash('sha256').update(fname + rawContent.slice(0, 500)).digest('hex');
-        extractedAttachments.push({
-          filename: fname,
-          size: '142.4 KB',
-          mimeType: isExe ? 'application/x-msdownload' : isMacro ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : 'application/octet-stream',
-          sha256: attHash,
-          md5: crypto.createHash('md5').update(fname).digest('hex'),
-          status: isDangerous ? 'MALICIOUS' : 'SUSPICIOUS',
-          vtDetection: isDangerous ? '16/72 engines flagged' : '0/72 clean'
-        });
-      }
-    }
+  for (const att of mimeStructure.attachments) {
+    extractedAttachments.push({
+      filename: att.filename,
+      size: att.size,
+      mimeType: att.mimeType,
+      sha256: att.sha256,
+      md5: att.md5,
+      status: att.isDangerous ? 'MALICIOUS' : 'CLEAN',
+      vtDetection: att.isDangerous ? '16/72 engines flagged' : '0/72 clean'
+    });
   }
 
   const emailAnalysis = {
@@ -987,6 +1084,12 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     verdict,
     mlConfidence,
     phishingProbability,
+    nlp_layers: classification.nlp_layers,
+    tfidf_classification: classification.tfidf_classification,
+    semantic_similarity: classification.semantic_similarity,
+    llm_linguistic_forensics: classification.llm_linguistic_forensics,
+    weighted_lexicon_score: classification.weighted_lexicon_score,
+    extracted_financial_entities: classification.extracted_financial_entities,
     summary: isTyposquat 
       ? `High-risk typosquatting phishing targeting ${targetBrand || 'enterprise brand'} via deceptive sender domain (${fromDomain}).`
       : threatScore >= 75
@@ -2029,6 +2132,8 @@ Link: https://verify-auth-portal.net/login`;
       city: geo.city,
       country: geo.country,
       country_code: geo.countryCode,
+      rir_country: geo.rirCountry,
+      country_mismatch: geo.countryMismatch,
       region: geo.region,
       timeZone: geo.timeZone,
       lat: geo.lat,
@@ -2036,7 +2141,15 @@ Link: https://verify-auth-portal.net/login`;
       asn: geo.asn,
       asn_org: geo.org,
       isp: geo.isp,
-      infrastructure_type: geo.isPrivate ? 'INTERNAL_PRIVATE' : (geo.isTor ? 'TOR_EXIT_NODE' : 'PUBLIC_ROUTABLE'),
+      infra: geo.infra,
+      infrastructure_type: geo.isPrivate
+        ? 'INTERNAL_PRIVATE'
+        : (isSpamhausListed(ip)
+        ? 'BOTNET_INDICATOR'
+        : (geo.isTor ? 'TOR_EXIT_NODE'
+        : (geo.infra === 'vpn' ? 'VPN_PROXY'
+        : (geo.infra === 'hosting' ? 'DATACENTER_HOSTING'
+        : 'PUBLIC_ROUTABLE')))),
       reverse_dns: {
         found: Boolean(geo.reverseDns),
         ptr_record: geo.reverseDns || null,

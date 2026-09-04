@@ -16,6 +16,8 @@ export interface EmailHop {
   city?: string;
   country?: string;
   countryCode?: string;
+  rirCountry?: string | null;
+  countryMismatch?: boolean;
   lat?: number;
   lng?: number;
   asn?: string;
@@ -27,6 +29,7 @@ export interface EmailHop {
   abuseStatus?: string;
   isBlacklisted?: boolean;
   isProxyOrVpn?: boolean;
+  infra?: 'vpn' | 'hosting' | null;
   isOrigin?: boolean;
   isPublicGateway?: boolean;
   isPrivate?: boolean;

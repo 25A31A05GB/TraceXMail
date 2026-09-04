@@ -20,8 +20,29 @@ import {
   extractForensicTokens,
   evaluateStructuralIdentity,
   loadBrandDefinitions,
-  isPunycodeOrHomoglyph
+  isPunycodeOrHomoglyph,
+  getWeightedSocialEngineeringScore,
+  extractFinancialEntities,
+  type FinancialEntitiesResult
 } from './structuralFeatures.js';
+import {
+  scoreSemanticSimilarity,
+  type SemanticSimilarityResult
+} from './semanticSimilarity.js';
+import {
+  analyzeLinguisticForensics,
+  type LinguisticForensicsResult
+} from './linguisticForensics.js';
+
+export {
+  scoreSemanticSimilarity,
+  analyzeLinguisticForensics,
+  getWeightedSocialEngineeringScore,
+  extractFinancialEntities,
+  type SemanticSimilarityResult,
+  type LinguisticForensicsResult,
+  type FinancialEntitiesResult
+};
 
 export type EmailClassification =
   | 'Legitimate'
@@ -615,19 +636,25 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     }
   }
 
-  const verdict: ClassificationResult['verdict'] =
-    finalClass === 'Phishing' ? 'MALICIOUS PHISH'
-    : finalClass === 'Fraud-related' ? 'FRAUD-RELATED'
-    : finalClass === 'Impersonated' ? 'IMPERSONATED'
-    : finalClass === 'Suspicious' ? 'SUSPICIOUS'
-    : 'LEGITIMATE';
-
   const severity: ClassificationResult['severity'] =
     totalThreatScore >= 80 ? 'CRITICAL'
     : totalThreatScore >= 60 ? 'HIGH'
     : totalThreatScore >= 35 ? 'MEDIUM'
     : totalThreatScore >= 15 ? 'LOW'
     : 'CLEAN';
+
+  // Authoritative top-level verdict strictly reconciled with composite multi-factor severity
+  let verdict: ClassificationResult['verdict'];
+  if (severity === 'CRITICAL' || severity === 'HIGH') {
+    verdict = finalClass === 'Fraud-related' ? 'FRAUD-RELATED'
+      : finalClass === 'Impersonated' ? 'IMPERSONATED'
+      : 'MALICIOUS PHISH';
+  } else if (severity === 'MEDIUM') {
+    verdict = 'SUSPICIOUS';
+  } else {
+    // Score is under 35/100 (LOW or CLEAN)
+    verdict = 'LEGITIMATE';
+  }
 
   const phishingProbability = parseFloat((mlOutput.probabilities.Phishing || 0).toFixed(4));
   const mlConfidence = mlOutput.confidence;
@@ -663,5 +690,154 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     topVectors,
     infrastructureBreakdown,
     attribution
+  };
+}
+
+export interface LayeredClassificationResult extends ClassificationResult {
+  tfidf_classification: {
+    predictedClass: EmailClassification;
+    probabilities: Record<EmailClassification, number>;
+    confidence: number;
+    topFeatures: Array<{ token: string; weight: number }>;
+  };
+  semantic_similarity: SemanticSimilarityResult;
+  llm_linguistic_forensics: LinguisticForensicsResult;
+  weighted_lexicon_score: Record<string, number>;
+  extracted_financial_entities: FinancialEntitiesResult;
+  nlp_layers: {
+    layer0_tfidf_centroid: {
+      predictedClass: EmailClassification;
+      probabilities: Record<EmailClassification, number>;
+      confidence: number;
+      topFeatures: Array<{ token: string; weight: number }>;
+    };
+    layer1_semantic_similarity: SemanticSimilarityResult;
+    layer2_llm_linguistic_forensics: LinguisticForensicsResult;
+    layer3_weighted_lexicon: {
+      scores: Record<string, number>;
+      financial_entities: FinancialEntitiesResult;
+    };
+  };
+}
+
+/**
+ * Multi-Layer Advanced Forensic NLP & Telemetry Pipeline.
+ *
+ * Runs all 4 distinct layers while keeping each separately labeled and grounded:
+ * - Layer 0: Centroid-Cosine TF-IDF Vector Space Inference (Deterministic baseline)
+ * - Layer 1: Gemini text-embedding-004 Semantic Similarity against reference corpus (Optional/API-key)
+ * - Layer 2: Groq / Gemini Structured LLM Linguistic Forensics tagged as HYPOTHESIS (Optional/API-key)
+ * - Layer 3: Expanded Weighted Lexicon & Financial Entity Extractor with IBAN/ABA checksums (Always-on)
+ */
+export async function classifyEmailContent(input: ClassifierInput): Promise<LayeredClassificationResult> {
+  // 1. Run Baseline Deterministic ML & Envelope Telemetry
+  const baseResult = classifyEmailForensics(input);
+  const bodyText = input.bodyText || input.text || '';
+  const combinedText = `${input.subject} ${bodyText}`;
+
+  // 2. LAYER 3: Free deterministic weighted lexicon & entity extraction (Always-On)
+  const seScores = getWeightedSocialEngineeringScore(combinedText);
+  const finEntities = extractFinancialEntities(combinedText);
+
+  // 3. LAYER 1: Semantic embedding similarity via Gemini text-embedding-004 (Optional)
+  const semanticSim = await scoreSemanticSimilarity(bodyText || input.subject);
+
+  // 4. LAYER 2: Structured LLM linguistic forensics (Optional, tagged as HYPOTHESIS)
+  const llmForensics = await analyzeLinguisticForensics(bodyText || input.subject, {
+    from: input.from,
+    subject: input.subject
+  });
+
+  // 5. Enhanced BEC / Payment Diversion Heuristic Synthesis
+  const updatedHeuristics = [...baseResult.heuristics];
+  const updatedFeatures = [...baseResult.features];
+  const updatedTopVectors = [...baseResult.topVectors];
+
+  const hasFinancialData = finEntities.hasFinancialEntities ||
+    llmForensics.extracted_entities.dollar_amounts.length > 0 ||
+    llmForensics.extracted_entities.account_or_routing_numbers.length > 0;
+
+  const isBecPattern = /(?:wire|direct deposit|payroll|w-2|gift card|invoice|remittance|swift transfer|routing number|escrow|bank details|ach debit)/i.test(combinedText) ||
+    llmForensics.social_engineering_techniques.includes('authority_impersonation') ||
+    llmForensics.social_engineering_techniques.includes('pretexting');
+
+  if (hasFinancialData && isBecPattern) {
+    const details: string[] = [];
+    if (finEntities.dollarAmounts.length > 0) details.push(`Amounts: ${finEntities.dollarAmounts.join(', ')}`);
+    if (finEntities.ibanNumbers.length > 0) details.push(`IBANs: ${finEntities.ibanNumbers.join(', ')}`);
+    if (finEntities.routingNumbers.length > 0) details.push(`ABA Routing: ${finEntities.routingNumbers.join(', ')}`);
+    if (finEntities.bankAccountCandidates.length > 0) details.push(`Account/SWIFT: ${finEntities.bankAccountCandidates.join(', ')}`);
+    if (llmForensics.extracted_entities.dollar_amounts.length > 0 && finEntities.dollarAmounts.length === 0) {
+      details.push(`LLM-detected Amounts: ${llmForensics.extracted_entities.dollar_amounts.join(', ')}`);
+    }
+
+    const becDesc = details.length > 0
+      ? `Explicit financial alteration / payment entities identified: ${details.join(' | ')}`
+      : 'Payment alteration or banking instructions detected.';
+
+    if (!updatedHeuristics.some(h => h.id === 'h-bec-entities')) {
+      updatedHeuristics.push({
+        id: 'h-bec-entities',
+        title: 'Verified Financial Entities in Payment Diversion Context',
+        severity: 'HIGH',
+        description: becDesc,
+        triggered: true
+      });
+      updatedTopVectors.push('Financial Payment Diversion Entities');
+    }
+  }
+
+  // Tag LLM findings as explicit HYPOTHESIS evidence
+  if (llmForensics.status === 'AVAILABLE' && llmForensics.social_engineering_techniques.length > 0) {
+    if (!updatedHeuristics.some(h => h.id === 'h-llm-hypothesis')) {
+      updatedHeuristics.push({
+        id: 'h-llm-hypothesis',
+        title: `Linguistic Hypothesis: ${llmForensics.social_engineering_techniques.slice(0, 2).map(s => s.replace(/_/g, ' ')).join(', ')}`,
+        severity: llmForensics.register_anomaly_flag ? 'HIGH' : 'MEDIUM',
+        description: `[HYPOTHESIS] Model ${llmForensics.model_used} inferred tone "${llmForensics.tone_register}" (confidence ${(llmForensics.confidence * 100).toFixed(0)}%). Techniques: ${llmForensics.social_engineering_techniques.join(', ')}.${llmForensics.register_anomaly_reason ? ` Note: ${llmForensics.register_anomaly_reason}` : ''}`,
+        triggered: true
+      });
+    }
+  }
+
+  // Tag Semantic similarity finding if strong cluster match observed
+  if (semanticSim.status === 'AVAILABLE' && semanticSim.topSimilarity >= 0.75 && semanticSim.nearestClass && semanticSim.nearestClass !== 'Legitimate') {
+    if (!updatedHeuristics.some(h => h.id === 'h-semantic-cluster')) {
+      updatedHeuristics.push({
+        id: 'h-semantic-cluster',
+        title: `Semantic Pattern Match: ${semanticSim.details?.nearestTemplateTitle || semanticSim.nearestClass}`,
+        severity: semanticSim.topSimilarity >= 0.85 ? 'HIGH' : 'MEDIUM',
+        description: `Cosine similarity ${(semanticSim.topSimilarity * 100).toFixed(1)}% to canonical ${semanticSim.nearestClass} pattern via Gemini text-embedding-004.`,
+        triggered: true
+      });
+    }
+  }
+
+  const tfidfSummary = {
+    predictedClass: baseResult.predictedClass,
+    probabilities: baseResult.probabilities,
+    confidence: baseResult.confidence,
+    topFeatures: baseResult.topFeatures
+  };
+
+  return {
+    ...baseResult,
+    heuristics: updatedHeuristics,
+    features: updatedFeatures,
+    topVectors: updatedTopVectors,
+    tfidf_classification: tfidfSummary,
+    semantic_similarity: semanticSim,
+    llm_linguistic_forensics: llmForensics,
+    weighted_lexicon_score: seScores,
+    extracted_financial_entities: finEntities,
+    nlp_layers: {
+      layer0_tfidf_centroid: tfidfSummary,
+      layer1_semantic_similarity: semanticSim,
+      layer2_llm_linguistic_forensics: llmForensics,
+      layer3_weighted_lexicon: {
+        scores: seScores,
+        financial_entities: finEntities
+      }
+    }
   };
 }

@@ -83,17 +83,22 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
   ).toUpperCase();
 
   // 3. Categorize into MALICIOUS, SUSPICIOUS, or SAFE
+  // If score is verified low (<35/100), composite risk takes precedence over text-only ML labels
+  const isScoreLow = hasScore && score < 35;
+
   const isMalicious =
-    rawVerdict.includes('PHISH') ||
+    !isScoreLow &&
+    (rawVerdict.includes('PHISH') ||
     rawVerdict.includes('FRAUD') ||
     rawVerdict.includes('MALICIOUS') ||
     rawVerdict.includes('IMPERSONAT') ||
-    (hasScore && score >= 75);
+    (hasScore && score >= 75));
 
   const isClean =
-    (rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN') || rawVerdict.includes('PASS') || rawVerdict.includes('SAFE')) &&
+    isScoreLow ||
+    ((rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN') || rawVerdict.includes('PASS') || rawVerdict.includes('SAFE')) &&
     !isMalicious &&
-    (!hasScore || score < 35);
+    (!hasScore || score < 35));
 
   const isSuspicious = !isClean && !isMalicious;
   const isSafe = isClean;
@@ -105,8 +110,8 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
     : 'SAFE';
 
   // 4. Primary standardized display verdict
-  let verdict = analysis?.threatVerdict || analysis?.verdict || analysis?.classification;
-  if (!verdict) {
+  let verdict = isScoreLow ? 'LEGITIMATE' : (analysis?.threatVerdict || analysis?.verdict || analysis?.classification);
+  if (!verdict || (isScoreLow && (verdict.includes('PHISH') || verdict.includes('MALICIOUS')))) {
     verdict = isMalicious ? 'MALICIOUS PHISH' : isSuspicious ? 'SUSPICIOUS' : 'LEGITIMATE';
   }
 

@@ -406,12 +406,24 @@ export function extractForensicTokens(input: {
 
   tokens.push(...structuralEval.structuralTokens);
 
-  // Linguistic semantic cues
-  if (/(?:wire|direct deposit|payroll|w-2|gift card|invoice|remittance|swift transfer|routing number|escrow|bank details|ach debit)/i.test(combined)) {
+  // Expanded deterministic linguistic semantic cues
+  const seScores = getWeightedSocialEngineeringScore(combined);
+  const finEntities = extractFinancialEntities(combined);
+
+  if (finEntities.hasFinancialEntities || /(?:wire|direct deposit|payroll|w-2|gift card|invoice|remittance|swift transfer|routing number|escrow|bank details|ach debit)/i.test(combined)) {
     tokens.push('__cue_fraud_wire__');
   }
-  if (/(?:urgent|immediate|account suspended|password expired|verify your identity|unauthorized access|restricted|unlock account|confirm credentials)/i.test(combined)) {
+  if (seScores.urgency > 0.1 || seScores.fear_threat > 0.1 || /(?:urgent|immediate|account suspended|password expired|verify your identity|unauthorized access|restricted|unlock account|confirm credentials)/i.test(combined)) {
     tokens.push('__cue_phish_urgency__');
+  }
+  if (seScores.authority > 0.2) {
+    tokens.push('__cue_authority__');
+  }
+  if (seScores.secrecy_isolation > 0.2) {
+    tokens.push('__cue_secrecy__');
+  }
+  if (seScores.reward > 0.2) {
+    tokens.push('__cue_reward__');
   }
   if (/(?:unsubscribe|newsletter|discount|promo|b2b leads|opt-out|voucher|cold outbound|pipeline|webinar)/i.test(combined)) {
     tokens.push('__cue_marketing_promo__');
@@ -421,4 +433,253 @@ export function extractForensicTokens(input: {
   }
 
   return tokens;
+}
+
+// ============================================================================
+// LAYER 3: Expanded, Weighted Social Engineering Lexicons & Deterministic Entity Extractor
+// (Free, deterministic zero-API-key baseline)
+// ============================================================================
+
+export const AUTHORITY_CUES: string[] = [
+  'chief executive officer', 'ceo', 'cfo', 'coo', 'cio', 'ciso',
+  'executive office', 'board of directors', 'managing director', 'president',
+  'office of the president', 'general counsel', 'legal department', 'compliance team',
+  'internal audit', 'information security department', 'system administrator',
+  'security operations center', 'it helpdesk', 'human resources director',
+  'payroll director', 'controller', 'vice president of finance',
+  'head of finance', 'supervisory authority', 'law enforcement', 'internal revenue service',
+  'irs notice', 'federal bureau', 'corporate headquarters', 'authorized corporate officer'
+];
+
+export const URGENCY_CUES: string[] = [
+  'urgent', 'urgently', 'immediately', 'immediate action required',
+  'within 24 hours', 'within 12 hours', 'within 48 hours', 'within 2 hours',
+  'strict deadline', 'critical deadline', 'time-sensitive', 'act now',
+  'do not delay', 'final notice', 'last warning', 'expiring soon',
+  'expires today', 'expires in 24 hours', 'critical notice', 'prompt attention',
+  'mandatory update', 'immediate response required', 'before close of business',
+  'by end of day', 'by today', 'account closure imminent', 'action required immediately',
+  'terminate access immediately', 'requires your urgent review'
+];
+
+export const FEAR_THREAT_CUES: string[] = [
+  'account suspended', 'account locked', 'unauthorized access', 'security breach',
+  'policy violation', 'access revoked', 'legal action', 'court subpoena',
+  'arrest warrant', 'termination of service', 'frozen assets', 'fraud alert',
+  'suspicious activity detected', 'penalty fee', 'account restriction',
+  'disciplinary action', 'audit finding', 'failure to comply', 'security alert',
+  'unusual login attempt', 'access restricted', 'security compromised',
+  'breach of policy', 'blacklisted sender', 'revocation notice', 'pending litigation'
+];
+
+export const SECRECY_ISOLATION_CUES: string[] = [
+  'strictly confidential', 'keep this confidential', 'do not discuss with colleagues',
+  'private matter', 'discrete assistance', 'discreet transaction', 'do not call me',
+  'handle privately', 'sensitive acquisition', 'bypass normal channels',
+  'out of the office', 'currently in a meeting', 'do not forward this email',
+  'keep this quiet', 'between you and me', 'sole discretion',
+  'undisclosed transaction', 'no phone calls', 'privileged communication',
+  'do not mention to it', 'keep off the record', 'unannounced acquisition',
+  'sensitive personnel matter', 'executive discretion required'
+];
+
+export const REWARD_CUES: string[] = [
+  'bonus payment', 'unclaimed funds', 'lottery prize', 'settlement payout',
+  'grant approval', 'crypto reward', 'cashback refund', 'compensation fund',
+  'exclusive gift', 'dividend distribution', 'inheritance beneficiary',
+  'special dividend', 'financial gift', 'overpayment refund', 'voucher reward',
+  'million dollars', 'funds credited', 'claim your prize', 'reimbursement check',
+  'welfare benefit', 'approved grant', 'congratulations you won',
+  'payment release', 'guaranteed return', 'windfall allocation'
+];
+
+/**
+ * Validates an International Bank Account Number (IBAN) using ISO 13616 Modulo 97-10 check.
+ */
+export function isValidIban(iban: string): boolean {
+  const clean = iban.replace(/[\s-]/g, '').toUpperCase();
+  if (!/^[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}$/.test(clean)) {
+    return false;
+  }
+  // Move first 4 characters to the end
+  const rearranged = clean.slice(4) + clean.slice(0, 4);
+  // Convert letters to numbers A=10 .. Z=35
+  let numericString = '';
+  for (let i = 0; i < rearranged.length; i++) {
+    const code = rearranged.charCodeAt(i);
+    if (code >= 65 && code <= 90) {
+      numericString += (code - 55).toString();
+    } else {
+      numericString += rearranged[i];
+    }
+  }
+
+  // Modulo 97 on large numeric string using BigInt
+  try {
+    return BigInt(numericString) % 97n === 1n;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validates a US 9-digit ABA Routing Transit Number using official Federal Reserve checksum:
+ * 3*(d0 + d3 + d6) + 7*(d1 + d4 + d7) + 1*(d2 + d5 + d8) mod 10 === 0
+ */
+export function isValidAbaRoutingNumber(routing: string): boolean {
+  const clean = routing.replace(/[\s-]/g, '');
+  if (!/^\d{9}$/.test(clean)) return false;
+  const digits = clean.split('').map(d => parseInt(d, 10));
+  const checksum = (
+    3 * (digits[0] + digits[3] + digits[6]) +
+    7 * (digits[1] + digits[4] + digits[7]) +
+    1 * (digits[2] + digits[5] + digits[8])
+  ) % 10;
+  return checksum === 0;
+}
+
+export interface FinancialEntitiesResult {
+  dollarAmounts: string[];
+  ibanNumbers: string[];
+  routingNumbers: string[];
+  bankAccountCandidates: string[];
+  hasFinancialEntities: boolean;
+  totalAmountsCount: number;
+}
+
+/**
+ * Deterministic Financial Entity Extractor:
+ * Extracts dollar/currency amounts, verified IBANs, ABA routing numbers, and bank account patterns.
+ */
+export function extractFinancialEntities(text: string): FinancialEntitiesResult {
+  if (!text) {
+    return {
+      dollarAmounts: [],
+      ibanNumbers: [],
+      routingNumbers: [],
+      bankAccountCandidates: [],
+      hasFinancialEntities: false,
+      totalAmountsCount: 0
+    };
+  }
+
+  const dollarAmounts: string[] = [];
+  const ibanNumbers: string[] = [];
+  const routingNumbers: string[] = [];
+  const bankAccountCandidates: string[] = [];
+
+  // 1. Dollar / Currency patterns ($1,200.00, 50,000 USD, €45,000, etc.)
+  const currencyRegex = /(?:\$|€|£|¥)\s*[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|\b[0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?\s*(?:USD|dollars?|EUR|euros?|GBP|pounds?|CAD|AUD)\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = currencyRegex.exec(text)) !== null) {
+    const val = match[0].trim();
+    if (!dollarAmounts.includes(val)) {
+      dollarAmounts.push(val);
+    }
+  }
+
+  // 2. IBAN Candidates
+  const ibanRegex = /\b[A-Z]{2}[0-9]{2}[A-Z0-9]{4,30}\b/g;
+  while ((match = ibanRegex.exec(text.toUpperCase())) !== null) {
+    const cand = match[0];
+    if (isValidIban(cand) && !ibanNumbers.includes(cand)) {
+      ibanNumbers.push(cand);
+    }
+  }
+
+  // 3. ABA Routing Number Candidates (9 consecutive digits or formatted XXX-XXX-XXX)
+  const routingRegex = /\b(?:\d{3}[-\s]?\d{3}[-\s]?\d{3}|\d{9})\b/g;
+  while ((match = routingRegex.exec(text)) !== null) {
+    const digitsOnly = match[0].replace(/[-\s]/g, '');
+    if (digitsOnly.length === 9 && isValidAbaRoutingNumber(digitsOnly)) {
+      if (!routingNumbers.includes(digitsOnly)) {
+        routingNumbers.push(digitsOnly);
+      }
+    }
+  }
+
+  // 4. Bank Account / Wire Instruction context cues
+  const accountPattern = /(?:account|acct|iban|routing|swift|sort\s*code|beneficiary\s*bank|bank\s*name)\s*(?:#|no\.?|num\.?|number|id)?[:\s]+([A-Z0-9-]{5,34})/gi;
+  while ((match = accountPattern.exec(text)) !== null) {
+    const matchedAccount = match[1].trim();
+    if (matchedAccount && !bankAccountCandidates.includes(matchedAccount)) {
+      bankAccountCandidates.push(matchedAccount);
+    }
+  }
+
+  const hasFinancialEntities = dollarAmounts.length > 0 ||
+    ibanNumbers.length > 0 ||
+    routingNumbers.length > 0 ||
+    bankAccountCandidates.length > 0;
+
+  return {
+    dollarAmounts,
+    ibanNumbers,
+    routingNumbers,
+    bankAccountCandidates,
+    hasFinancialEntities,
+    totalAmountsCount: dollarAmounts.length
+  };
+}
+
+/**
+ * Computes match density (0.0 to 1.0) for categorized social engineering lexicons.
+ */
+export function getWeightedSocialEngineeringScore(text: string): Record<string, number> {
+  if (!text) {
+    return {
+      authority: 0,
+      urgency: 0,
+      fear_threat: 0,
+      secrecy_isolation: 0,
+      reward: 0,
+      composite_density: 0
+    };
+  }
+
+  const lower = text.toLowerCase();
+  const wordCount = Math.max(1, lower.split(/\s+/).length);
+
+  const countMatches = (cues: string[]) => {
+    let count = 0;
+    for (const phrase of cues) {
+      if (lower.includes(phrase)) {
+        count++;
+      }
+    }
+    return count;
+  };
+
+  const authMatches = countMatches(AUTHORITY_CUES);
+  const urgencyMatches = countMatches(URGENCY_CUES);
+  const fearMatches = countMatches(FEAR_THREAT_CUES);
+  const secrecyMatches = countMatches(SECRECY_ISOLATION_CUES);
+  const rewardMatches = countMatches(REWARD_CUES);
+
+  // Density scoring: 1 match = ~0.35, 2 matches = ~0.70, 3+ matches = 1.0, adjusted by document length
+  const scoreCategory = (matches: number) => {
+    if (matches === 0) return 0;
+    const base = Math.min(1.0, matches * 0.35);
+    const densityBoost = Math.min(0.2, (matches / Math.sqrt(wordCount)) * 2);
+    return parseFloat(Math.min(1.0, base + densityBoost).toFixed(3));
+  };
+
+  const authority = scoreCategory(authMatches);
+  const urgency = scoreCategory(urgencyMatches);
+  const fear_threat = scoreCategory(fearMatches);
+  const secrecy_isolation = scoreCategory(secrecyMatches);
+  const reward = scoreCategory(rewardMatches);
+
+  const totalMatches = authMatches + urgencyMatches + fearMatches + secrecyMatches + rewardMatches;
+  const composite_density = parseFloat(Math.min(1.0, (authority * 0.25 + urgency * 0.30 + fear_threat * 0.20 + secrecy_isolation * 0.15 + reward * 0.10)).toFixed(3));
+
+  return {
+    authority,
+    urgency,
+    fear_threat,
+    secrecy_isolation,
+    reward,
+    composite_density,
+    totalMatches
+  };
 }
