@@ -370,6 +370,30 @@ function broadcastAlert(alert: any, extraData?: any) {
   });
 }
 
+// Analysis Pipeline Real-Time Progress Broadcaster (WebSockets)
+function broadcastAnalysisProgress(
+  requestId: string | undefined,
+  stage: string,
+  label: string,
+  status: 'active' | 'done' = 'done'
+) {
+  if (!requestId) return;
+  try {
+    if (typeof broadcastWebSocketEvent === 'function') {
+      broadcastWebSocketEvent({
+        type: 'ANALYSIS_PROGRESS',
+        requestId,
+        stage,
+        label,
+        status,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (err: any) {
+    console.warn('[Analysis Progress Broadcast Warning]', err?.message);
+  }
+}
+
 // Notice definitions for IP telemetry disclosures
 const maxmindCopyrightNotice = 'Database and Contents Copyright (c) 2026 MaxMind, Inc.';
 const maxmindLicenseNotice = "Use of this MaxMind product is governed by MaxMind's GeoLite End User License Agreement (https://www.maxmind.com/en/geolite/eula).";
@@ -492,7 +516,7 @@ function buildEvidenceWhyNarrative(analysisOrCase: any) {
 }
 
 // Real Forensic Analysis Engine (Dynamic Geolocation, True IP Extraction, Authentic DNS/RDAP)
-async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'email.eml') {
+async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'email.eml', requestId?: string) {
   // 1. Extract chronological hops and candidate origin IPs using RFC 5321/5322 extraction engine
   const { hops: extractedHops, originIp, originIpSource } = extractHopsAndOriginIp(rawContent);
 
@@ -539,6 +563,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   if (currentHeader) {
     allHeaders[currentHeader] = currentValue;
   }
+  broadcastAnalysisProgress(requestId, 'headers', 'Parsed RFC822 headers and relay chain', 'done');
 
   // 2. Extract genuine fromEmail and sender domain
   const fromEmailMatch = from.match(/<([^>]+)>/) || from.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
@@ -556,6 +581,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
 
   // 3. Resolve Real Domain Intelligence (Live DNS: A, MX, SPF, DMARC, NS; Live RDAP)
   const domainIntelligence = await resolveDomainIntelligence(fromDomain);
+  broadcastAnalysisProgress(requestId, 'domain', `Resolved DNS & RDAP for ${fromDomain}`, 'done');
   const isTyposquat = domainIntelligence.is_typosquat || false;
   const targetBrand = domainIntelligence.typosquatting?.target_brand;
 
@@ -604,6 +630,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
       lookupMethod: geo.lookupMethod
     });
   }
+  broadcastAnalysisProgress(requestId, 'geo', `Traced ${hops.length} relay hop(s) via MaxMind GeoIP & ASN`, 'done');
 
   // 5. Ensure earliest public hop is flagged as gateway if origin is private
   const firstPublicHop = hops.find(h => !h.isPrivate && h.fromIp);
@@ -681,6 +708,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     dmarc: { status: dmarcStatus, policy: dmarcPolicy, domain: fromDomain, details: dmarcDetails },
     arc: { status: arcStatus, details: arcDetails }
   };
+  broadcastAnalysisProgress(requestId, 'auth', `Verified SPF=${spfStatus} DKIM=${dkimStatus} DMARC=${dmarcStatus}`, 'done');
 
   // Content / NLP Risk Heuristics
   const contentRisk = analyzeContentRisk(subject, bodyText);
@@ -707,6 +735,7 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
   const mlConfidence = classification.mlConfidence;
   const phishingProbability = classification.phishingProbability;
   const threatScoreBreakdown = classification.threatScoreBreakdown;
+  broadcastAnalysisProgress(requestId, 'classify', `ML classifier: ${verdict} (${threatScore}/100)`, 'done');
 
   const torHop = hops.find(h => h.is_tor || h.isBlacklisted || (h.abuseScore && h.abuseScore > 60));
 
@@ -1034,6 +1063,8 @@ async function parseRawEmailToAnalysis(rawContent: string, fileName: string = 'e
     isTyposquat,
     torHop
   });
+
+  broadcastAnalysisProgress(requestId, 'finalize', 'Case record finalized', 'done');
 
   return { case: newCaseItem, analysis: emailAnalysis, alert: newAlert };
 }
@@ -1779,6 +1810,7 @@ async function startServer() {
   const handleAnalyze = async (req: express.Request, res: express.Response) => {
     let rawContent = req.body?.raw_email || req.body?.raw_content || req.body?.rawEml || req.body?.email || '';
     let fileName = req.body?.filename || 'manual_submission.eml';
+    const requestId = req.body?.requestId || req.body?.request_id || (req.query?.requestId as string) || undefined;
 
     if (req.file) {
       rawContent = req.file.buffer.toString('utf-8');
@@ -1798,7 +1830,7 @@ Please verify your corporate credentials immediately to retain mailbox access.
 Link: https://verify-auth-portal.net/login`;
     }
 
-    const result = await parseRawEmailToAnalysis(rawContent, fileName);
+    const result = await parseRawEmailToAnalysis(rawContent, fileName, requestId);
     res.json({
       success: true,
       status: 'success',

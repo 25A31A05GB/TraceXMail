@@ -16,6 +16,8 @@ import {
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { parseRawEml, mapBackendCaseToAnalysis } from '../utils/parser';
+import { apiFetch } from '../lib/api';
+import { AnalysisProgressPanel, useAnalysisProgress } from './AnalysisProgressPanel';
 
 interface IngestionPipelineViewProps {
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
@@ -30,18 +32,11 @@ export function IngestionPipelineView({
   const [rawText, setRawText] = useState('');
   const [fileName, setFileName] = useState('raw_email.eml');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentStep, setCurrentStep] = useState<number>(0);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const progress = useAnalysisProgress();
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const steps = [
-    { label: 'Evidence Vault Custody (SHA-256 Digest)', icon: Lock },
-    { label: 'RFC822 MIME & Header Parsing', icon: FileText },
-    { label: 'MaxMind GeoIP & ASN Hop Traceroute', icon: Activity },
-    { label: 'Authentication & Threat Intelligence Engine', icon: Cpu },
-  ];
 
   const handleProcessEmail = async (content: string, name: string) => {
     if (!content.trim()) {
@@ -50,22 +45,18 @@ export function IngestionPipelineView({
     }
     setError(null);
     setIsProcessing(true);
-    setCurrentStep(1);
+    const requestId = progress.start();
 
     try {
-      // Step 1: Simulated Pipeline progression
-      await new Promise(r => setTimeout(r, 200));
-      setCurrentStep(2);
-
-      // Attempt FastAPI backend call
       let backendResult: any = null;
       try {
         const formData = new FormData();
         formData.append('raw_email', content);
         formData.append('filename', name);
         formData.append('source', 'email_upload');
+        formData.append('requestId', requestId);
 
-        const res = await fetch('/api/v1/analyze', {
+        const res = await apiFetch('/api/v1/analyze', {
           method: 'POST',
           body: formData
         });
@@ -76,9 +67,8 @@ export function IngestionPipelineView({
         console.warn('[IngestionPipeline] Backend direct call failed, using client-side engine:', err);
       }
 
-      setCurrentStep(3);
-      await new Promise(r => setTimeout(r, 200));
-      setCurrentStep(4);
+      progress.finish();
+      await new Promise(r => setTimeout(r, 400));
 
       let finalAnalysis: EmailAnalysis;
       if (backendResult?.analysis || backendResult?.case) {
@@ -153,34 +143,14 @@ export function IngestionPipelineView({
         </div>
       </div>
 
-      {/* Processing Stepper (Visible during active ingestion) */}
+      {/* Real-Time Forensic Pipeline Telemetry (Visible during active ingestion) */}
       {isProcessing && (
-        <div className="p-6 rounded-2xl bg-cyan-950/20 border border-cyan-800/60 shadow-xl space-y-4 animate-in fade-in duration-200">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400">
-            Pipeline Execution in Progress
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {steps.map((step, idx) => {
-              const StepIcon = step.icon;
-              const isDone = currentStep > idx;
-              const isCurrent = currentStep === idx + 1;
-              return (
-                <div
-                  key={idx}
-                  className={`p-3.5 rounded-xl border flex items-center gap-3 transition-all ${
-                    isDone
-                      ? 'bg-emerald-950/40 border-emerald-800 text-emerald-300'
-                      : isCurrent
-                      ? 'bg-cyan-950/60 border-cyan-600 text-cyan-300 animate-pulse'
-                      : 'bg-slate-900/60 border-slate-800 text-slate-500'
-                  }`}
-                >
-                  <StepIcon className="w-4 h-4 shrink-0" />
-                  <span className="text-xs font-medium">{step.label}</span>
-                </div>
-              );
-            })}
-          </div>
+        <div className="animate-in fade-in duration-200">
+          <AnalysisProgressPanel
+            stageStatus={progress.stageStatus}
+            stageDetail={progress.stageDetail}
+            startedAt={progress.startedAt}
+          />
         </div>
       )}
 
