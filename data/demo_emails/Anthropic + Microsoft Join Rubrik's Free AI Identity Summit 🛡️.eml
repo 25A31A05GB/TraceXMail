@@ -1,0 +1,662 @@
+Delivered-To: jayramsappa537@gmail.com
+Received: by 2002:ad4:5c6f:0:b0:90c:c0db:1bae with SMTP id i15csp4852729qvh;
+        Thu, 3 Sep 2026 14:06:29 -0700 (PDT)
+X-Received: by 2002:a05:6214:1d2e:b0:90d:a536:1e33 with SMTP id 6a1803df08f44-9103eeb1cc4mr21862616d6.0.1788469588879;
+        Thu, 03 Sep 2026 14:06:28 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1788469588; cv=none;
+        d=google.com; s=arc-20260327;
+        b=Act/jLgub7OjIaWaxscH/IN3zRDpRks91yTm/y8t6WB2RMQEJHRQqLfNeGg60yb7CO
+         yw1Rndvy3zQWHTOmNksiIBqnFfiz0+Gxd2YZ0l+/aYTja4jFCiLAElgwEIG2XovvCfzV
+         2ePffOcEq3shKbRAuuhah7WGbtxwcplOB+LJABcp64WeCIQta2a2CHak7Tjoodw/Spb8
+         Btkm5W3AXn7EGTzqu+LROQSZysoPYQEtJTDSGQPGXCT3sWI43dSBdnSr17fSCHXIwRXX
+         jpAQ7fzEMi9iHYGrc55WUoPYAMjN6iz8cm9Vc8fGgBDPnEWapmizfcGpOhK7AsV/KJa3
+         nB3A==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=message-id:date:mime-version:sid:subject:reply-to
+         :list-unsubscribe-post:list-unsubscribe:from:feedback-id:to
+         :dkim-signature:dkim-signature;
+        bh=T5cEXLwR3dtO9GUAqdFkuOKqpn2Q84ClD5YDvav2p4A=;
+        fh=Q5C0F8FLnEzGJJf31Q4EeHh7hja1qu/XQfBjH8pn5VY=;
+        b=RBVKr4NXtDuvLqoEempXvJARtnXgW+/NpOEtkZDWWiDGLENVJuauKg6vQeCXKmW8W7
+         u8KPQGQUfnF7M81YPXGrCJ0Nlf07BSXhKkkYVvJbxSSWrfRekCQevHKc7FEkaQRyp+2d
+         p02OR253j4M3vZlaeY5mN3jr98axcGvc+mzcN5ciZqa8TcZ5VUvE9T4KuFM6/15LMhJU
+         qWjDRkqvwOAYSimOBzViCqTvO9g1CsHHDnSeEqSKlY9cO5Gv4nTZTHSuD+gFp8KKVg87
+         g6DSCzmFSAr6x/+USdqzsEjZ0SE2X2/jJ/0pWi77uFbD4pqnk0gVqMEWp9tVWbnD2RVb
+         s6Kw==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@bhmta.beehiiv.com header.s=bh header.b=gj9R1Via;
+       dkim=pass header.i=@mail.beehiiv.com header.s=bh header.b=ndxI75uo;
+       spf=pass (google.com: domain of bounces+jayramsappa537=gmail.com@bh.mail.beehiiv.com designates 69.67.186.32 as permitted sender) smtp.mailfrom="bounces+jayramsappa537=gmail.com@bh.mail.beehiiv.com";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=beehiiv.com
+Return-Path: <bounces+jayramsappa537=gmail.com@bh.mail.beehiiv.com>
+Received: from bh186-32.smtp-out.beehiivmail.net (bh186-32.smtp-out.beehiivmail.net. [69.67.186.32])
+        by mx.google.com with ESMTPS id 6a1803df08f44-9104076a9ecsi4076196d6.276.2026.09.03.14.06.28
+        for <jayramsappa537@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Thu, 03 Sep 2026 14:06:28 -0700 (PDT)
+Received-SPF: pass (google.com: domain of bounces+jayramsappa537=gmail.com@bh.mail.beehiiv.com designates 69.67.186.32 as permitted sender) client-ip=69.67.186.32;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@bhmta.beehiiv.com header.s=bh header.b=gj9R1Via;
+       dkim=pass header.i=@mail.beehiiv.com header.s=bh header.b=ndxI75uo;
+       spf=pass (google.com: domain of bounces+jayramsappa537=gmail.com@bh.mail.beehiiv.com designates 69.67.186.32 as permitted sender) smtp.mailfrom="bounces+jayramsappa537=gmail.com@bh.mail.beehiiv.com";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=beehiiv.com
+X-BmtaRef: eyJfQF8iOiJcXF8vIiwicmVjaXBpZW50IjoiamF5cmFtc2FwcGE1MzdAZ21haWwuY29tIiwieF9hZ2dyZWdhdGlvbl9pZCI6bnVsbCwieF9hZ2dyZWdhdGlvbl90eXBlIjpudWxsLCJ4X2lwX3dhcm11cF9zY2hlZHVsZV9zdGFnZV9pZCI6bnVsbCwieF9saXN0X2lkIjoiYzA4Nzk2OTEtZTM0Zi00YTIzLThiNGItYjJkOWMzMTNkOTFkIiwieF9tZXNzYWdlX3NlbmRfaWQiOm51bGwsInhfbWVzc2FnZV90eXBlIjpudWxsLCJ4X25ld3NsZXR0ZXJfbGlzdF9pZCI6bnVsbCwieF9wb3N0X2lkIjoiZWJjMDA2NjgtMWYxNC00YzY5LWFhYzYtMjdhODE4ZTNmZGYxIiwieF9zZW5kYWJsZV9pZCI6bnVsbCwieF9zZW5kYWJsZV9zdWJ0eXBlIjpudWxsLCJ4X3NlbmRhYmxlX3R5cGUiOm51bGwsInhfc3Vic2NyaWJlcl9pZCI6IjgzZmQ1OTkyLWFkMGEtNDI4MC04YjdlLTFhZjY3YWRiNTg2MyIsInhfd2FybXVwX3NjaGVkdWxlX3N0YWdlX2lkIjpudWxsfQ==
+DKIM-Signature: v=1; a=rsa-sha256; d=bhmta.beehiiv.com; s=bh; c=relaxed/relaxed;
+	bh=T5cEXLwR3dtO9GUAqdFkuOKqpn2Q84ClD5YDvav2p4A=;
+	h=from:subject:mime-version:content-type:content-transfer-encoding:
+		list-unsubscribe:feedback-id:list-unsubscribe-post:reply-to:to:cc:
+		content-type:feedback-id:from:subject:to; t=1788469588;
+	b=gj9R1ViaL9mDZClrWk4AYVJDZ6F/vpRnsC5G59Ii12msCJYnBb6pFG2T1swNtGEjstv+BBICE
+	Wr5sS67W7opgs/Oh+o1SA403YkNRp751AGkHCTtvl4SXj37FS9PxD+C0QLmztm0uaT0EKko9avR
+	mvZk3rlC6896P09HF45eYrdQN7GFzfWZV4P8d7bsXsUGxMZnev8n2PWyZ8dUoD5aNgCKkMbeav4
+	TVZQagfuP/Kmc7wip1Aw6Hx45PWZ6NlOdTu0ijWdDGLSn/1YN00YjnCNJhT/nvRC/o/cugbcv7i
+	Ipw8Km7hwqZed71fxAmxS7t4eHMWud/1oL0KxgZRKv7A==;
+DKIM-Signature: v=1; a=rsa-sha256; d=mail.beehiiv.com; s=bh; c=relaxed/relaxed;
+	bh=T5cEXLwR3dtO9GUAqdFkuOKqpn2Q84ClD5YDvav2p4A=;
+	h=from:subject:mime-version:content-type:content-transfer-encoding:
+		list-unsubscribe:feedback-id:list-unsubscribe-post:reply-to:to:cc:
+		content-type:feedback-id:from:subject:to; t=1788469588;
+	b=ndxI75uoVlWr9u+5ExNu8A+DHv0cK93FCaTltlZA8j65DB+xWC2hQGjPb0yqUrFrqVVbbpV2p
+	3zSO2iLney0WCvgS9GIteJwcldm1HUmcY0WXn88nMbPzo1Rf7NkRnnqXm5Jd7bcp75JbnC2OsK6
+	1FmpoCwtlRBE+vYhzx9YYFafl+++LjhTFvvxzbTMLLt7Zyfgxb2EnF8X9lkJegzOHWR1Ams0bnt
+	1Pl26U8at+AVcZf9YwsY7oyaOUTKHkWDZtQxn+4M/a6dVwuKQlCg451hHGbOuuWjbknOA4pPq52
+	aw4mClLspzMTS6tNmzWkSpW07jML8J2i48yYjOcWzpUQ==;
+Received: from mail.beehiiv.com by bhmta(mta25) with
+    HTTP id <54a948b4a7db11f1b1c412d5d5ddf6df> for <jayramsappa537@gmail.com>;
+    Thu, 03 Sep 2026 21:06:28 +0000
+Content-Type: multipart/alternative;
+	boundary="8+CBqaTgT6S2DWJCnFHrTg"
+To: "jayramsappa537@gmail.com" <jayramsappa537@gmail.com>
+Feedback-ID: ebc00668-1f14-4c69-aac6-27a818e3fdf1:newsletter:c0879691-e34f-4a23-8b4b-b2d9c313d91d:6d3ecd391f1c4b3
+From: =?utf-8?Q?=F0=9F=94=B3_Turing_Post?= <turingpost@mail.beehiiv.com>
+List-Unsubscribe: <mailto:c0879691-e34f-4a23-8b4b-b2d9c313d91d+83fd5992-ad0a-4280-8b7e-1af67adb5863+ebc00668-1f14-4c69-aac6-27a818e3fdf1@unsub.beehiiv.com>,
+	<https://www.turingpost.com/unsubscribe/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWJzY3JpYmVyX2lkIjoiODNmZDU5OTItYWQwYS00MjgwLThiN2UtMWFmNjdhZGI1ODYzIiwicG9zdF9pZCI6ImViYzAwNjY4LTFmMTQtNGM2OS1hYWM2LTI3YTgxOGUzZmRmMSIsImxhc3RfcmVzb3VyY2VfZ3VpZCI6IlBvc3Q6ZWJjMDA2NjgtMWYxNC00YzY5LWFhYzYtMjdhODE4ZTNmZGYxIn0.9ibBLLCOhtGzKa7GWkyaw0DFB30LG0NbNVftocKT2wk>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+Reply-To: =?utf-8?Q?=F0=9F=94=B3_Turing_Post?= <ks@turingpost.com>
+Subject: =?UTF-8?q?Anthropic_+_Microsoft_Join_Rubrik's_Free_AI_Identity_Summit_?=
+	=?UTF-8?q?=F0=9F=9B=A1=EF=B8=8F?=
+X-Batch-Id: 83394713-53f4-48a6-9200-38606cbfd19e
+X-Subscriber-ID: 83fd5992-ad0a-4280-8b7e-1af67adb5863
+X-Subscription-ID: 1080331612
+sId: c0879691-e34f-4a23-8b4b-b2d9c313d91d
+x-beehiiv-ids: {"account_name":"https://www.turingpost.com/","campaign_id":"ebc00668-1f14-4c69-aac6-27a818e3fdf1","category":"newsletter","email_generated_at":1788469568,"user_id":"c0879691-e34f-4a23-8b4b-b2d9c313d91d"}
+x-beehiiv-type: newsletter
+x-list-id: c0879691-e34f-4a23-8b4b-b2d9c313d91d
+x-list-owner: <mailto:ks@turingpost.com>
+x-newsletter: https://www.turingpost.com/p/anthropic-microsoft-join-rubrik-s-free-ai-identity-summit
+x-newsletter-id: https://www.turingpost.com/
+x-newsletter-signup: https://www.turingpost.com/subscribe
+Mime-Version: 1.0
+Date: Thu, 3 Sep 2026 21:06:28 +0000
+Message-ID: <20260903.210628.954cfd5f@mta25>
+
+--8+CBqaTgT6S2DWJCnFHrTg
+Content-Type: text/plain;
+	charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+View image: (https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,forma=
+t=3Dauto,onerror=3Dredirect,quality=3D80/uploads/asset/file/e9c76f75-070c-4=
+aeb-ac75-a29d549b1195/image.png?t=3D1788461783)=0AFollow image link: (https=
+://go.rbrk.co/AI-Resilience-Summit)=0ACaption: =0A=0AFrontier AI models can=
+ now chain vulnerabilities and move through infrastructure on their own, no=
+ human required. **The target, almost always, is identity:** credentials, m=
+achine access, and the keys that both agents and attackers need.=0A=0A[On S=
+eptember 15, Rubrik is hosting a free virtual AI + Identity Resilience Summ=
+it](https://go.rbrk.co/AI-Resilience-Summit) to unpack what that means for =
+security teams. The opening keynote brings together Rubrik's Chief Product =
+Officer, Anthropic's Head of National Security Partnerships, and Microsoft'=
+s identity leadership to lay out an operating model for the agentic era: pr=
+otect against AI, protect AI itself, and use AI to protect your environment=
+. Eight-plus sessions follow across two tracks (AI and Identity), closing w=
+ith a conversation with=C2=A0_will.i.am_=C2=A0on creativity and identity in=
+ an AI future.=0A=0AFree, virtual, two hours live =E2=80=94 every session i=
+s available on-demand if you can't make it live.=0A=0ARegister now (https:/=
+/go.rbrk.co/AI-Resilience-Summit)=0A=0A=E2=80=94=E2=80=94=E2=80=94=E2=80=94=
+=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=
+=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=
+=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=E2=80=94=0A=0A_=F0=9F=9B=
+=A1=EF=B8=8F This event is _[_presented_](https://go.rbrk.co/AI-Resilience-=
+Summit)_ by the Rubrik team. We thank Rubrik for sharing their expertise an=
+d supporting Turing Post=E2=80=99s mission to bring clarity to the AI lands=
+cape._=0A=0A=0A=E2=80=94=E2=80=94=E2=80=94=0A=0AYou are reading a plain tex=
+t version of this post. For the best experience, copy and paste this link i=
+n your browser to view the post online:=0Ahttps://www.turingpost.com/p/anth=
+ropic-microsoft-join-rubrik-s-free-ai-identity-summit
+--8+CBqaTgT6S2DWJCnFHrTg
+Content-Type: text/html;
+	charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<!DOCTYPE html><html lang=3D"en" xmlns=3D"http://www.w3.org/1999/xhtml" xml=
+ns:v=3D"urn:schemas-microsoft-com:vml" xmlns:o=3D"urn:schemas-microsoft-com=
+:office:office" style=3D"font-size:16px;"><head></head><head><meta charset=
+=3D"utf-8"/><!--[if !mso]><!--><meta http-equiv=3D"X-UA-Compatible" content=
+=3D"IE=3Dedge"/><!--<![endif]--><meta name=3D"viewport" content=3D"width=3D=
+device-width,initial-scale=3D1"/><meta name=3D"x-apple-disable-message-refo=
+rmatting"/><meta name=3D"format-detection" content=3D"telephone=3Dno,addres=
+s=3Dno,email=3Dno,date=3Dno,url=3Dno"/><meta name=3D"color-scheme" content=
+=3D"light"/><meta name=3D"supported-color-schemes" content=3D"light"/><titl=
+e>Anthropic + Microsoft Join Rubrik&#39;s Free AI Identity Summit =F0=9F=9B=
+=A1=EF=B8=8F</title><!--[if mso]><xml><o:OfficeDocumentSettings><o:AllowPNG=
+/><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![=
+endif]--><style>=0A  :root { color-scheme: light; supported-color-schemes: =
+light; }=0A  body { margin: 0; padding: 0; min-width: 100%!important; -ms-t=
+ext-size-adjust: 100% !important; -webkit-transform: scale(1) !important; -=
+webkit-text-size-adjust: 100% !important; -webkit-font-smoothing: antialias=
+ed !important; }=0A  .body { word-wrap: normal; word-spacing:normal; }=0A  =
+table.mso { width: 100%; border-collapse: collapse; padding: 0; table-layou=
+t: fixed; }=0A  img { border: 0; outline: none; }=0A  table {  mso-table-ls=
+pace: 0px; mso-table-rspace: 0px; }=0A  td, a, span {  mso-line-height-rule=
+: exactly; }=0A  #root [x-apple-data-detectors=3Dtrue],=0A  a[x-apple-data-=
+detectors=3Dtrue],=0A  #MessageViewBody a { color: inherit !important; text=
+-decoration: inherit !important; font-size: inherit !important; font-family=
+: inherit !important; font-weight: inherit !important; line-height: inherit=
+ !important; }=0A  span.MsoHyperlink { color: inherit !important; mso-style=
+-priority: 99 !important; }=0A  span.MsoHyperlinkFollowed { color: inherit =
+!important; mso-style-priority: 99 !important; }=0A  .a { background-color:=
+#FFFFFF; }=0A  .b { background-color:#030712; }=0A  .c  { background-color:=
+#FFFFFF; }=0A  .d { background-color:#EAEBEC; }=0A  .d2 { background-color:=
+#FFFFFF; }=0A  .d3 { background-color:#FFFFFF; }=0A  h1 a { text-decoration=
+:underline;color:#0C4A6E !important;font-style:italic; }=0A  h2 a { text-de=
+coration:underline;color:#0C4A6E !important;font-style:italic; }=0A  h3 a {=
+ text-decoration:underline;color:#0C4A6E !important;font-style:italic; }=0A=
+  h4 a { text-decoration:underline;color:#0C4A6E !important;font-style:ital=
+ic; }=0A  h5 a { text-decoration:underline;color:#0C4A6E !important;font-st=
+yle:italic; }=0A  h6 a { text-decoration:underline;color:#0C4A6E !important=
+;font-style:italic; }=0A  h1, h1 a, h2, h2 a, h3, h3 a, h4, h4 a, h5, h5 a,=
+ h6, h6 a, ul, li, ol, p, p a { margin: 0;padding: 0; }=0A  h1 { font-famil=
+y:'Trebuchet MS','Lucida Grande',Tahoma,sans-serif;font-weight:400;font-siz=
+e:28px;color:#2A2A2A;line-height:1.75;padding-bottom:4px;padding-top:16px;m=
+so-margin-top-alt:16px;mso-margin-bottom-alt:4px }=0A  h2 { font-family:'Tr=
+ebuchet MS','Lucida Grande',Tahoma,sans-serif;font-weight:400;font-size:24p=
+x;color:#2A2A2A;line-height:1.5;padding-bottom:4px;padding-top:16px;mso-mar=
+gin-top-alt:16px;mso-margin-bottom-alt:4px }=0A  h3 { font-family:'Trebuche=
+t MS','Lucida Grande',Tahoma,sans-serif;font-weight:400;font-size:20px;colo=
+r:#2A2A2A;line-height:1.25;padding-bottom:4px;padding-top:16px;mso-margin-t=
+op-alt:16px;mso-margin-bottom-alt:4px }=0A  h4 { font-family:'Trebuchet MS'=
+,'Lucida Grande',Tahoma,sans-serif;font-weight:400;font-size:18px;color:#2A=
+2A2A;line-height:1.125;padding-bottom:4px;padding-top:16px;mso-margin-top-a=
+lt:16px;mso-margin-bottom-alt:4px }=0A  h5 { font-family:'Trebuchet MS','Lu=
+cida Grande',Tahoma,sans-serif;font-weight:400;font-size:16px;color:#2A2A2A=
+;line-height:1;padding-bottom:4px;padding-top:16px;mso-margin-top-alt:16px;=
+mso-margin-bottom-alt:4px }=0A  h6 { font-family:'Trebuchet MS','Lucida Gra=
+nde',Tahoma,sans-serif;font-weight:400;font-size:14px;color:#2A2A2A;line-he=
+ight:0.875;padding-bottom:4px;padding-top:16px;mso-margin-top-alt:16px;mso-=
+margin-bottom-alt:4px }=0A  p { font-family:'Helvetica',Arial,sans-serif;fo=
+nt-weight:400;color:#2D2D2D;font-size:16px;line-height:1.5;padding-bottom:1=
+2px;padding-top:12px;mso-margin-top-alt:12px;mso-margin-bottom-alt:12px; }=
+=0A  p a, .e a, ul a, li a, .h a, .h2 a, .h3 a { word-break:break-word;colo=
+r:#0C4A6E !important;text-decoration:underline;text-decoration-color:#0C4A6=
+E;font-style:italic; }=0A  p a span, .e a span, ul a span, li a span { colo=
+r: inherit }=0A  p .bold { font-weight:bold;color:#2D2D2D; }=0A  p span[sty=
+le*=3D"font-size"] { line-height: 1.6; }=0A  .f p { font-size:12px;line-hei=
+ght:15px;color:#2D2D2D;padding:0; }=0A  .f p a { color:#2D2D2D !important; =
+}=0A  .g p { font-family:'Helvetica',Arial,sans-serif;font-size:14px;line-h=
+eight:20px;font-weight:normal;margin:0; }=0A  .g p a  { text-decoration: un=
+derline; }=0A  .i p { font-family:'Helvetica',Arial,sans-serif;line-height:=
+1.5;font-size:15px;color:#2D2D2D; }=0A  .i p a { color:#2D2D2D !important; =
+}=0A  .i2 p { font-family:'Helvetica',Arial,sans-serif;line-height:1.5;font=
+-size:15px;color:#2D2D2D; }=0A  .i2 p a { color:#2D2D2D !important; }=0A  .=
+i3 p { font-family:'Helvetica',Arial,sans-serif;line-height:1.8;font-size:2=
+4px;color:#2D2D2D; }=0A  .i3 p a { color:#2D2D2D !important; }=0A  .h p a {=
+ color:#0C4A6E !important; }=0A  .h2 p a { color:#0C4A6E !important; }=0A  =
+.h3 p a { color:#0C4A6E !important; }=0A  .f p a, .i p a, .i2 p a, .i3 p a,=
+ .h p a, .h2 p a, .h3 p a { text-decoration:underline; }=0A  .j { border-to=
+p:3px solid #030712; }=0A  .k p { padding-left:15px;padding-bottom:0px;padd=
+ing-top:6px;mso-margin-top-alt:6px;mso-margin-bottom-alt:0px;mso-margin-lef=
+t-alt:15px; }=0A  .o { background-color:#FFFFFF;border:1px solid #F1F1F1;bo=
+rder-radius:5px; }=0A  .o p { font-family:'Helvetica',Arial,sans-serif;padd=
+ing:0px;margin:0px; }=0A  .l p,=0A  .l p a, .l a { font-size:14px;line-heig=
+ht:20px;font-weight: bold;color:#2D2D2D;padding-bottom:6px;mso-margin-botto=
+m-alt:6px;text-decoration:none; }=0A  .m p,=0A  .m p a { font-size:13px;lin=
+e-height:18px;font-weight:400;color:#2D2D2D;padding-bottom:6px;mso-margin-b=
+ottom-alt:6px;text-decoration:none; }=0A  .n p,=0A  .n p a { font-size:12px=
+;line-height:17px;font-weight:400;color:#2D2D2D;padding-bottom:6px;mso-marg=
+in-bottom-alt:6px;text-decoration:none; }=0A  .p { background-color:#FFFFFF=
+;max-width:520px;border:1px solid #E1E8ED;border:1px solid rgba(80, 80, 80,=
+ 0.3);border-radius:5px; }=0A  .q { font-size:16px;font-family:Helvetica,Ro=
+boto,Calibri,sans-serif !important;border:1px solid #e1e8ed;border:1px soli=
+d rgba(80, 80, 80, 0.3);border-radius:10px;background-color:#FFFFFF; }=0A  =
+.q p { font-size:16px;font-family:system-ui,Helvetica,Roboto,Calibri,sans-s=
+erif !important;color:#222222;padding:4px 0; }=0A  .r { border:1px solid #E=
+1E8ED !important;border-radius:5px; }=0A  .s p { font-size: 14px; line-heig=
+ht: 17px; font-weight: 400; color: #697882; text-decoration: none; }=0A  .t=
+ p { font-family:'Helvetica',Arial,sans-serif;font-size:12px;line-height:1.=
+5;font-weight:400;color:#000000;font-style:italic;padding:0px; }=0A  .v { b=
+order-radius:8px;border:solid 0px #030712;background-color:#030712;font-fam=
+ily:'Verdana',Geneva,sans-serif;color:#FFFFFF; }=0A  .v a { text-decoration=
+:none;display:block;color:#FFFFFF; }=0A  .w p { font-size:12px;line-height:=
+15px;font-weight:400;color:#FFFFFF; }=0A  .w p a { text-decoration: underli=
+ne !important;color:#FFFFFF !important; }=0A  ul { font-family:'Helvetica',=
+Arial,sans-serif;margin:0px 0px 0px 25px !important;padding:0px !important;=
+color:#2D2D2D;line-height:24px;list-style-type:disc !important;font-size:16=
+px; }=0A  ul ul { list-style-type:circle !important; }=0A  ul ul ul { list-=
+style-type:square !important; }=0A  ul ul ul ul { list-style-type:disc !imp=
+ortant; }=0A  ul ul ul ul ul { list-style-type:circle !important; }=0A  ul =
+ul ul ul ul ul { list-style-type:square !important; }=0A  ul ul ul ul ul ul=
+ ul { list-style-type:disc !important; }=0A  ul ul ul ul ul ul ul ul { list=
+-style-type:circle !important; }=0A  ul ul ul ul ul ul ul ul ul { list-styl=
+e-type:square !important; }=0A  ul > li { font-family:'Helvetica',Arial,san=
+s-serif;margin:10px 0px 0px 0px !important;padding: 0px 0px 0px 0px !import=
+ant; color: #2D2D2D; }=0A  .poll-choices > li { margin: 4px 0px 0px 0px !im=
+portant; }=0A  ol { font-family:'Helvetica',Arial,sans-serif;margin: 0px 0p=
+x 0px 25px !important;padding:0px !important;color:#2D2D2D;line-height:24px=
+;list-style:decimal;font-size:16px; }=0A  ol > li { font-family:'Helvetica'=
+,Arial,sans-serif;margin:10px 0px 0px 0px !important;padding: 0px 0px 0px 0=
+px !important; color: #2D2D2D; }=0A  li > p, li p { font-family:'Helvetica'=
+,Arial,sans-serif;font-size:16px;font-weight:normal;line-height:24px;paddin=
+g:0px; }=0A  .e h3,=0A  .e p,=0A  .e span { padding-bottom:0px;padding-top:=
+0px;mso-margin-top-alt:0px;mso-margin-bottom-alt:0px; }=0A  .e span,=0A  .e=
+ li { font-family:'Helvetica',Arial,sans-serif;font-size:16px;color:#2D2D2D=
+;line-height:24px; }=0A  .rec { font-family:  ui-sans-serif, system-ui, -ap=
+ple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial=
+, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI=
+ Symbol", "Noto Color Emoji" !important; }=0A  .rec__button:hover { backgro=
+und-color: #f9fafb !important; }=0A  .copyright a {color: inherit !importan=
+t; text-decoration: none !important; font-size: inherit !important; font-fa=
+mily: inherit !important; font-weight: inherit !important; line-height: inh=
+erit !important;}=0A  .txt_social p { padding: 0; word-break: break-all; }=
+=0A  .table, .table-c, .table-h { border: 1px solid #C0C0C0; }=0A  .table-c=
+ { padding:5px; background-color:#FFFFFF; }=0A  .table-c p { color: #2D2D2D=
+; font-family:'Helvetica',Arial,sans-serif !important;overflow-wrap: break-=
+word; }=0A  .table-h { padding:5px; background-color:#F1F1F1; }=0A  .table-=
+h p { color: #2A2A2A; font-family:'Trebuchet MS','Lucida Grande',Tahoma,san=
+s-serif !important;overflow-wrap: break-word; }=0A  @media only screen and =
+(max-width:667px) {=0A    .aa, .w100pc { width: 100% !important; }=0A    .b=
+b, .bb td { max-width: 100% !important; }=0A    .bb img { max-width: 100% !=
+important; height: auto !important; }=0A    .dd { overflow-wrap: break-word=
+ !important; }=0A    .cc { padding: 0px 8px !important; }=0A    .ee { paddi=
+ng-top:10px !important;padding-bottom:10px !important; }=0A    .ff ul, .ff =
+ol { margin: 0px 0px 0px 10px !important;padding: 0px !important; }=0A    .=
+ff li { margin:10px 0px 0px 10px !important; }=0A    .r {height:140px !impo=
+rtant;}=0A    .s p { font-size:13px !important;line-height:15px !important;=
+ }=0A    .mob-hide {display:none !important;}=0A    .mob-show {display: blo=
+ck !important; width: auto !important; overflow: visible !important; float:=
+ none !important; max-height: inherit !important; line-height: inherit !imp=
+ortant;}=0A    .mob-stack {width:100% !important;display:block !important;}=
+=0A    .mob-w-full {width:100% !important;}=0A    .mob-block {display:block=
+ !important;}=0A    .embed-img {padding:0px 0px 12px 0px !important;}=0A   =
+ .socialShare {padding-top:15px !important;}=0A    .rec { padding-left:15px=
+!important;padding-right:15px!important; }=0A    .bodyWrapper { padding:10p=
+x 4px 10px 4px !important; }=0A    .social-mobile {float:left !important;ma=
+rgin-top:10px !important;}=0A  }=0A  @media screen and (max-width: 480px) {=
+=0A    u + .a .gg { width: 100% !important; width: 100vw !important; }=0A  =
+  .tok-heart { padding-top:75% !important; }=0A    .tok-play { padding-top:=
+ 250px !important; }=0A  }=0A  @media screen and (max-width: 320px) {=0A   =
+ .tok-heart { padding-top:65% !important; }=0A  }=0A  .u { border: 1px soli=
+d #CACACA !important; border-radius: 2px !important; background-color: #fff=
+fff !important; padding: 0px 13px 0px 13px !important; font-family:ui-sans-=
+serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helveti=
+ca Neue",Arial,"Noto Sans",sans-serif !important;font-size: 12px !important=
+; color: #767676 !important; }=0A  .u a { text-decoration: none; display: b=
+lock !important; color: #767676 !important; margin: 0px !important; }=0A  .=
+u span, .u img { color: #767676 !important;margin:0px !important; max-heigh=
+t:32px !important;background-color:#ffffff !important; }=0A</style><!--[if =
+mso]><style type=3D"text/css">=0A    h1, h2, h3, h4, h5, h6 {font-family: A=
+rial, sans-serif !important;}=0A    body, table, td, p, a, span {font-famil=
+y: Arial, sans-serif !important;}=0A    sup { font-size: 100% !important;ve=
+rtical-align: .5em !important;mso-text-raise: -1.5% !important;line-height:=
+ 0 !important; }=0A    ul { margin-left:0px !important; margin-right:10px !=
+important; margin-top:20px !important; margin-bottom:20px !important; }=0A =
+   ul li { margin-left: 0px !important; mso-special-format: decimal; }=0A  =
+  ol { margin-left:0px !important; margin-right:10px !important; margin-top=
+:20px !important; margin-bottom:20px !important; }=0A    ol li { margin-lef=
+t: 0px !important; mso-special-format: decimal; }=0A    li.listItem { margi=
+n-left:15px !important; margin-top:0px !important; }=0A    .paddingDesktop =
+{ padding: 10px 0 !important; }=0A    .edm_outlooklist { margin-left: -20px=
+ !important; }=0A    .embedImage { display:none !important; }=0A</style><![=
+endif]--><!-- 108033161283fd5992-ad0a-4280-8b7e-1af67adb5863 --><style></st=
+yle></head><body class=3D"a" style=3D"margin:0px auto;padding:0px;word-wrap=
+:normal;word-spacing:normal;background-color:#FFFFFF;"><div role=3D"article=
+" aria-roledescription=3D"email" aria-label=3D"email_name" lang=3D"en" styl=
+e=3D"font-size:1rem"><div style=3D"display:none;max-height:0px;overflow:hid=
+den;"> Join us September 15 &#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#=
+8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160=
+;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#=
+160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204=
+;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8=
+204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;=
+&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#1=
+60;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;=
+&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#82=
+04;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&=
+#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#16=
+0;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&=
+#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#820=
+4;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#=
+8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160=
+;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#=
+160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204=
+;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8=
+204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;=
+&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#1=
+60;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;=
+&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#82=
+04;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&=
+#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#16=
+0;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&=
+#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#820=
+4;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#=
+8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160=
+;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#=
+160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204=
+;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8=
+204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;=
+&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#1=
+60;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;=
+&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#82=
+04; </div><table role=3D"none" width=3D"100%" border=3D"0" cellspacing=3D"0=
+" align=3D"center" cellpadding=3D"0" class=3D"gg"><tr><td align=3D"center" =
+valign=3D"top"><table role=3D"none" width=3D"670" border=3D"0" cellspacing=
+=3D"0" cellpadding=3D"0" class=3D"aa" style=3D"width:670px;table-layout:fix=
+ed;"><tr><td class=3D"bodyWrapper" align=3D"center" valign=3D"top" style=3D=
+"padding:10px 5px 10px 5px;"><table role=3D"none" width=3D"100%" border=3D"=
+0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr><td align=3D"ce=
+nter" valign=3D"top" style=3D"border-width:0px 0px 0px 0px;border-style: so=
+lid; border-color: #FFFFFF;border-radius:10px 10px 0px 0px;background-color=
+:#FFFFFF;" class=3D"c"><table role=3D"none" width=3D"100%" border=3D"0" cel=
+lspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr id=3D"header"><td sty=
+le=3D"padding:15px 15px 0px 15px;"><div style=3D"padding-top:0px;padding-ri=
+ght:0px;padding-bottom:20px;padding-left:0px;"><table role=3D"none" width=
+=3D"100%" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"=
+><tr><td class=3D"f" align=3D"right" valign=3D"top"><p> September 03, 2026 =
+&nbsp; | &nbsp; <a data-read-online-tooltip=3D"true" href=3D"https://link.m=
+ail.beehiiv.com/v2/c/ff28dc48d2e3dbc46ffd354917e6495ba10b5665d5d8ed7a2f3406=
+d48ef9fe4cc05ae5dc919ec17d10d2404c49e49b03293c05054a75bcf79d8df80f4e19579e7=
+229e69dfc5712416800607f99e496ae3ee66dd7a2bfd5126bc2dae97b8ead3f3c94c0721575=
+2a1535cb7898ad4274840606a2b0c7b02eec9b5bcbae8be8357a587e2e2782c5c4ed0bce60a=
+f35c49531bc258860d1ba16d846124c8c89b4dfdf/3f6a0dd59908b22b">Read online</a>=
+</p></td></tr><tr><td class=3D"dd" align=3D"center" valign=3D"top" style=3D=
+"width:100%;text-align:center;"><table role=3D"none" border=3D"0" cellspaci=
+ng=3D"0" cellpadding=3D"0" align=3D"center" style=3D"margin:16px auto 16px;=
+ padding: 0;"><tbody><tr><td style=3D"width:630px;padding: 0px 0px 0px 0px;=
+text-align:center;"><img alt=3D"" width=3D"630" height=3D"auto" border=3D"0=
+" style=3D"width:100%;height:auto;border:0;display:block;outline:none;text-=
+decoration:none;margin:0 auto;" src=3D"https://media.beehiiv.com/cdn-cgi/im=
+age/fit=3Dscale-down,format=3Dauto,onerror=3Dredirect,quality=3D80/uploads/=
+asset/file/eae3c433-e67e-4f20-bde2-e6e2626580e0/TP-header-1200x300.png?t=3D=
+1781729596"/></td></tr></tbody></table></td></tr><tr><td class=3D"dd" align=
+=3D"center" valign=3D"top" style=3D"padding:15px 0;"><table role=3D"none" w=
+idth=3D"100%" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"cen=
+ter"><tr><td align=3D"center" valign=3D"top"><h1 style=3D"text-align:left;f=
+ont-family:'Trebuchet MS','Lucida Grande',Tahoma,sans-serif;font-weight:Bol=
+d;font-size:32px;color:#2A2A2A;padding:2px 0;line-height:38px;"> Anthropic =
++ Microsoft Join Rubrik&#39;s Free AI Identity Summit =F0=9F=9B=A1=EF=B8=8F=
+ </h1><p style=3D"text-align:left;font-family:'Helvetica',Arial,sans-serif;=
+font-weight:normal;font-size:20px;color:#3E3E3E;padding:5px 0;line-height:2=
+4px;"> Join us September 15 </p></td></tr></table></td></tr><tr><td><table =
+role=3D"none" width=3D"100%" border=3D"0" cellspacing=3D"0" cellpadding=3D"=
+0" align=3D"center"><tr><td><table role=3D"none" width=3D"100%" border=3D"0=
+" cellspacing=3D"0" cellpadding=3D"0" align=3D"center" style=3D"border-top:=
+1px solid #E5E7EB;border-bottom:1px solid #E5E7EB;padding-top:12px;padding-=
+bottom:12px;margin-bottom:15px;margin-top:15px;"><tr><td align=3D"left" val=
+ign=3D"middle"><table role=3D"none" border=3D"0" cellspacing=3D"0" cellpadd=
+ing=3D"0" align=3D"left"><tr><td align=3D"left" valign=3D"middle"><table ro=
+le=3D"none" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"left"=
+><tr><td align=3D"center" valign=3D"middle"><a href=3D"https://link.mail.be=
+ehiiv.com/v2/c/543337108f4c3c2a0af803c2d4d6040daf6ab1a91e16eaad476fde7c0a6a=
+45b331a955d9eb30237641f22584d5d822cb1db68ad55813bb54bf8a8fc39ddca2a168ecfe2=
+45ba5b66cd9a85e1b3593aa635bf9dc825e07fa7f2ac803b2359076047ebda3da8a626c90a9=
+fa8187a416cdd97098a8fd2309059e74146522f34b589d9ab2842896eca2e23e72cdbb0e96a=
+85762d64a60961006fdd22d2681d31a1257/78e69f2dc510e7f9" style=3D"text-decorat=
+ion:none; display:block;"><table role=3D"none" border=3D"0" cellspacing=3D"=
+0" cellpadding=3D"0" align=3D"center"><tr><td align=3D"center" valign=3D"mi=
+ddle" style=3D"border: 1px solid #E5E7EB; border-radius: 100%; width: 18px;=
+ height: 18px; padding: 8px;"><img style=3D"display:block; width:100%; heig=
+ht:100%; max-width:18px; max-height:18px; object-fit: contain;" alt=3D"like=
+" width=3D"18" height=3D"18" border=3D"0" src=3D"https://media.beehiiv.com/=
+cdn-cgi/image/fit=3Dscale-down,format=3Dauto,onerror=3Dredirect,quality=3D8=
+0/static_assets/header/like.png"/></td></tr></table></a></td><td width=3D"8=
+" style=3D"width:8px;">&nbsp;</td><td align=3D"center" valign=3D"middle"><a=
+ href=3D"https://link.mail.beehiiv.com/v2/c/6d9a1b0183ce96388cc25bbca45ab92=
+9cd92cf8dfe735a91b5a2a19da570f9149c6c808d4ea23f8fb2ccc50d5879890103b5f41377=
+e911af688fb749c934c791a109d4313bc44ae4dbaf8d2b562b2733bd02be457e7d9b94e3680=
+72c5217a6df658973d7b937309425a7c001c070d105638fb99c4b5b336e82756512c6040ed2=
+791028b403af547fbabbb1768af2b3ccc97f343599ce2a37fa15e3224afe1a78/8075f0d905=
+c9b083" style=3D"text-decoration:none; display:block;"><table role=3D"none"=
+ border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr><td =
+align=3D"center" valign=3D"middle" style=3D"border: 1px solid #E5E7EB; bord=
+er-radius: 100%; width: 18px; height: 18px; padding: 8px;"><img style=3D"di=
+splay:block; width:100%; height:100%; max-width:18px; max-height:18px; obje=
+ct-fit: contain;" alt=3D"comment" width=3D"18" height=3D"18" border=3D"0" s=
+rc=3D"https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Daut=
+o,onerror=3Dredirect,quality=3D80/static_assets/header/comment.png"/></td><=
+/tr></table></a></td></tr></table></td></tr></table></td><td align=3D"right=
+" valign=3D"middle"><table role=3D"none" border=3D"0" cellspacing=3D"0" cel=
+lpadding=3D"0" align=3D"right" class=3D""><tr><td align=3D"left" valign=3D"=
+middle"><table role=3D"none" border=3D"0" cellspacing=3D"0" cellpadding=3D"=
+0" align=3D"left" style=3D"width:100%"><tr><td align=3D"center" valign=3D"m=
+iddle"><a href=3D"https://link.mail.beehiiv.com/v2/c/7a75c95e795927b317cdd1=
+9a575f4702468e9e7557766bde887bbea88a0dd86733a7e4aa050a86b5acd2638a900ae0913=
+3bc641d08c789199c5885de05ab17fa87f884d2fb252ab9f96d0b3b40f5da395aa6a4e35b14=
+23e2ba269430a093af4f11ddfc467d8a3ade0e47f1b1c8468f66d49aff170d01a5bcdacfd83=
+d6b9b603f7d33f486bc1d3754b6bffe3067ebeff0c81b9cde9ecdd77a7056851e33ab24ce/5=
+b165e93c4548d09" style=3D"text-decoration:none; display:block;"><table role=
+=3D"none" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"=
+><tr><td align=3D"center" valign=3D"middle" style=3D"border: 1px solid #E5E=
+7EB; border-radius: 100%; width: 18px; height: 18px; padding: 8px;"><img st=
+yle=3D"display:block; width:100%; height:100%; max-width:18px; max-height:1=
+8px; object-fit: contain;" alt=3D"share on facebook" width=3D"18" border=3D=
+"0" src=3D"https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,format=
+=3Dauto,onerror=3Dredirect,quality=3D80/static_assets/header/facebook.png"/=
+></td></tr></table></a></td><td width=3D"8" style=3D"width:8px;">&nbsp;</td=
+><td align=3D"center" valign=3D"middle"><a href=3D"https://link.mail.beehii=
+v.com/v2/c/22e3b6bf53805b8dfc1cf6f859cc984fd389d068dcaf347cf5299513b42ddcb0=
+1ac1a15ae8e39acc58bd5775c7da3225efbaab525f87004ecf2c704b6758bd5764b2fb6e90d=
+607c809ef62ff202bb703d6c913caf2377cb088eb52005c5469f3e7e21016eb69d7b270a3c1=
+d951b33fd11482b8260e55d3409a1fa5c46a64b89158f9b2f9f1c1c5034ed7041bc8ee36c1f=
+25ef3e4366f6dca86995f5967003ee7/207c2035023747fb" style=3D"text-decoration:=
+none; display:block;"><table role=3D"none" border=3D"0" cellspacing=3D"0" c=
+ellpadding=3D"0" align=3D"center"><tr><td align=3D"center" valign=3D"middle=
+" style=3D"border: 1px solid #E5E7EB; border-radius: 100%; width: 18px; hei=
+ght: 18px; padding: 8px;"><img style=3D"display:block; width:100%; height:1=
+00%; max-width:18px; max-height:18px; object-fit: contain;" alt=3D"share on=
+ twitter" width=3D"18" height=3D"18" border=3D"0" src=3D"https://media.beeh=
+iiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Dauto,onerror=3Dredirect,qua=
+lity=3D80/static_assets/header/x.png"/></td></tr></table></a></td><td width=
+=3D"8" style=3D"width:8px;">&nbsp;</td><td align=3D"center" valign=3D"middl=
+e"><a href=3D"https://link.mail.beehiiv.com/v2/c/75d0a4989ccf4e27a7a5e3df87=
+49d12c9e886e340fb5b5f16bed519114440eb746285068e5d825da75eae37553a0a6e1a4860=
+6d9f09e33db2a2d51850686b2bf238a52adaae7dc500c2727eba5e8f547d86ea23d13afbd53=
+e90444a07e176d199255c2f7674c5b6e0221a92cf0fc84dbab839cba5facdc00b2701584b2e=
+68622afe6b06d581adb5ba6cf6c5ac8b344d66bdbb5d322c5930ee6112ce28bd4835b/604e1=
+ffad5b7c954" style=3D"text-decoration:none; display:block;"><table role=3D"=
+none" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr=
+><td align=3D"center" valign=3D"middle" style=3D"border: 1px solid #E5E7EB;=
+ border-radius: 100%; width: 18px; height: 18px; padding: 8px;"><img style=
+=3D"display:block; width:100%; height:100%; max-width:18px; max-height:18px=
+; object-fit: contain;" alt=3D"share on threads" width=3D"18" height=3D"18"=
+ border=3D"0" src=3D"https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-do=
+wn,format=3Dauto,onerror=3Dredirect,quality=3D80/static_assets/header/threa=
+ds.png"/></td></tr></table></a></td><td width=3D"8" style=3D"width:8px;">&n=
+bsp;</td><td align=3D"center" valign=3D"middle"><a href=3D"https://link.mai=
+l.beehiiv.com/v2/c/cdc1bfd5e4d2cc6701de9b62a20219b04611962949e2f9ab7d7e0209=
+b717c4c1d35a9debb62bec118a58f805118ebec0340144cb007290d4dcb1431ef996b49abae=
+ec2f8169d96b741d9719a64d8bc92df2c9f58957cf3b37bbda4e00a161191b79439aec935f0=
+94e2c8dd862cafe8dc36f7bc03f49f6671e3df1b2323842dc952b3221fd401f4948599a67f2=
+3bb81cc5cecee9ba83fc57cdc56a3b1c50ec896/307d802d651e7576" style=3D"text-dec=
+oration:none; display:block;"><table role=3D"none" border=3D"0" cellspacing=
+=3D"0" cellpadding=3D"0" align=3D"center"><tr><td align=3D"center" valign=
+=3D"middle" style=3D"border: 1px solid #E5E7EB; border-radius: 100%; width:=
+ 18px; height: 18px; padding: 8px;"><img style=3D"display:block; width:100%=
+; height:100%; max-width:18px; max-height:18px; object-fit: contain;" alt=
+=3D"share on linkedin" width=3D"18" height=3D"18" border=3D"0" src=3D"https=
+://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Dauto,onerror=
+=3Dredirect,quality=3D80/static_assets/header/linkedin.png"/></td></tr></ta=
+ble></a></td></tr></table></td></tr></table></td></tr></table></td></tr></t=
+able></td></tr><tr><td style=3D"line-height:0;"><div data-open-tracking=3D"=
+true"><img src=3D"https://link.mail.beehiiv.com/v2/o/f9869561feff7eb76cf996=
+69fbce4510192641fd8f859169f84e03914bbcdd0b39b7512ea81742571a93e282c59667949=
+279c6ea0f6ed007de77658188d9f0f343e757846bac7c7be51faf7f92e12009dce36d514aed=
+dd40a194884733fb31a85c907c0a4790b254e0f7d7d5fc4463cdc1d96c0122c9b75eff1b28b=
+5daf9394c12367105596ba22f74947188584ca8adbcf50799b48290c53c6c17f50afcc92896=
+2352ae213decbc264d3b1776f0c5167c90a5f5174a3ac24e7c0dd59c45e0f09fdc8c7036dd6=
+c6dd2f5c2987b367be999c8ea4822f41d07b6a2fc6a4e4393bcd82f87905d112a17bff6da82=
+4c54cf9bc2fe4c26797b45142725c1653aa741d1023cedac84af1eac71a090bba822c6b4968=
+7f91f43f087e9a0be2c4be3d59d1d7afbaca7c49266c77fd6936b396c1b5044d91be4ca0213=
+a7c0743de5451c1372a906d92fca5d03529574beed67eb92cc96433c32fb88cb84152484d7a=
+644d832/e588da6732cf7362.gif" alt=3D"" width=3D"1" height=3D"1" style=3D"di=
+splay:block;border:0;outline:0;"></div></td></tr></table></div></td></tr><t=
+r id=3D"content-blocks"><td class=3D"email-card-body" align=3D"center" vali=
+gn=3D"top" style=3D"padding-bottom:15px;"><table role=3D"none" width=3D"100=
+%" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr><t=
+d align=3D"center" valign=3D"top" style=3D"padding-bottom:20px;padding-left=
+:15px;padding-right:15px;padding-top:20px; " class=3D"dd"><table role=3D"no=
+ne" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" class=3D"bb" style=3D"=
+margin:0 auto 0 auto;"><tr><td align=3D"center" valign=3D"top" class=3D"bb"=
+ style=3D"width:630px;"><a href=3D"https://link.mail.beehiiv.com/v2/c/05977=
+1275ecdd887464859178fe9b294204ddb7499fc1af4cd5aba5be873ae6adb002ffb2e6b3ce5=
+85be53a2b313c63b2033f81db28b09b42fa4d7b16d0060e7d7f1c1e640c4529cad5e870b229=
+3fa7e093ad4f95308d99b7bfb0a895b5528aac98f3378e9f992b93846b8f821a8f7a6bb67cd=
+8b0c5cac999dc57f90cde2d7e7bd5dfed2a9d4f1f0e38e9b57fd654b737c665914077333b3f=
+a021f84a565f3c7/94eeadea2ebf5cfe" rel=3D"noopener noreferrer nofollow" styl=
+e=3D"text-decoration:none;" target=3D"_blank"><img src=3D"https://media.bee=
+hiiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Dauto,onerror=3Dredirect,qu=
+ality=3D80,width=3D1920,height=3D3840/uploads/asset/file/e9c76f75-070c-4aeb=
+-ac75-a29d549b1195/image.png?t=3D1788461783" alt=3D"" height=3D"auto" width=
+=3D"630" style=3D"display:block;width:100%;" border=3D"0"/></a></td></tr></=
+table></td></tr><tr><td class=3D"dd" align=3D"justify" style=3D"padding:0px=
+ 15px;text-align:justify;word-break:break-word;"><p style=3D"mso-line-heigh=
+t-alt:150.0%;"> Frontier AI models can now chain vulnerabilities and move t=
+hrough infrastructure on their own, no human required. <b>The target, almos=
+t always, is identity:</b> credentials, machine access, and the keys that b=
+oth agents and attackers need. </p></td></tr><tr><td class=3D"dd" align=3D"=
+justify" style=3D"padding:0px 15px;text-align:justify;word-break:break-word=
+;"><p style=3D"mso-line-height-alt:150.0%;"><a class=3D"link" href=3D"https=
+://link.mail.beehiiv.com/v2/c/89502f986bd1ab422a7f734994866df8854d696772892=
+1b35f66c724e7776e48d873cc86488ad81d0aba6ef281d3234336e61bd9d831056e1032e8a2=
+3ffccd09e93b3a0a0ed3d2a21f7b0ce2efd5fbc394e8318bd13c8eef4a01e05faf66ff2206f=
+735469ef2e1c6787c9749ac73d4fa01d954b62e6e8c10acf987bf714d586082e2a2abffaa86=
+20a4c9a35b2340075d886e55b33175dd0e61bead53e56c38b9/8361fe0c539c45bd" target=
+=3D"_blank" rel=3D"noopener noreferrer nofollow"><span>On September 15, Rub=
+rik is hosting a free virtual AI + Identity Resilience Summit</span></a> to=
+ unpack what that means for security teams. The opening keynote brings toge=
+ther Rubrik&#39;s Chief Product Officer, Anthropic&#39;s Head of National S=
+ecurity Partnerships, and Microsoft&#39;s identity leadership to lay out an=
+ operating model for the agentic era: protect against AI, protect AI itself=
+, and use AI to protect your environment. Eight-plus sessions follow across=
+ two tracks (AI and Identity), closing with a conversation with=C2=A0<i>wil=
+l.i.am</i>=C2=A0on creativity and identity in an AI future. </p></td></tr><=
+tr><td class=3D"dd" align=3D"justify" style=3D"padding:0px 15px;text-align:=
+justify;word-break:break-word;"><p style=3D"mso-line-height-alt:150.0%;"> F=
+ree, virtual, two hours live =E2=80=94 every session is available on-demand=
+ if you can&#39;t make it live. </p></td></tr><tr class=3D"btn_row"><td val=
+ign=3D"top" style=3D"padding-bottom:12px;padding-left:15px;padding-right:15=
+px;padding-top:12px;text-align:center;width:100%;word-break:break-word;" cl=
+ass=3D"dd"><table width=3D"100%" role=3D"none" border=3D"0" cellspacing=3D"=
+0" cellpadding=3D"0" style=3D"margin:14px auto 14px auto;"><tr><td align=3D=
+"center" valign=3D"middle"><table role=3D"none" border=3D"0" cellspacing=3D=
+"0" cellpadding=3D"0"><tr><td style=3D"background-color:#030712;border-radi=
+us:8px;mso-padding-alt:12px 20px;text-align:center;" class=3D"btn"><a href=
+=3D"https://link.mail.beehiiv.com/v2/c/c344095993431a66dbe0b89079dad2d5c86d=
+b651876a5273536fcf90e53e5b57ade66fedc66e9ec380bcca4aab0e62ad1cc658b6c31a1f2=
+b4a2c76b479c2f9bf8f39ab43b0511aa56e2623c834d3cc56c3cc4441920ec8f0c5db47dd1a=
+57e270d035a8e2c1e36b3c75771e4bf6b1501def5c836bd18689b9fc52f02632c93d13798ab=
+347d433dc3a10f443bf5a2be0999352dc14258e87f056561b3695671496/7ccc43886c3824b=
+0" target=3D"_blank" rel=3D"noopener noreferrer nofollow" style=3D"backgrou=
+nd-color:#030712;border-radius:8px;color:#FFFFFF;display:inline-block;font-=
+family:'Verdana',Geneva,sans-serif;font-size:16px;font-weight:normal;line-h=
+eight:18px;padding:12px 20px;text-align:center;text-decoration:none;"> Regi=
+ster now </a></td></tr></table></td></tr></table></td></tr><tr><td align=3D=
+"center" valign=3D"top" style=3D"font-size:0px;line-height:0px;padding:30px=
+ 0px 30px;" class=3D"dd"><table class=3D"j" role=3D"none" width=3D"50%" bor=
+der=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr><td> &nb=
+sp; </td></tr></table></td></tr><tr><td class=3D"dd" align=3D"justify" styl=
+e=3D"padding:0px 15px;text-align:justify;word-break:break-word;"><p style=
+=3D"mso-line-height-alt:150.0%;"><i>=F0=9F=9B=A1=EF=B8=8F This event is </i=
+><a class=3D"link" href=3D"https://link.mail.beehiiv.com/v2/c/c4ddfa4555672=
+e76afd2f9c258625138aca6c2252b184dd262b7cc86dac947693d5628550d6249773d9325c8=
+895b24325e7d04587a297bab50842ac2f5013a23ba1b972171627f5137192fe67924585ba2a=
+c665f8cc4bb7609b3620c82ec21c11900c0502e48ebb99fa0af3c38914b36737f5c9532f674=
+2b15952b933954421fe860b8bdd7940030f39b0411c86682c4c773b66cf4e03215352f39153=
+83a7f53/df2cce952f5a388f" target=3D"_blank" rel=3D"noopener noreferrer nofo=
+llow"><span><i>presented</i></span></a><i> by the Rubrik team. We thank Rub=
+rik for sharing their expertise and supporting Turing Post=E2=80=99s missio=
+n to bring clarity to the AI landscape.</i></p></td></tr></table></td></tr>=
+</table></td></tr><tr><td align=3D"center" valign=3D"top"><table role=3D"no=
+ne" width=3D"100%" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=
+=3D"center"><tr><td><tr><td class=3D"b" align=3D"center" valign=3D"top" bgc=
+olor=3D"#030712" style=3D"padding:0px 0px 0px 0px;border-style:solid;border=
+-width: 0px 0px 0px 0px;border-color: #FFFFFF;border-bottom-left-radius:10p=
+x;border-bottom-right-radius:10px;"><table role=3D"none" width=3D"100%" bor=
+der=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr><td alig=
+n=3D"center" valign=3D"top" bgcolor=3D"#030712" style=3D"padding:12px"><tab=
+le role=3D"none" width=3D"100%" border=3D"0" cellspacing=3D"0" cellpadding=
+=3D"0" align=3D"center"><tr><td><span style=3D"padding-left:1px;"></span></=
+td><td align=3D"center" valign=3D"middle" width=3D"75" style=3D"width:75px;=
+"><a href=3D"https://link.mail.beehiiv.com/v2/c/c04b8be8c77976cda2bbce10045=
+44fea8872d4aa0e3f276978e2e12c1a2987dae9ae9efdafbfdc2612e2344789a2be418f404d=
+571aa9ecdafc53373993ec18e6535708dda09a6887e834d035ca7de10d7cd34384dc10da207=
+f0456739275a51fd404e8d985ed9ac3f10cf52e40bd70cb8be4a637dd293f23f5a7fe2858af=
+467fb227d934756fa7ecd6a5de03560168b70406764f366bd7a1f05cc056e634594c/81bd57=
+4f70a431e3" style=3D"text-decoration:none;"><img width=3D"22" height=3D"22"=
+ alt=3D"tw" border=3D"0" style=3D"display:block;max-width:22px;color:light"=
+ src=3D"https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Da=
+uto,onerror=3Dredirect,quality=3D80/static_assets/x_light.png"/></a></td><t=
+d align=3D"center" valign=3D"middle" width=3D"75" style=3D"width:75px;"><a =
+href=3D"https://link.mail.beehiiv.com/v2/c/87e9ed989820be8dad736441fc0cfe98=
+bf9d6401c7f61c4250a5f19623ef439e169dfcd75bc7b7f64974d66c602182fe1c03e3195e8=
+afba7965210517ebc2454cd0288dde0e7a09b1a7e92cc19ecb72707f91964740407df70bd7c=
+804552fbf5bf64658f1c1e2b015a88dbd0f6de4d54b4cae211d6efe9fddb4430a588f13217a=
+1614864b1e37e52b07140904902b23a9e6964afbea97c28ef05d9833e52b33f/8eb98275a0f=
+55ed2" style=3D"text-decoration:none;"><img width=3D"22" height=3D"16" alt=
+=3D"yt" border=3D"0" style=3D"display:block;max-width:22px;color:light" src=
+=3D"https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Dauto,=
+onerror=3Dredirect,quality=3D80/static_assets/youtube_light.png"/></a></td>=
+<td align=3D"center" valign=3D"middle" width=3D"75" style=3D"width:75px;"><=
+a href=3D"https://link.mail.beehiiv.com/v2/c/dde377878f03df37c6d6089f4894a2=
+9bb682a1db6a88498b3207c1b4d7213c258c7234e9189ce736cc84df11e9883bd9ea0d887b3=
+3360c049b675cebd5dcc7fbec07061deba411d0d759704be3c2712cdf91b775d1d6af8b6913=
+c399a53f0e09ce90b4cf22f734b007daefcb755ee543edc66e0e19e328f0ff8b245e336f30e=
+19cc0ff692d559234311bc2c7456e993a51ba9e20f3b9b9e5d7412fb2954ae809/be89eb3f6=
+0b67856" style=3D"text-decoration:none;"><img width=3D"22" height=3D"22" al=
+t=3D"in" border=3D"0" style=3D"display:block;max-width:22px;color:light" sr=
+c=3D"https://media.beehiiv.com/cdn-cgi/image/fit=3Dscale-down,format=3Dauto=
+,onerror=3Dredirect,quality=3D80/static_assets/linkedin_light.png"/></a></t=
+d><td><span style=3D"padding-left:1px;"></span></td></tr></table></td></tr>=
+<tr><td style=3D"padding:4px 15px"><p style=3D"font-family: 'DM Sans', mono=
+space; color: white;"> Want 115,000+ people to see what you=E2=80=99re buil=
+ding? <a href=3D"https://link.mail.beehiiv.com/v2/c/a96b94d298674fcf2262983=
+527f92c003ed9a779330c87e7245e0d84d2809235de9b9ec5b7388ce158a492e162f062eecf=
+5a8f8b70ec2959f7e5104a48464054d95007534ee352f303726c16b247d8620fcb18224f85b=
+6032956d15def2d8482d002aa24f7c9f5953d46f8dc5b4f8b10bc0befbe13dff61ab7a3ce72=
+82a62cddce46e76f0c3c25ceb78563c4c7407af9f52251f323c7f151a3b0eb92f706d5ab/c5=
+8c792d15eb056f">Get in touch</a> to feature your company in Turing Post. </=
+p></td></tr><tr><td align=3D"center" valign=3D"top" style=3D"padding-bottom=
+:20px;padding-left:15px;padding-right:15px;padding-top:20px; " class=3D"dd"=
+><table role=3D"none" border=3D"0" cellspacing=3D"0" cellpadding=3D"0" clas=
+s=3D"bb" style=3D"margin:0 auto 0 auto;"><tr><td align=3D"center" valign=3D=
+"top" class=3D"bb" style=3D"width:630px;"><img src=3D"https://media.beehiiv=
+.com/cdn-cgi/image/fit=3Dscale-down,format=3Dauto,onerror=3Dredirect,qualit=
+y=3D80,width=3D1920,height=3D3840/uploads/asset/file/8b6b20d1-5bf9-4aa6-bf3=
+c-349d2d465ce1/TP-footer-1200x300.png?t=3D1782333916" alt=3D"" height=3D"au=
+to" width=3D"630" style=3D"display:block;width:100%;" border=3D"0"/></td></=
+tr></table></td></tr><tr><td class=3D"w" align=3D"center" valign=3D"top" st=
+yle=3D"padding:15px 15px 15px 15px;"><table role=3D"none" width=3D"100%" bo=
+rder=3D"0" cellspacing=3D"0" cellpadding=3D"0" align=3D"center"><tr><td ali=
+gn=3D"center" valign=3D"top"><p style=3D"font-family:'Verdana',Geneva,sans-=
+serif;color:#FFFFFF!important;"> Update your email preferences or unsubscri=
+be <a class=3D"link" href=3D"https://link.mail.beehiiv.com/v2/c/2c3335cee92=
+8624b16b6da55b1bdb9119f73682bd4b98fa7968ec71c90220b5985226f4ee46b2de5579434=
+d867fdd6c9090fba7d38df29cdb069b8046d8e2dd3dcf2f1557b3d67219330d97f27e3e9419=
+da9a6e31da0a1fb24a6ad68232f78f3a03ae52658f7f3ffc7b0015e489250908b0089bdea69=
+7fbdcc4cf970698741355f334acbd200875c93cae9ec9dde2e25636b562a2e0ae80947fb8dc=
+41bfaffa3/ba645304e7cb8957" style=3D"text-decoration:underline;text-decorat=
+ion-color:#FFFFFF!important;color:#FFFFFF!important;"> here</a></p><p class=
+=3D"copyright" style=3D"font-family:'Verdana',Geneva,sans-serif;color:#FFFF=
+FF!important;"> &copy; 2026 Ksenia Se </p><p style=3D"font-family:'Verdana'=
+,Geneva,sans-serif;color:#FFFFFF!important;"> 1434 Western Ave, Suite 1 #47=
+96 <br>Albany, New York 12203, United States </p></td></tr><tr><td align=3D=
+"left" valign=3D"top" height=3D"2" style=3D"height:2px;line-height:1px;font=
+-size:1px;mso-line-height-rule:exactly;"><a href=3D'https://hp.beehiiv.com/=
+83fd5992-ad0a-4280-8b7e-1af67adb5863' style=3D"color: #030712 !important; c=
+ursor: default; font-size: 1px; text-decoration: none;"></a></td></tr><tr><=
+td align=3D"left" valign=3D"top" height=3D"2" style=3D"height:2px;"><a href=
+=3D'https://email.beehiivstatus.com/8df5c30331c0fbea0f3c0fe42a25a5e0b7c6a60=
+f/hclick' clicktracking=3D"off" style=3D"color: #030712 !important; cursor:=
+ default; font-size: 1px; text-decoration: none;"></a></td></tr></table></t=
+d></tr></table></td></tr></td></tr></table></td></tr></table></td></tr></ta=
+ble></td></tr></table></div></body></html>
+--8+CBqaTgT6S2DWJCnFHrTg--

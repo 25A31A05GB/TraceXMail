@@ -1,0 +1,48 @@
+From: Office365 <noreply@COMPANY.com>
+To: {{.Email}}
+Subject: Microsoft Account Security Alert
+Date: Fri, 04 Sep 2026 16:49:28 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============1651072488044357098=="
+
+--===============1651072488044357098==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+Dear {{.FirstName}},
+
+Someone in Bogot=C3=A1 Colombia attempted to log into your account several ti=
+mes. If you believe this was fraudulent activity please report it here: {{.UR=
+L}}
+
+If you do not believe this to be fraudulent activity you may ignore this mess=
+age.
+
+Sincerely,
+Office365 @ COMPANY.com
+
+--===============1651072488044357098==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<html>
+<head>
+  <link rel=3D"stylesheet" href=3D"https://maxcdn.bootstrapcdn.com/bootstrap/=
+3.3.7/css/bootstrap.min.css">
+</head>
+<body>
+<h1 style=3D"color:#4472c4">Microsoft Account</h1>
+<p>Dear {{.FirstName}},</p>
+<p>Someone in Bogot=C3=A1 Colombia attempted to log into your account several=
+ times. If you believe this was fraudulent activity please report it <a href=
+=3D"{{.URL}}">here</a>.</p>
+<p>If you do not believe this to be fraudulent activity you may ignore this m=
+essage</p><br>
+<p>Sincerely,</p>
+<p>Office365 @ COMPANY.com</p>
+</body>
+</html>
+
+--===============1651072488044357098==--

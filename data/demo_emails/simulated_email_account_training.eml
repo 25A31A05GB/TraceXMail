@@ -1,0 +1,54 @@
+From: Security Awareness Training <training@example.invalid>
+To: {{.Email}}
+Subject: [TRAINING] Simulated Email Account Notice
+Date: Fri, 04 Sep 2026 17:11:16 +0000
+X-Training-Exercise: true
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============4405821574077221735=="
+
+--===============4405821574077221735==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+SECURITY AWARENESS TRAINING =E2=80=94 SIMULATION
+
+Hello {{.FirstName}},
+
+This is a simulated IT security-awareness exercise. It demonstrates a common =
+email-account validation scenario and is not a real account notification.
+
+No action is required on your actual email account, and you should never ente=
+r credentials into an unexpected link.
+
+Training scenario: https://example.invalid/security-training
+
+Thanks for your cooperation,
+Security Awareness Training
+
+--===============4405821574077221735==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<!doctype html>
+<html>
+<head>
+  <meta charset=3D"utf-8">
+</head>
+<body>
+<p><strong>SECURITY AWARENESS TRAINING =E2=80=94 SIMULATION</strong></p>
+<p>Hello {{.FirstName}},</p>
+<p>This is a simulated IT security-awareness exercise. It demonstrates a comm=
+on email-account validation scenario and is not a real account notification.<=
+/p>
+<p>No action is required on your actual email account, and you should never e=
+nter credentials into an unexpected link.</p>
+<p>For this exercise, you may review the <a href=3D"https://example.invalid/s=
+ecurity-training">training scenario</a>.</p>
+<p>Thanks for your cooperation,</p>
+<p>Security Awareness Training</p>
+</body>
+</html>
+
+--===============4405821574077221735==--

@@ -1,0 +1,72 @@
+From: Security Awareness Training <training@example.invalid>
+To: {{.Email}}
+Subject: [TRAINING] Simulated Company News
+Date: Fri, 04 Sep 2026 17:04:07 +0000
+X-Training-Exercise: true
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============0206932578277313353=="
+
+--===============0206932578277313353==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+SECURITY AWARENESS TRAINING =E2=80=94 SIMULATION
+
+This simulated message is for authorized security-awareness testing.
+It is not a real company-wide communication.
+
+Breaking News
+
+What's been happening in our training scenario?
+
+This exercise demonstrates how a company-news email may encourage employees t=
+o follow a link for additional information.
+
+We want to make sure that no employee feels left out because we value you, {{=
+.FirstName}}.
+
+For this simulation, use the training link below. Do not enter credentials or=
+ confidential information.
+
+Training link: https://example.invalid/security-training
+
+Best Regards:
+The Security Awareness Training Team
+
+--===============0206932578277313353==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+MIME-Version: 1.0
+
+<!doctype html>
+<html>
+<head>
+  <meta charset=3D"utf-8">
+</head>
+<body style=3D"background-color:#A9A9A9">
+<div class=3D"container">
+  <div class=3D"container" style=3D"background-color:#FFF;">
+    <br><br>
+    <p><strong>SECURITY AWARENESS TRAINING =E2=80=94 SIMULATION</strong></p>
+    <p>This simulated message is for authorized security-awareness testing. I=
+t is not a real company-wide communication.</p>
+    <h1>Breaking News</h1>
+    <h3>What's been happening in our training scenario?</h3>
+    <p>This exercise demonstrates how a company-news email may encourage empl=
+oyees to follow a link for additional information.</p>
+    <p>We want to make sure that no employee feels left out because we value =
+you, {{.FirstName}}.</p>
+    <p>For this simulation, use the training link below. Do not enter credent=
+ials or confidential information.</p>
+    <h4><a href=3D"https://example.invalid/security-training">View Training S=
+cenario</a></h4>
+    <br><br><hr>
+    <p>Best Regards:</p>
+    <p>The Security Awareness Training Team</p>
+  </div>
+</div>
+</body>
+</html>
+
+--===============0206932578277313353==--
