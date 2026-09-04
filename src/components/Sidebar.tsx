@@ -192,37 +192,36 @@ export function Sidebar({ activeTab, setActiveTab, alertCount, wsStatus }: Sideb
         </a>
       </div>
 
-      {/* System Status Footer with Dynamic WebSocket indicator */}
-      <div className="p-3.5 border-t border-slate-700 bg-slate-900/60">
-        <div className="flex items-center justify-between mb-1.5">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                isWsConnected ? 'bg-emerald-400' : isWsReconnecting ? 'bg-amber-400' : 'bg-rose-400'
-              }`}></span>
-              <span className={`relative inline-flex rounded-full h-2 w-2 ${
-                isWsConnected ? 'bg-emerald-500' : isWsReconnecting ? 'bg-amber-500' : 'bg-rose-500'
-              }`}></span>
-            </span>
-            <span className={`text-[11px] font-mono font-semibold flex items-center gap-1 ${
-              isWsConnected ? 'text-emerald-400' : isWsReconnecting ? 'text-amber-400' : 'text-rose-400'
+      {/* System Status Footer with Dynamic Connection Indicator */}
+      {false && (
+        <div className="p-3.5 border-t border-slate-700 bg-slate-900/60">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  isWsConnected ? 'bg-emerald-400' : isWsReconnecting ? 'bg-amber-400' : 'bg-slate-500'
+                }`}></span>
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${
+                  isWsConnected ? 'bg-emerald-500' : isWsReconnecting ? 'bg-amber-500' : 'bg-slate-500'
+                }`}></span>
+              </span>
+              <span className={`text-[11px] font-sans font-semibold flex items-center gap-1.5 ${
+                isWsConnected ? 'text-emerald-400' : isWsReconnecting ? 'text-amber-400' : 'text-slate-400'
+              }`}>
+                <Radio className="w-3.5 h-3.5 inline animate-pulse" />
+                {isWsConnected ? 'Live Threat Stream' : isWsReconnecting ? 'Reconnecting...' : 'Feed Disconnected'}
+              </span>
+            </div>
+            <span className={`text-[9px] px-2 py-0.5 rounded font-sans font-semibold border ${
+              isWsConnected
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                : 'bg-slate-800 text-slate-400 border-slate-700'
             }`}>
-              <Radio className="w-3 h-3 inline animate-pulse" /> WS {wsStatus}
+              Protected
             </span>
           </div>
-          <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono border ${
-            isWsConnected
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-          }`}>
-            RLS ACTIVE
-          </span>
         </div>
-        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-          <span>TENANT: org_acme_soc_01</span>
-          <span>TABLES: 19</span>
-        </div>
-      </div>
+      )}
     </aside>
   );
 }

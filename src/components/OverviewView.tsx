@@ -380,7 +380,7 @@ export function OverviewView({
       cidr: 'Public IPv4',
       scope: 'PUBLIC_INTERNET',
       subnetDescription: 'Public Routable Address Space',
-      lookupMethod: originHopRaw.lookupMethod || geo.lookupMethod || 'MaxMind GeoLite2 Database'
+      lookupMethod: originHopRaw.lookupMethod || geo.lookupMethod || 'Threat Intelligence GeoIP Database'
     };
   })();
 

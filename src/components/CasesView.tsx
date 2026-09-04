@@ -177,11 +177,11 @@ export function CasesView({
     fetchCases();
   }, [alerts, lastCreatedCaseId, refreshSignal, showDemoCases, maskPii]);
 
-  // Periodic safety net polling interval (15s)
+  // Periodic safety net polling interval (30s)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchCases();
-    }, 15000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -623,7 +623,7 @@ export function CasesView({
                             className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
                           >
                             <FlaskConical className="w-3.5 h-3.5 text-amber-400" />
-                            Show Demo Data
+                            Include Sample Cases
                           </button>
                         )}
                       </div>
@@ -940,7 +940,7 @@ export function CasesView({
                     Select Member Emails to Group ({selectedEmailIds.length} selected)
                   </label>
                   <span className="text-[11px] text-slate-400">
-                    Auto-suggest members enabled via correlation engine
+                    Auto-suggest members enabled via graph correlation
                   </span>
                 </div>
 
@@ -1039,7 +1039,7 @@ export function CasesView({
                     </span>
                   </div>
                   <p className="text-xs text-slate-400">
-                    Tenant Scoped: {selectedCaseDetail.organization_id || 'org_acme_soc_01'}
+                    Organization Partition Protected
                   </p>
                 </div>
               </div>
@@ -1205,7 +1205,7 @@ export function CasesView({
                 </div>
               </div>
 
-              {/* Auto-Suggested Candidate Members (from graph_engine correlation) */}
+              {/* Auto-Suggested Candidate Members (from graph correlation) */}
               {selectedCaseDetail.suggested_members && selectedCaseDetail.suggested_members.length > 0 && (
                 <div className="space-y-2">
                   <h4 className="font-semibold text-amber-400 flex items-center gap-1.5">
@@ -1213,7 +1213,7 @@ export function CasesView({
                     Auto-Suggested Candidate Members ({selectedCaseDetail.suggested_members.length})
                   </h4>
                   <p className="text-[11px] text-slate-400">
-                    Correlated by graph correlation engine via shared IOCs and infrastructure (suggested, not auto-included):
+                    Correlated by graph correlation intelligence via shared IOCs and infrastructure (suggested, not auto-included):
                   </p>
                   <div className="border border-amber-900/50 bg-amber-950/20 rounded-xl divide-y divide-amber-900/30 overflow-hidden">
                     {selectedCaseDetail.suggested_members.map((sug: any, idx: number) => (

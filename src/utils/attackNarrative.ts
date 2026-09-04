@@ -6,7 +6,7 @@ import { getStandardizedVerdict } from './verdict';
  * from verifiable forensic evidence present in EmailAnalysis.
  * Uses strict string-template composition — zero LLM/ML calls, deterministic and unit-testable.
  */
-export function generateAttackNarrative(analysis: Partial<EmailAnalysis> | null | undefined): string {
+export function generateAttackNarrative(analysis: EmailAnalysis | Partial<EmailAnalysis> | null | undefined): string {
   if (!analysis) {
     return 'No forensic telemetry available for narrative synthesis.';
   }

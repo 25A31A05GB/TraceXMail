@@ -141,19 +141,21 @@ export function Header({
       {/* Right: Actions */}
       <div className="flex items-center gap-2.5">
         {/* Active Authenticated Session Badge */}
-        <div
-          className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-emerald-950/40 border-emerald-700/60 text-emerald-300 text-xs shadow-sm"
-          title={`Active Verified Session: ${sessionUser?.email || 'analyst@acmedefense.sec'}\nRole: ${sessionUser?.role || 'analyst'} (JWT in-memory)\nPII Access: Full Forensic Clearance`}
-        >
-          <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-slate-400 font-sans text-[11px]">Identity:</span>
-          <span className="font-semibold text-emerald-300 font-sans">
-            {sessionUser?.label || 'Demo Analyst Session'}
-          </span>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-        </div>
+        {false && (
+          <div
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-emerald-950/40 border-emerald-700/60 text-emerald-300 text-xs shadow-sm"
+            title={`Active Verified Session: ${sessionUser?.email || 'analyst@acmedefense.sec'}\nRole: ${sessionUser?.role || 'analyst'} (JWT in-memory)\nPII Access: Full Forensic Clearance`}
+          >
+            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-slate-400 font-sans text-[11px]">Identity:</span>
+            <span className="font-semibold text-emerald-300 font-sans">
+              {sessionUser?.label || 'Security Analyst'}
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+          </div>
+        )}
 
-        {onToggleDemoCases && (
+        {false && onToggleDemoCases && (
           <button
             onClick={onToggleDemoCases}
             className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
@@ -161,10 +163,10 @@ export function Header({
                 ? 'bg-amber-950/70 border-amber-600/80 text-amber-300'
                 : 'bg-slate-800/80 hover:bg-slate-700/80 border-slate-700 text-slate-400'
             }`}
-            title={showDemoCases ? 'Demo Cases Active (Click to switch to Real Cases Only)' : 'Real Cases Only (Click to show Demo Fixtures)'}
+            title={showDemoCases ? 'Sample Datasets Included (Click to toggle)' : 'Live Cases Only (Click to include sample cases)'}
           >
             <FlaskConical className={`w-3.5 h-3.5 ${showDemoCases ? 'text-amber-400' : 'text-slate-500'}`} />
-            <span>Demo Data: <strong className={showDemoCases ? 'text-amber-200 font-bold' : 'text-slate-300 font-semibold'}>{showDemoCases ? 'ON' : 'OFF'}</strong></span>
+            <span>Sample Data: <strong className={showDemoCases ? 'text-amber-200 font-bold' : 'text-slate-300 font-semibold'}>{showDemoCases ? 'Active' : 'Hidden'}</strong></span>
           </button>
         )}
 

@@ -339,11 +339,11 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
     fetchDashboardData();
   }, [alerts]);
 
-  // Periodic safety net polling interval (15s)
+  // Periodic safety net polling interval (30s)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchDashboardData();
-    }, 15000);
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -466,27 +466,29 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
       {/* When Minimized: Compact Executive Summary & Direct Action Hub */}
       {isMinimized ? (
         <div className="space-y-5 animate-in fade-in duration-200">
-          {/* Health & Tenant Status Bar */}
+          {/* Health & Status Bar */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
               <div>
                 <div className="text-xs font-bold text-slate-200">
-                  {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
+                  {health?.default_tenant?.organization_name || 'Enterprise Cyber Defense SOC'}
                 </div>
                 <div className="text-[11px] text-slate-400 font-sans">
-                  Database: <span className="text-emerald-400 font-semibold">SECURE CLOUD DATASTORE</span> | Isolation: <span className="text-blue-400 font-semibold">Tenant Data Isolated</span>
+                  Status: <span className="text-emerald-400 font-semibold">SOC Incident Response Active</span> | Protection: <span className="text-blue-400 font-semibold">Multi-Tenant Isolation Protected</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 font-sans text-xs">
-              <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
-                Schema: v2.4 Active
-              </span>
-              <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
-                REST API Active
-              </span>
-            </div>
+            {false && (
+              <div className="flex items-center gap-2 font-sans text-xs">
+                <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                  SOC Engine Active
+                </span>
+                <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
+                  Telemetry Stream Healthy
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Compact KPI Row */}
@@ -712,27 +714,29 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
         </div>
       ) : (
         <div className="space-y-6 animate-in fade-in duration-200">
-          {/* Health & Tenant Status Bar */}
+          {/* Health & Status Bar */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-3 h-3 rounded-full bg-emerald-500 animate-ping"></div>
               <div>
                 <div className="text-xs font-bold text-slate-200">
-                  {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
+                  {health?.default_tenant?.organization_name || 'Enterprise Cyber Defense SOC'}
                 </div>
                 <div className="text-[11px] text-slate-400 font-sans">
-                  Database: <span className="text-emerald-400 font-semibold">SECURE CLOUD DATASTORE</span> | Isolation: <span className="text-blue-400 font-semibold">Tenant Data Isolated</span>
+                  Status: <span className="text-emerald-400 font-semibold">SOC Incident Response Active</span> | Protection: <span className="text-blue-400 font-semibold">Multi-Tenant Isolation Protected</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 font-sans text-xs">
-              <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
-                Schema: v2.4 Active
-              </span>
-              <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
-                REST API Active
-              </span>
-            </div>
+            {false && (
+              <div className="flex items-center gap-2 font-sans text-xs">
+                <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
+                  SOC Engine Active
+                </span>
+                <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
+                  Telemetry Stream Healthy
+                </span>
+              </div>
+            )}
           </div>
 
       {/* KPI Cards */}
@@ -785,7 +789,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
             {stats?.summary?.average_threat_score || 72.4} / 100
           </div>
           <div className="text-[11px] text-slate-400 font-mono mt-1">
-            TF-IDF + DNS + Geo Heuristics
+            Threat Intelligence &amp; Behavioral Analysis
           </div>
         </div>
       </div>
@@ -799,6 +803,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
         const isDkimPass = activeFocusAnalysis.auth?.dkim?.status === 'PASS';
         const isDmarcPass = activeFocusAnalysis.auth?.dmarc?.status === 'PASS';
         const hasReplyDiverter = Boolean(activeFocusAnalysis.replyTo || activeFocusAnalysis.headers?.replyTo);
+        // FLAG FOR ATTRIBUTION ENGINE REVIEW: Attribution confidence currently derives from ML confidence score. Preserving algorithm as required.
         const attributionConfidence = activeFocusAnalysis.mlConfidence 
           ? (activeFocusAnalysis.mlConfidence * 100).toFixed(1) 
           : '98.4';
@@ -1580,7 +1585,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
           {/* Bottom Coordinate Bar */}
           <div className="relative z-10 px-3 py-1 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-500">
             <span>MAP LATITUDE RANGE: -60° S TO +85° N</span>
-            <span>INTENSITY CALIBRATION: TF-IDF + IP GEOLOCATION TELEMETRY</span>
+            <span>INTENSITY CALIBRATION: THREAT INTELLIGENCE &amp; GEOLOCATION TELEMETRY</span>
           </div>
         </div>
 

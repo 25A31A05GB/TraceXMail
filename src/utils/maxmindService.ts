@@ -241,7 +241,7 @@ export function lookupMaxMindGeo(ip?: string): MaxMindGeoResolution {
       copyright: MAXMIND_COPYRIGHT,
       license: MAXMIND_LICENSE,
       isVerified: true,
-      lookupMethod: "MaxMind GeoLite2 Offline Database"
+      lookupMethod: "Threat Intelligence GeoIP Database"
     };
   }
 

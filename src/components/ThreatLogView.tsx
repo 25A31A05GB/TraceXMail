@@ -486,8 +486,8 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
           <span className={`w-2 h-2 rounded-full ${isVtActive ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
           <span>
             {isVtActive 
-              ? 'Connected to TraceXMail VirusTotal v3 multi-engine daemon ... telemetry live' 
-              : 'VirusTotal v3 daemon is dormant (waiting for VIRUSTOTAL_API_KEY configuration)'}
+              ? 'Connected to Threat Intelligence Stream ... telemetry live' 
+              : 'Threat Intelligence API integration standby (waiting for VIRUSTOTAL_API_KEY configuration)'}
           </span>
         </div>
       </div>

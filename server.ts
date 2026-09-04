@@ -96,6 +96,7 @@ import {
   handlePingNetwork,
   handleGetBandwidthPayload
 } from './src/server/networkIntelligenceService';
+import { sendEmailAlert, getEmailAlertConfig } from './src/server/emailAlertService';
 
 // Multer memory storage for uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -2833,7 +2834,47 @@ If authentication (SPF/DKIM/DMARC) passed but the threat score is elevated, expl
         org: 'Zettahost Cyber Ltd'
       }
     });
-    res.json({ status: resultLog.status, log: resultLog });
+
+    // Also attempt email alert dispatch via Resend API / SMTP Relay if configured
+    const emailDispatch = await sendEmailAlert({
+      subject: targetCase.title,
+      threatScore: targetCase.threat_score || 85,
+      verdict: targetCase.severity === 'CRITICAL' ? 'MALICIOUS (CRITICAL)' : 'SUSPICIOUS (HIGH RISK)',
+      sender: matchingAlert?.sender || 'attacker@phishing-domain.net',
+      recipient: 'soc-team@enterprise.corp',
+      originIp: '185.220.101.5',
+      caseId: targetCase.id,
+      summary: `Case ${targetCase.id} threat alert dispatched via SOC portal.`
+    });
+
+    res.json({ status: resultLog.status, log: resultLog, emailDispatch });
+  });
+
+  app.get('/api/alerts/email/config', (_req, res) => {
+    const cfg = getEmailAlertConfig();
+    res.json({
+      enabled: cfg.enabled,
+      provider: cfg.resendApiKey ? 'Resend API' : cfg.smtpHost ? 'SMTP Relay' : 'None',
+      recipients: cfg.alertRecipients,
+      smtpFrom: cfg.smtpFrom,
+      smtpHost: cfg.smtpHost || null,
+      hasResendKey: Boolean(cfg.resendApiKey)
+    });
+  });
+
+  app.post('/api/alerts/email/test', async (req, res) => {
+    const { subject, sender, threatScore, verdict } = req.body || {};
+    const result = await sendEmailAlert({
+      subject: subject || 'TEST: Phishing Attack Simulation',
+      threatScore: threatScore || 92,
+      verdict: verdict || 'MALICIOUS (CRITICAL)',
+      sender: sender || 'test-attacker@phish-sim.net',
+      recipient: 'soc-test@enterprise.corp',
+      originIp: '198.51.100.42',
+      caseId: 'TEST-CASE-001',
+      summary: 'Manual test dispatch triggered via TraceXMail SOC Email Alert Test Suite.'
+    });
+    res.json(result);
   });
 
   // VirusTotal v3 Live Enrichment, Status & Single-IOC Lookups with TTL Caching

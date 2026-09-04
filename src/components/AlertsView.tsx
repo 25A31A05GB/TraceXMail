@@ -191,7 +191,9 @@ export function AlertsView({
               wsStatus === 'connecting' ? 'bg-amber-500 animate-ping' :
               'bg-red-500'
             }`} />
-            <span className="font-mono capitalize text-slate-300">WS: {wsStatus}</span>
+            <span className="font-sans font-semibold text-slate-300">
+              {wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Reconnecting...' : 'Disconnected'}
+            </span>
             {wsStatus !== 'connected' && (
               <button
                 onClick={onReconnectWs}

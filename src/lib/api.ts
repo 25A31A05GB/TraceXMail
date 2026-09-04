@@ -123,7 +123,23 @@ apiClient.interceptors.request.use(async (config) => {
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('[TraceXMail API Error]', error.response?.data || error.message);
+    const status = error.response?.status;
+    const responseData = error.response?.data;
+    let errorMessage = 'API Request Failed';
+
+    if (typeof responseData === 'string') {
+      errorMessage = responseData;
+    } else if (responseData && typeof responseData === 'object') {
+      errorMessage = responseData.error || responseData.message || JSON.stringify(responseData);
+    } else if (error.message) {
+      errorMessage = error.message;
+    }
+
+    if (status === 429 || errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('rate exceeded')) {
+      console.warn('[TraceXMail API Warning] Rate limit encountered:', errorMessage);
+    } else {
+      console.error('[TraceXMail API Error]', errorMessage);
+    }
     return Promise.reject(error);
   }
 );

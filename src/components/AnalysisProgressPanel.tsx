@@ -278,7 +278,7 @@ export function AnalysisProgressPanel({
               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
             </div>
             <p className="text-[11px] text-slate-400">
-              Live server-side checkpoints from DNS, RDAP, MaxMind GeoIP &amp; ML engines
+              Live server-side checkpoints from Threat Intelligence, RDAP, GeoIP &amp; Machine Learning
             </p>
           </div>
         </div>
