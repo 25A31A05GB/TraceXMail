@@ -383,8 +383,8 @@ export function mapBackendCaseToAnalysis(
   }));
 
   // Auth
-  const dataAuth = data.auth || data.authResults || {};
-  const dnsAuth = data.dns_auth || {};
+  const dataAuth = data.auth || data.authResults || data.dns_auth || {};
+  const dnsAuth = data.auth || data.dns_auth || {};
 
   const headerParsedAuth = parseAuthenticationHeaders(allHeadersMap, {
     fromDomain: fromDomainFallback || (fromEmail ? fromEmail.split('@')[1] : undefined),
@@ -393,11 +393,7 @@ export function mapBackendCaseToAnalysis(
   });
 
   const getSpfStatus = (): AuthResults['spf']['status'] => {
-    const raw = (dataAuth.spf?.status && dataAuth.spf.status !== 'NONE')
-      ? dataAuth.spf.status
-      : (dnsAuth.spf?.status && dnsAuth.spf.status !== 'NONE')
-        ? dnsAuth.spf.status
-        : headerParsedAuth.spf.status;
+    const raw = dataAuth.spf?.status ?? dnsAuth.spf?.status ?? headerParsedAuth.spf.status;
     const s = (raw || 'NONE').toUpperCase();
     if (s === 'PASS' || s === 'PASSED') return 'PASS';
     if (s === 'FAIL' || s === 'FAILED' || s === 'HARDFAIL') return 'FAIL';
@@ -407,11 +403,7 @@ export function mapBackendCaseToAnalysis(
   };
 
   const getDkimStatus = (): AuthResults['dkim']['status'] => {
-    const raw = (dataAuth.dkim?.status && dataAuth.dkim.status !== 'NONE')
-      ? dataAuth.dkim.status
-      : (dnsAuth.dkim?.status && dnsAuth.dkim.status !== 'NONE')
-        ? dnsAuth.dkim.status
-        : headerParsedAuth.dkim.status;
+    const raw = dataAuth.dkim?.status ?? dnsAuth.dkim?.status ?? headerParsedAuth.dkim.status;
     const s = (raw || 'NONE').toUpperCase();
     if (s === 'PASS' || s === 'PASSED' || s === 'VERIFIED') return 'PASS';
     if (s === 'FAIL' || s === 'FAILED' || s === 'BAD') return 'FAIL';
@@ -421,11 +413,7 @@ export function mapBackendCaseToAnalysis(
   };
 
   const getDmarcStatus = (): AuthResults['dmarc']['status'] => {
-    const raw = (dataAuth.dmarc?.status && dataAuth.dmarc.status !== 'NONE')
-      ? dataAuth.dmarc.status
-      : (dnsAuth.dmarc?.status && dnsAuth.dmarc.status !== 'NONE')
-        ? dnsAuth.dmarc.status
-        : headerParsedAuth.dmarc.status;
+    const raw = dataAuth.dmarc?.status ?? dnsAuth.dmarc?.status ?? headerParsedAuth.dmarc.status;
     const s = (raw || 'NONE').toUpperCase();
     if (s === 'PASS' || s === 'PASSED') return 'PASS';
     if (s === 'REJECT' || s === 'REJECTED') return 'REJECT';
@@ -436,15 +424,7 @@ export function mapBackendCaseToAnalysis(
 
   const resolvedSpf = getSpfStatus();
   const resolvedDkim = getDkimStatus();
-  let resolvedDmarc = getDmarcStatus();
-
-  if (resolvedDmarc === 'NONE') {
-    if (resolvedSpf === 'PASS' || resolvedDkim === 'PASS') {
-      resolvedDmarc = 'PASS';
-    } else if (resolvedSpf === 'FAIL' || resolvedDkim === 'FAIL') {
-      resolvedDmarc = 'FAIL';
-    }
-  }
+  const resolvedDmarc = getDmarcStatus();
 
   const authResults: AuthResults = {
     spf: {
@@ -472,14 +452,16 @@ export function mapBackendCaseToAnalysis(
     }
   };
 
-  // Heuristics/Alerts
-  const rawAlerts = Array.isArray(data.alerts) ? data.alerts : (Array.isArray(data.heuristics) ? data.heuristics : []);
+  // Heuristics/Alerts - Check both heuristics and alerts fields from backend
+  const rawAlerts = Array.isArray(data.heuristics) && data.heuristics.length > 0
+    ? data.heuristics
+    : (Array.isArray(data.alerts) ? data.alerts : []);
   const heuristics: HeuristicSignal[] = rawAlerts.map((alt: any, idx: number) => ({
     id: alt.id || `heur_${idx}`,
     title: alt.title || 'Security Flag',
     severity: (alt.severity || 'MEDIUM').toUpperCase() as any,
     description: alt.description || '',
-    triggered: true,
+    triggered: alt.triggered ?? true,
     why: alt.evidence ? { why: alt.description, evidence_chain: [JSON.stringify(alt.evidence)], confidence: 1.0, limitation: '' } : undefined
   }));
 
@@ -505,6 +487,21 @@ export function mapBackendCaseToAnalysis(
         : (rawClassification.includes('SUSPICIOUS') 
           ? 'SUSPICIOUS' 
           : (calculatedRiskScore >= 70 ? 'PHISHING' : calculatedRiskScore >= 40 ? 'SUSPICIOUS' : 'LEGITIMATE'))));
+
+  const resolvedMlConfidence = typeof data.mlConfidence === 'number'
+    ? data.mlConfidence
+    : (typeof data.ml_confidence === 'number'
+      ? data.ml_confidence
+      : (typeof data.confidence === 'number' ? data.confidence : undefined));
+
+  const resolvedPhishingProbability = typeof data.phishingProbability === 'number'
+    ? data.phishingProbability
+    : (typeof data.phishing_probability === 'number'
+      ? data.phishing_probability
+      : undefined);
+
+  const resolvedClassification = data.classification || data.raw_classification || data.verdict || data.threatVerdict || undefined;
+  const resolvedBreakdown = data.threatScoreBreakdown || data.threat_score_breakdown || undefined;
 
   return {
     id: data.id || data.case_id || `case_${Date.now()}`,
@@ -542,7 +539,11 @@ export function mapBackendCaseToAnalysis(
     threatScore: calculatedRiskScore,
     threatVerdict: resolvedVerdict,
     verdict: resolvedVerdict,
-    mlConfidence: data.confidence || data.ml_confidence || 0.95,
+    mlConfidence: resolvedMlConfidence,
+    phishingProbability: resolvedPhishingProbability,
+    threatScoreBreakdown: resolvedBreakdown,
+    probabilities: data.probabilities,
+    classification: resolvedClassification,
     rawEml: rawContent || data.raw_email || data.rawEml,
     summary: data.summary || data.description || `Forensic analysis complete for ${subject}`,
     why: data.why,

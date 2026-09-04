@@ -2,15 +2,15 @@
 
 @layer base {
   :root {
-    --ink: #0B0C0F;
-    --surface: #16181D;
-    --surface2: #1D2027;
-    --red: #C6402F;
-    --green: #2E8B63;
-    --amber: #C68A34;
-    --paper: #E7E4DA;
-    --muted: #6E7480;
-    --line: #2A2D34;
+    --ink: #0B0F19;
+    --surface: #0F172A;
+    --surface2: #1E293B;
+    --red: #EF4444;
+    --green: #10B981;
+    --amber: #F59E0B;
+    --paper: #F8FAFC;
+    --muted: #94A3B8;
+    --line: #334155;
   }
 
   * {
@@ -20,7 +20,7 @@
   body {
     background-color: #0b0f19;
     color: #f1f5f9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   }
 }
 
@@ -44,54 +44,56 @@
 .evidence-card {
   width: 100%;
   max-width: 540px;
-  background: var(--surface);
-  border: 1px solid var(--line);
+  background: #0F172A;
+  border: 1px solid #334155;
   position: relative;
   overflow: hidden;
-  font-family: 'IBM Plex Mono', monospace;
-  color: var(--paper);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #F8FAFC;
   box-sizing: border-box;
-  border-radius: 6px;
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05);
 }
 
 .evidence-card .tab {
-  background: var(--surface2);
-  padding: 10px 18px;
+  background: #1E293B;
+  padding: 12px 18px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid #334155;
 }
-.evidence-card .tab .caseid { font-size: 13px; letter-spacing: 0.04em; color: var(--muted); }
-.evidence-card .tab .caseid b { color: var(--paper); font-weight: 700; }
-.evidence-card .tab .meta { font-size: 12px; color: var(--muted); font-weight: 500; }
+.evidence-card .tab .caseid { font-size: 13px; letter-spacing: 0.02em; color: #94A3B8; font-weight: 500; }
+.evidence-card .tab .caseid b { color: #38BDF8; font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+.evidence-card .tab .meta { font-size: 12px; color: #94A3B8; font-weight: 500; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 
-.evidence-card .body { padding: 14px 18px 12px; position: relative; }
+.evidence-card .body { padding: 16px 20px 14px; position: relative; }
 
 .evidence-card .stamp {
   position: absolute;
-  top: 12px;
-  right: 14px;
-  border: 2.5px solid var(--red);
-  color: var(--red);
-  font-family: 'Archivo Black', sans-serif;
-  font-size: 15px;
+  top: 14px;
+  right: 16px;
+  border: 2.5px solid #EF4444;
+  color: #EF4444;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-weight: 800;
+  font-size: 14px;
   line-height: 1.05;
-  padding: 5px 9px;
-  transform: rotate(-5deg);
+  padding: 6px 10px;
+  transform: rotate(-4deg);
   text-align: center;
-  letter-spacing: 0.04em;
-  background: rgba(11, 12, 15, 0.9);
-  backdrop-filter: blur(3px);
+  letter-spacing: 0.05em;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(4px);
   z-index: 2;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.5);
 }
-.evidence-card .stamp.good { border-color: var(--green); color: var(--green); }
-.evidence-card .stamp.warn { border-color: var(--amber); color: var(--amber); }
+.evidence-card .stamp.good { border-color: #10B981; color: #10B981; }
+.evidence-card .stamp.warn { border-color: #F59E0B; color: #F59E0B; }
 .evidence-card .stamp small {
   display: block;
-  font-family: 'IBM Plex Mono', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;

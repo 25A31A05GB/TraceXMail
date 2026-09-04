@@ -25,8 +25,8 @@ export function AICaseSummaryCard({ aiNarrative, ai_narrative }: AICaseSummaryCa
               <span className="text-xs font-bold text-purple-200 uppercase tracking-wider font-mono">
                 AI Case Summary
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                GROQ NARRATIVE SYNTHESIS
+              <span className="px-2 py-0.5 rounded text-[10px] font-sans font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                FORENSIC AI NARRATIVE SYNTHESIS
               </span>
             </div>
             {data.model && (

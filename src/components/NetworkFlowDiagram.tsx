@@ -224,8 +224,8 @@ export function NetworkFlowDiagram({ analysis, hops }: NetworkFlowDiagramProps) 
       {/* Header Overlay */}
       <div className="absolute top-3 left-4 z-10 bg-slate-900/90 border border-slate-700/80 px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-md">
         <Network className="w-4 h-4 text-blue-400" />
-        <span className="text-xs font-mono font-semibold text-slate-200">
-          {isBackendGraph ? 'NetworkX Forensic Topology Engine' : `React Flow Hop DAG (${nodes.length} Nodes)`}
+        <span className="text-xs font-sans font-semibold text-slate-200">
+          {isBackendGraph ? 'Forensic Topology Engine' : `Interactive Topology DAG (${nodes.length} Hop Nodes)`}
         </span>
       </div>
 

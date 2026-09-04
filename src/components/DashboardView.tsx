@@ -472,17 +472,17 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                 <div className="text-xs font-bold text-slate-200">
                   {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono">
-                  Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
+                <div className="text-[11px] text-slate-400 font-sans">
+                  Database: <span className="text-emerald-400 font-semibold">SECURE CLOUD DATASTORE</span> | Isolation: <span className="text-blue-400 font-semibold">Tenant Data Isolated</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="flex items-center gap-2 font-sans text-xs">
               <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
-                Alembic: 001_initial_schema
+                Schema: v2.4 Active
               </span>
               <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
-                FastAPI + CORS Ready
+                REST API Active
               </span>
             </div>
           </div>
@@ -718,17 +718,17 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                 <div className="text-xs font-bold text-slate-200">
                   {health?.default_tenant?.organization_name || 'Acme Cyber Defense SOC (Tenant: org_acme_soc_01)'}
                 </div>
-                <div className="text-[11px] text-slate-400 font-mono">
-                  Database: <span className="text-emerald-400 font-semibold">{health?.database?.dialect.toUpperCase() || 'POSTGRESQL / SUPABASE'}</span> | RLS: <span className="text-blue-400 font-semibold">18 Tenant Tables Isolated</span>
+                <div className="text-[11px] text-slate-400 font-sans">
+                  Database: <span className="text-emerald-400 font-semibold">SECURE CLOUD DATASTORE</span> | Isolation: <span className="text-blue-400 font-semibold">Tenant Data Isolated</span>
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="flex items-center gap-2 font-sans text-xs">
               <span className="px-2 py-1 bg-slate-800 border border-slate-700 rounded text-slate-300">
-                Alembic: 001_initial_schema
+                Schema: v2.4 Active
               </span>
               <span className="px-2 py-1 bg-blue-900/40 border border-blue-700/50 rounded text-blue-300">
-                FastAPI + CORS Ready
+                REST API Active
               </span>
             </div>
           </div>

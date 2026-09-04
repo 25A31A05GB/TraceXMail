@@ -40,7 +40,7 @@ export function IngestionPipelineView({
     { label: 'Evidence Vault Custody (SHA-256 Digest)', icon: Lock },
     { label: 'RFC822 MIME & Header Parsing', icon: FileText },
     { label: 'MaxMind GeoIP & ASN Hop Traceroute', icon: Activity },
-    { label: 'Authentication & Threat Intelligence (VT / Groq)', icon: Cpu },
+    { label: 'Authentication & Threat Intelligence Engine', icon: Cpu },
   ];
 
   const handleProcessEmail = async (content: string, name: string) => {

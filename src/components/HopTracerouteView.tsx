@@ -61,7 +61,7 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
               }`}
             >
               <Workflow className="w-3.5 h-3.5" />
-              <span>React Flow Graph</span>
+              <span>Topology Graph</span>
             </button>
             <button
               onClick={() => setViewMode('timeline')}
@@ -86,12 +86,12 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
         </div>
       </div>
 
-      {/* React Flow DAG Interactive Graph View */}
+      {/* Interactive Graph View */}
       {viewMode === 'flow' && (
         <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-4 shadow-sm flex flex-col min-h-[460px]">
-          <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-mono">
+          <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-sans">
             <span>Interactive Node Directed Acyclic Graph (DAG) — Pan, Zoom, and Drag</span>
-            <span className="text-blue-400">Powered by @xyflow/react</span>
+            <span className="text-blue-400 font-semibold">TraceXMail Topology Engine</span>
           </div>
           <div className="h-[440px] w-full">
             <NetworkFlowDiagram analysis={analysis} />

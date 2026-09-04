@@ -334,8 +334,8 @@ export const SAMPLE_ANALYSES: EmailAnalysis[] = [
     },
     ai_narrative: {
       narrative: 'Automated forensic synthesis indicates a sophisticated credential harvesting campaign targeting enterprise PayPal users. The attacker forged the display name to impersonate "PayPal Security Center" while relaying through an active Tor exit node (185.220.101.5) in Sofia, Bulgaria. Both SPF and DKIM cryptographic checks failed against the authentic paypal.com domain policy (DMARC p=reject). Embedded URL bit.ly/3gX992PaypalSec directs to an unauthorized domain (paypal-account-security-update.com) registered 14 days prior on NameCheap. Immediate mitigation: purge from inboxes and block inbound traffic from AS200548.',
-      model: 'llama-3.3-70b-versatile',
-      source: 'Groq AI Narrative Engine',
+      model: 'forensic-llm-v1',
+      source: 'Forensic AI Narrative Engine',
       disclaimer: 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
     },
     rawEml: `Delivered-To: victim@enterprise.corp
@@ -581,8 +581,8 @@ X-Priority: 1 (Highest)
     },
     ai_narrative: {
       narrative: 'High-severity Business Email Compromise (BEC) and malware dropper campaign impersonating Citibank Commercial Banking. The attack vector delivers an urgent financial notification ($48,200.00 wire transfer) with a double-extension attachment "WIRE_TRANSACTION_DETAILS_#48200.pdf.exe" embedding an AsyncRAT payload. The message originated from bulletproof infrastructure at 194.26.29.112 (AlexHost SRL, Moldova), failing SPF alignment against official banking records. SOC analyst action: isolate recipient host and initiate endpoint EDR scan.',
-      model: 'llama-3.3-70b-versatile',
-      source: 'Groq AI Narrative Engine',
+      model: 'forensic-llm-v1',
+      source: 'Forensic AI Narrative Engine',
       disclaimer: 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
     },
     rawEml: `Authentication-Results: mx.corporate.com; spf=softfail; dkim=none; dmarc=none

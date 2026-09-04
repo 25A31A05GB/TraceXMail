@@ -65,8 +65,8 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
     if (typeof raw === 'string') {
       return {
         narrative: raw,
-        model: 'llama-3.3-70b-versatile',
-        source: 'Groq AI Narrative Engine',
+        model: 'forensic-llm-v1',
+        source: 'Forensic AI Narrative Engine',
         disclaimer: 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
       };
     }
@@ -84,8 +84,8 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
       if (typeof raw === 'string') {
         setNarrativeData({
           narrative: raw,
-          model: 'llama-3.3-70b-versatile',
-          source: 'Groq AI Narrative Engine',
+          model: 'forensic-llm-v1',
+          source: 'Forensic AI Narrative Engine',
           disclaimer: 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
         });
       } else {
@@ -113,13 +113,13 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
             if (narrativeObj && (narrativeObj.narrative || typeof narrativeObj === 'string')) {
               const formatted: AINarrative = typeof narrativeObj === 'string' ? {
                 narrative: narrativeObj,
-                model: data.model || 'llama-3.3-70b-versatile',
-                source: data.source || 'Groq AI Narrative Engine',
+                model: data.model || 'forensic-llm-v1',
+                source: data.source || 'Forensic AI Narrative Engine',
                 disclaimer: data.disclaimer || 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
               } : {
                 narrative: narrativeObj.narrative,
-                model: narrativeObj.model || 'llama-3.3-70b-versatile',
-                source: narrativeObj.source || 'Groq AI Narrative Engine',
+                model: narrativeObj.model || 'forensic-llm-v1',
+                source: narrativeObj.source || 'Forensic AI Narrative Engine',
                 disclaimer: narrativeObj.disclaimer || 'AI-generated narrative summary based on deterministic forensic telemetry. Verify independently before regulatory or legal submission.'
               };
               setNarrativeData(formatted);
@@ -152,7 +152,7 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
       return (
         <div className={`bg-[#1E293B] border border-purple-500/20 rounded-lg p-3 text-xs text-slate-400 flex items-center gap-2.5 font-mono ${className}`}>
           <RefreshCw className="w-3.5 h-3.5 text-purple-400 animate-spin shrink-0" />
-          <span>Synthesizing Groq AI Case Narrative in background...</span>
+          <span>Synthesizing Forensic AI Case Narrative in background...</span>
         </div>
       );
     }
@@ -180,7 +180,7 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
               </span>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
                 <Cpu className="w-3 h-3" />
-                {narrativeData.source || 'GROQ NARRATIVE SYNTHESIS'}
+                {narrativeData.source || 'FORENSIC NARRATIVE SYNTHESIS'}
               </span>
             </div>
             {narrativeData.model && (
