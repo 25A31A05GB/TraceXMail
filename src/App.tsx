@@ -193,7 +193,7 @@ export default function App() {
           )}
 
           {activeTab === 'graph' && (
-            <div className="flex-1 p-6 overflow-hidden flex flex-col h-full bg-[#0F172A]">
+            <div className="flex-1 p-6 overflow-hidden flex flex-col h-full bg-[#14120f]">
               <RelationshipGraphView
                 analysis={currentAnalysis}
                 caseId={currentAnalysis?.id}

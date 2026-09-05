@@ -14,31 +14,31 @@ export function AICaseSummaryCard({ aiNarrative, ai_narrative }: AICaseSummaryCa
   }
 
   return (
-    <div className="bg-[#1E293B] border border-purple-500/40 rounded-lg p-5 shadow-sm relative overflow-hidden bg-gradient-to-r from-[#1E293B] via-purple-950/20 to-slate-900">
-      <div className="flex items-center justify-between border-b border-purple-500/30 pb-3">
+    <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-5 shadow-sm relative overflow-hidden">
+      <div className="flex items-center justify-between border-b border-[#3a352c] pb-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300 font-bold">
-            <Sparkles className="w-4 h-4 text-purple-300" />
+          <div className="w-8 h-8 rounded bg-[#b23a2e]/20 border border-[#b23a2e]/40 flex items-center justify-center text-[#d97768] font-bold">
+            <Sparkles className="w-4 h-4 text-[#d97768]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-purple-200 uppercase tracking-wider font-mono">
+              <span className="text-xs font-bold text-amber-200/90 uppercase tracking-wider font-mono">
                 AI Case Summary
               </span>
-              <span className="px-2 py-0.5 rounded text-[10px] font-sans font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+              <span className="px-2 py-0.5 rounded text-[10px] font-sans font-semibold bg-[#b23a2e]/20 text-[#ede6d8] border border-[#b23a2e]/40">
                 FORENSIC AI NARRATIVE SYNTHESIS
               </span>
             </div>
             {data.model && (
               <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                Model: <span className="text-purple-300">{data.model}</span>
+                Model: <span className="text-amber-300">{data.model}</span>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="mt-3 text-xs text-slate-200 leading-relaxed font-sans bg-slate-950/50 p-4 rounded border border-purple-900/40 whitespace-pre-line">
+      <div className="mt-3 text-xs text-[#ede6d8] leading-relaxed font-sans bg-[#14120f] p-4 rounded border border-[#3a352c] whitespace-pre-line">
         {data.narrative}
       </div>
 

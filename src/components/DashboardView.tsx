@@ -813,7 +813,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
       </div>
 
       {/* PRIORITIZED ACTIVE CASES & THREAT SCORE MATRIX */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-xl space-y-4">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-xl space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-rose-950/80 border border-rose-700/60 flex items-center justify-center text-rose-400 shadow-md">
@@ -912,7 +912,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
         };
 
         return (
-          <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-xl space-y-5">
+          <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-xl space-y-5">
             {/* Console Header & Case Selector */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
               <div className="flex items-center gap-3">
@@ -1210,7 +1210,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
       />
 
       {/* Email Verdict Distribution (Last 30 Days) Chart */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-lg space-y-4">
         {/* Chart Header & Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-4">
           <div>
@@ -1374,7 +1374,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                   stroke="#38BDF8"
                   strokeWidth={2.5}
                   strokeDasharray="4 4"
-                  dot={{ r: 3, fill: '#38BDF8', stroke: '#0F172A', strokeWidth: 1 }}
+                  dot={{ r: 3, fill: '#38BDF8', stroke: '#14120f', strokeWidth: 1 }}
                   activeDot={{ r: 6, fill: '#38BDF8', stroke: '#FFFFFF', strokeWidth: 2 }}
                 />
               </ComposedChart>
@@ -1419,7 +1419,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                   stroke="#38BDF8"
                   strokeWidth={2.5}
                   strokeDasharray="4 4"
-                  dot={{ r: 3, fill: '#38BDF8', stroke: '#0F172A', strokeWidth: 1 }}
+                  dot={{ r: 3, fill: '#38BDF8', stroke: '#14120f', strokeWidth: 1 }}
                   activeDot={{ r: 6, fill: '#38BDF8', stroke: '#FFFFFF', strokeWidth: 2 }}
                 />
               </ComposedChart>
@@ -1436,7 +1436,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
                   label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
                 >
                   {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#0F172A" strokeWidth={2} />
+                    <Cell key={`cell-${index}`} fill={entry.color} stroke="#14120f" strokeWidth={2} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -1464,7 +1464,7 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
       </div>
 
       {/* World Geographic Threat Heatmap Section (Recharts ScatterChart) */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-5">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-lg space-y-5">
         {/* Header Bar & Vector Filters */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
           <div>

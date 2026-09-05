@@ -326,7 +326,7 @@ export function RawHeaderView({ analysis }: RawHeaderViewProps) {
   }, [analysis]);
 
   return (
-    <div id="raw-headers-view" className="flex-1 flex flex-col h-full bg-[#0F172A] overflow-hidden p-6 space-y-4 select-text">
+    <div id="raw-headers-view" className="flex-1 flex flex-col h-full bg-[#14120f] overflow-hidden p-6 space-y-4 select-text">
       {/* Top Banner */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
         <div className="flex items-center gap-3">

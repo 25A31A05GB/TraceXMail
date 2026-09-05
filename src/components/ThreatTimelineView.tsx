@@ -396,25 +396,25 @@ export function ThreatTimelineView({
   };
 
   return (
-    <div id="threat-timeline-view" className="flex-1 p-6 overflow-y-auto bg-[#0F172A] space-y-6">
+    <div id="threat-timeline-view" className="flex-1 p-6 overflow-y-auto bg-[#14120f] space-y-6">
       {/* Top Banner & Context Header */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-lg relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-[#3a352c] pb-4">
           <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white shadow-md shadow-blue-500/20 shrink-0 mt-0.5">
-              <Clock className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-[#26221b] border border-[#3a352c] flex items-center justify-center text-[var(--thread)] shadow-md shrink-0 mt-0.5">
+              <Clock className="w-5 h-5 text-[#b23a2e]" />
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg font-bold text-white tracking-tight">Threat Investigation Timeline</h2>
-                <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">
+                <h2 className="text-lg font-bold text-[#ede6d8] tracking-tight">Threat Investigation Timeline</h2>
+                <span className="bg-[#b23a2e]/20 text-[#ede6d8] border border-[#b23a2e]/40 text-[10px] font-mono font-bold px-2 py-0.5 rounded-full uppercase">
                   Historical Campaign Correlation
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-[#b9af9c] mt-0.5">
                 Chronological aggregation of prior security investigations matching target sender{' '}
-                <strong className="text-slate-200 font-mono">{currentSenderEmail}</strong> or domain{' '}
-                <strong className="text-blue-400 font-mono">{currentDomain}</strong>.
+                <strong className="text-[#ede6d8] font-mono">{currentSenderEmail}</strong> or domain{' '}
+                <strong className="text-[#7fa3ba] font-mono">{currentDomain}</strong>.
               </p>
             </div>
           </div>
@@ -422,9 +422,9 @@ export function ThreatTimelineView({
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => onNavigateToOverview && onNavigateToOverview()}
-              className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
+              className="bg-[#221e17] hover:bg-[#2b251d] border border-[#3a352c] text-[#ede6d8] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
             >
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400 rotate-180" />
+              <ArrowRight className="w-3.5 h-3.5 text-[#b9af9c] rotate-180" />
               <span>Back to Overview</span>
             </button>
           </div>
@@ -467,7 +467,7 @@ export function ThreatTimelineView({
       {/* Analytics Summary Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Investigations */}
-        <div className="bg-[#1E293B] border border-slate-700/80 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-medium">Correlated Incidents</span>
             <div className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400">
@@ -484,7 +484,7 @@ export function ThreatTimelineView({
         </div>
 
         {/* Highest Threat Score */}
-        <div className="bg-[#1E293B] border border-slate-700/80 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-medium">Peak Threat Level</span>
             <div className="p-1.5 rounded-lg bg-rose-500/15 text-rose-400">
@@ -503,7 +503,7 @@ export function ThreatTimelineView({
         </div>
 
         {/* Infrastructure Churn */}
-        <div className="bg-[#1E293B] border border-slate-700/80 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-medium">Infrastructure Churn</span>
             <div className="p-1.5 rounded-lg bg-amber-500/15 text-amber-400">
@@ -520,7 +520,7 @@ export function ThreatTimelineView({
         </div>
 
         {/* Authentication Trajectory */}
-        <div className="bg-[#1E293B] border border-slate-700/80 rounded-xl p-4 shadow-sm">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 shadow-sm">
           <div className="flex items-center justify-between">
             <span className="text-xs text-slate-400 font-medium">Auth Fail Trajectory</span>
             <div className="p-1.5 rounded-lg bg-purple-500/15 text-purple-400">
@@ -538,7 +538,7 @@ export function ThreatTimelineView({
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
         {/* Search input */}
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -616,15 +616,15 @@ export function ThreatTimelineView({
         {/* Left 8 Cols: Timeline Cards */}
         <div className="lg:col-span-8 space-y-6">
           {filteredIncidents.length === 0 ? (
-            <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-8 text-center font-mono">
-              <AlertOctagon className="w-10 h-10 text-slate-500 mx-auto mb-3" />
-              <h4 className="text-sm font-bold text-slate-300 uppercase">No Matching Historical Incidents Found</h4>
-              <p className="text-xs text-slate-400 max-w-md mx-auto mt-1">
+            <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-8 text-center font-mono">
+              <AlertOctagon className="w-10 h-10 text-[#8a8070] mx-auto mb-3" />
+              <h4 className="text-sm font-bold text-[#ede6d8] uppercase">No Matching Historical Incidents Found</h4>
+              <p className="text-xs text-[#b9af9c] max-w-md mx-auto mt-1">
                 No past investigations matched the specified search terms or scope filter.
               </p>
             </div>
           ) : (
-            <div className="relative pl-6 space-y-6 border-l-2 border-slate-700/80 ml-4">
+            <div className="relative pl-6 space-y-6 border-l-2 border-[#3a352c] ml-4">
               {filteredIncidents.map((inc, index) => {
                 const isMalicious = inc.verdict.includes('MALICIOUS') || inc.threatScore >= 80;
                 const isSuspicious = inc.verdict.includes('SUSPICIOUS') || (inc.threatScore >= 50 && !isMalicious);
@@ -634,7 +634,7 @@ export function ThreatTimelineView({
                     {/* Timeline Node Icon */}
                     <div className={`absolute -left-[35px] top-4 w-7 h-7 rounded-full border-2 flex items-center justify-center shadow-md transition-transform group-hover:scale-110 ${
                       inc.isCurrentAnalysis
-                        ? 'bg-blue-600 border-blue-400 text-white shadow-blue-500/50 ring-4 ring-blue-500/20'
+                        ? 'bg-[#b23a2e] border-[#ede6d8] text-[#ede6d8] shadow-[#b23a2e]/50 ring-4 ring-[#b23a2e]/20'
                         : isMalicious
                         ? 'bg-rose-950 border-rose-500 text-rose-400 shadow-rose-950/50'
                         : isSuspicious
@@ -653,10 +653,10 @@ export function ThreatTimelineView({
                     </div>
 
                     {/* Timeline Event Card */}
-                    <div className={`bg-[#1E293B] border rounded-xl p-5 shadow-lg transition-all ${
+                    <div className={`bg-[#1a1712] border rounded-xl p-5 shadow-lg transition-all ${
                       inc.isCurrentAnalysis
-                        ? 'border-blue-500/80 bg-gradient-to-r from-blue-950/40 via-[#1E293B] to-[#1E293B] shadow-blue-950/40 ring-1 ring-blue-500/30'
-                        : 'border-slate-700 hover:border-slate-600'
+                        ? 'border-[#b23a2e] bg-[#221e17] shadow-[#b23a2e]/20 ring-1 ring-[#b23a2e]/40'
+                        : 'border-[#3a352c] hover:border-[#574f42]'
                     }`}>
                       {/* Card Header Top Row */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
@@ -798,8 +798,8 @@ export function ThreatTimelineView({
         {/* Right 4 Cols: SOC Threat Pattern Insights & Playbook Panel */}
         <div className="lg:col-span-4 space-y-6">
           {/* Threat Pattern Insights Card */}
-          <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-700/80 pb-3">
+          <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-lg space-y-4">
+            <div className="flex items-center gap-2 border-b border-[#3a352c] pb-3">
               <ShieldAlert className="w-4 h-4 text-amber-400" />
               <h3 className="text-sm font-bold text-white tracking-tight">Campaign Pattern Analysis</h3>
             </div>
@@ -840,8 +840,8 @@ export function ThreatTimelineView({
           </div>
 
           {/* SOC Mitigation Playbook Card */}
-          <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-700/80 pb-3">
+          <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-lg space-y-4">
+            <div className="flex items-center gap-2 border-b border-[#3a352c] pb-3">
               <Zap className="w-4 h-4 text-blue-400" />
               <h3 className="text-sm font-bold text-white tracking-tight">Recommended SOC Playbook</h3>
             </div>

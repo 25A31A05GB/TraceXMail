@@ -381,7 +381,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
 
   if (loading) {
     return (
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-6 flex items-center justify-center gap-3 text-slate-400 text-xs">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-6 flex items-center justify-center gap-3 text-slate-400 text-xs">
         <RefreshCw className="w-4 h-4 animate-spin text-blue-400" />
         <span>Loading Gmail Connection Status...</span>
       </div>
@@ -389,7 +389,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
   }
 
   return (
-    <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-6 space-y-5 shadow-md">
+    <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-6 space-y-5 shadow-md">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-700 pb-4">
         <div className="flex items-center gap-3.5">
@@ -487,7 +487,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
       {/* Live Metrics Grid */}
       {status?.is_connected && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          <div className="bg-[#0F172A] p-3.5 rounded-lg border border-slate-800 space-y-1">
+          <div className="bg-[#14120f] p-3.5 rounded-lg border border-[#3a352c] space-y-1">
             <span className="text-[10px] uppercase font-mono text-slate-400 block">Connected Mailbox</span>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-emerald-400 truncate">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
@@ -495,7 +495,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
             </div>
           </div>
 
-          <div className="bg-[#0F172A] p-3.5 rounded-lg border border-slate-800 space-y-1">
+          <div className="bg-[#14120f] p-3.5 rounded-lg border border-[#3a352c] space-y-1">
             <span className="text-[10px] uppercase font-mono text-slate-400 block">Real-Time Ingestion Mode</span>
             <div className="flex items-center gap-1.5 text-xs font-mono text-purple-300 font-semibold truncate">
               <Radio className="w-3.5 h-3.5 text-purple-400 shrink-0 animate-pulse" />
@@ -506,7 +506,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
             </div>
           </div>
 
-          <div className="bg-[#0F172A] p-3.5 rounded-lg border border-slate-800 space-y-1">
+          <div className="bg-[#14120f] p-3.5 rounded-lg border border-[#3a352c] space-y-1">
             <span className="text-[10px] uppercase font-mono text-slate-400 block">Pre-Delivery Interceptions</span>
             <div className="flex items-center gap-1.5 text-xs font-mono text-amber-400 font-bold">
               <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -517,7 +517,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
             </div>
           </div>
 
-          <div className="bg-[#0F172A] p-3.5 rounded-lg border border-slate-800 space-y-1">
+          <div className="bg-[#14120f] p-3.5 rounded-lg border border-[#3a352c] space-y-1">
             <span className="text-[10px] uppercase font-mono text-slate-400 block">Post-Delivery Alerts</span>
             <div className="flex items-center gap-1.5 text-xs font-mono text-blue-400 font-semibold">
               <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
@@ -569,7 +569,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
 
           {/* Cloud Pub/Sub Watch Config Panel */}
           {showWatchConfig && (
-            <div className="p-4 bg-[#0F172A] rounded-lg border border-purple-900/40 space-y-4">
+            <div className="p-4 bg-[#14120f] rounded-lg border border-[#3a352c] space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div>
                   <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -651,7 +651,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
 
           {/* Config Panel */}
           {showConfig && (
-            <div className="p-4 bg-[#0F172A] rounded-lg border border-slate-800 space-y-4">
+            <div className="p-4 bg-[#14120f] rounded-lg border border-[#3a352c] space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div>
                   <h4 className="text-xs font-bold text-white uppercase tracking-wider">Automated Pre-Delivery Gate</h4>
@@ -732,7 +732,7 @@ export function GmailConnectionView({ onNewCasesProcessed }: GmailConnectionView
 
           {/* Audit Logs Table */}
           {showAuditLogs && (
-            <div className="p-4 bg-[#0F172A] rounded-lg border border-slate-800 space-y-3">
+            <div className="p-4 bg-[#14120f] rounded-lg border border-[#3a352c] space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-white uppercase tracking-wider">Quarantine & Interception Audit Log</h4>
                 <button

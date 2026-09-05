@@ -90,7 +90,7 @@ export function SearchView({
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#0F172A] overflow-y-auto p-6 space-y-6">
+    <div className="flex-1 flex flex-col h-full bg-[#14120f] overflow-y-auto p-6 space-y-6">
       {/* Top Search Bar */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between">

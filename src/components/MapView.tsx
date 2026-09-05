@@ -236,9 +236,9 @@ export function MapView({ analysis }: MapViewProps) {
   };
 
   return (
-    <div id="map-view-container" className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto bg-[#0F172A]">
+    <div id="map-view-container" className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto bg-[#14120f]">
       {/* Map Header Card */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
             <Globe className="w-5 h-5" />
@@ -325,7 +325,7 @@ export function MapView({ analysis }: MapViewProps) {
       </div>
 
       {/* Main Interactive Map Stage */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl overflow-hidden relative shadow-xl min-h-[520px] flex flex-col">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl overflow-hidden relative shadow-xl min-h-[520px] flex flex-col">
         <div ref={mapContainerRef} className="w-full h-[520px] z-10"></div>
 
         {validHops.length === 0 && (
@@ -378,7 +378,7 @@ export function MapView({ analysis }: MapViewProps) {
       </div>
 
       {/* MaxMind GeoIP & Network Infrastructure Forensics Grid (100% Transparent Data) */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-lg space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-700/80 pb-3">
           <div className="flex items-center gap-2">
             <Server className="w-5 h-5 text-blue-400" />

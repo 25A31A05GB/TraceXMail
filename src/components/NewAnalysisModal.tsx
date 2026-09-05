@@ -198,7 +198,7 @@ export function NewAnalysisModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="bg-[#1E293B] border border-slate-700 w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="bg-[#1a1712] border border-[#3a352c] w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-5 border-b border-slate-700 flex items-center justify-between bg-slate-800/60">
           <div className="flex items-center gap-3">
@@ -359,7 +359,7 @@ export function NewAnalysisModal({
                     onChange={(e) => setPastedRaw(e.target.value)}
                     placeholder="Delivered-To: victim@domain.com&#10;Received: from mail.attacker-server.com (185.220.101.5) by mx.google.com&#10;Authentication-Results: mx.google.com; spf=fail; dkim=fail; dmarc=reject&#10;From: 'PayPal Support' <service@paypal.com>&#10;Subject: [URGENT] Account Action Required&#10;..."
                     rows={10}
-                    className="w-full bg-[#0F172A] border border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500 placeholder:text-slate-600 resize-none"
+                    className="w-full bg-[#14120f] border border-[#3a352c] rounded-lg p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-[#b23a2e] placeholder:text-slate-600 resize-none"
                   ></textarea>
                 </div>
               )}
@@ -372,7 +372,7 @@ export function NewAnalysisModal({
                   className={`border-2 border-dashed rounded-xl p-8 text-center flex flex-col items-center justify-center gap-3 transition-colors ${
                     isDragging
                       ? 'border-blue-400 bg-blue-950/30'
-                      : 'border-slate-700 hover:border-blue-500/70 bg-[#0F172A]/60'
+                      : 'border-[#3a352c] hover:border-[#b23a2e]/70 bg-[#14120f]'
                   }`}
                 >
                   <input

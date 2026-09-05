@@ -83,18 +83,18 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
   const country = analysis?.hops?.[0]?.country || 'Germany (DE)';
 
   // Background
-  ctx.fillStyle = '#13161F';
+  ctx.fillStyle = '#14120f';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // Border & Glow
-  ctx.strokeStyle = verdict === 'MALICIOUS' ? '#ef4444' : verdict === 'SUSPICIOUS' ? '#f59e0b' : '#10b981';
+  ctx.strokeStyle = verdict === 'MALICIOUS' ? '#b23a2e' : verdict === 'SUSPICIOUS' ? '#f59e0b' : '#10b981';
   ctx.lineWidth = 12;
   ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40);
 
   // Header Banner
-  ctx.fillStyle = '#1E293B';
+  ctx.fillStyle = '#1a1712';
   ctx.fillRect(40, 40, canvas.width - 80, 120);
-  ctx.fillStyle = '#38BDF8';
+  ctx.fillStyle = '#ede6d8';
   ctx.font = 'bold 36px monospace';
   ctx.fillText(`CASE: ${caseId}`, 70, 110);
 
@@ -107,10 +107,10 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
   ctx.save();
   ctx.translate(canvas.width - 320, 260);
   ctx.rotate(-0.08);
-  ctx.strokeStyle = isMal ? '#ef4444' : '#10b981';
+  ctx.strokeStyle = isMal ? '#b23a2e' : '#10b981';
   ctx.lineWidth = 8;
   ctx.strokeRect(0, 0, 240, 90);
-  ctx.fillStyle = isMal ? '#ef4444' : '#10b981';
+  ctx.fillStyle = isMal ? '#b23a2e' : '#10b981';
   ctx.font = 'bold 40px sans-serif';
   ctx.fillText(isMal ? 'MALICIOUS' : 'BENIGN', 15, 55);
   ctx.font = '18px monospace';
@@ -118,29 +118,29 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
   ctx.restore();
 
   // Subject Heading
-  ctx.fillStyle = '#F8FAFC';
+  ctx.fillStyle = '#ede6d8';
   ctx.font = 'bold 42px sans-serif';
   ctx.fillText(subject.slice(0, 45), 70, 240);
 
   // Details
   ctx.font = '28px sans-serif';
-  ctx.fillStyle = '#64748B';
+  ctx.fillStyle = '#94A3B8';
   ctx.fillText('FROM:', 70, 320);
-  ctx.fillStyle = '#E2E8F0';
+  ctx.fillStyle = '#ede6d8';
   ctx.fillText(from, 220, 320);
 
-  ctx.fillStyle = '#64748B';
+  ctx.fillStyle = '#94A3B8';
   ctx.fillText('TO:', 70, 370);
-  ctx.fillStyle = '#E2E8F0';
+  ctx.fillStyle = '#ede6d8';
   ctx.fillText(to, 220, 370);
 
-  ctx.fillStyle = '#64748B';
+  ctx.fillStyle = '#94A3B8';
   ctx.fillText('ORIGIN IP:', 70, 420);
-  ctx.fillStyle = '#38BDF8';
+  ctx.fillStyle = '#7fa3ba';
   ctx.fillText(`${ip} (${country})`, 220, 420);
 
   // Authentication Checks
-  ctx.fillStyle = '#1E293B';
+  ctx.fillStyle = '#1a1712';
   ctx.fillRect(70, 480, canvas.width - 140, 140);
 
   ctx.fillStyle = '#94A3B8';
@@ -159,9 +159,9 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
 
   checks.forEach((c, idx) => {
     const x = 90 + idx * 420;
-    ctx.fillStyle = '#0F172A';
+    ctx.fillStyle = '#100e0c';
     ctx.fillRect(x, 545, 380, 55);
-    ctx.fillStyle = '#CBD5E1';
+    ctx.fillStyle = '#ede6d8';
     ctx.font = 'bold 22px monospace';
     ctx.fillText(c.name, x + 20, 580);
     ctx.fillStyle = c.ok ? '#34D399' : '#F87171';
@@ -169,17 +169,17 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
   });
 
   // AI Forensic Summary
-  ctx.fillStyle = '#0F172A';
+  ctx.fillStyle = '#100e0c';
   ctx.fillRect(70, 660, canvas.width - 140, 320);
-  ctx.strokeStyle = '#334155';
+  ctx.strokeStyle = '#3a352c';
   ctx.lineWidth = 2;
   ctx.strokeRect(70, 660, canvas.width - 140, 320);
 
-  ctx.fillStyle = '#38BDF8';
+  ctx.fillStyle = '#d97768';
   ctx.font = 'bold 26px sans-serif';
   ctx.fillText('TRACE-X FORENSIC ENGINE INTELLIGENCE', 100, 710);
 
-  ctx.fillStyle = '#CBD5E1';
+  ctx.fillStyle = '#ede6d8';
   ctx.font = '24px sans-serif';
   const summaryText = (analysis as any)?.aiSummary || (analysis as any)?.summary || 'Automated multi-layered forensic inspection analyzed RFC 822 message structure, authentication alignment, origin IP infrastructure, and threat heuristics.';
   const words = summaryText.split(' ');
@@ -198,14 +198,14 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
   if (line && y <= 940) ctx.fillText(line, 100, y);
 
   // Footer Hash & Integrity Stamp
-  ctx.fillStyle = '#1E293B';
+  ctx.fillStyle = '#1a1712';
   ctx.fillRect(40, canvas.height - 140, canvas.width - 80, 100);
 
-  ctx.fillStyle = '#64748B';
+  ctx.fillStyle = '#94A3B8';
   ctx.font = '22px monospace';
   ctx.fillText('SHA-256 DIGEST:', 70, canvas.height - 85);
 
-  ctx.fillStyle = '#38BDF8';
+  ctx.fillStyle = '#7fa3ba';
   ctx.font = '22px monospace';
   const hash = analysis?.sha256 || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
   ctx.fillText(hash, 260, canvas.height - 85);

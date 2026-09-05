@@ -188,9 +188,9 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
   const isVtActive = vtStatusInfo ? vtStatusInfo.configured : (vtStatus ? vtStatus.vt_active : false);
 
   return (
-    <div id="logs-view-container" className="flex-1 p-6 flex flex-col gap-4 overflow-hidden bg-[#0F172A]">
+    <div id="logs-view-container" className="flex-1 p-6 flex flex-col gap-4 overflow-hidden bg-[#14120f]">
       {/* Console Controls & VirusTotal Header Card */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-sm">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
             <Terminal className="w-5 h-5" />
@@ -418,7 +418,7 @@ export function ThreatLogView({ analysis }: ThreatLogViewProps) {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 shrink-0">
         {/* Tag Filters */}
         <div className="flex items-center gap-1.5 overflow-x-auto">
           {tags.map((tag) => (

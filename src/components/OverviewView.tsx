@@ -155,8 +155,8 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
   if (!narrativeData || !narrativeData.narrative) {
     if (isLoading) {
       return (
-        <div className={`bg-[#1E293B] border border-purple-500/20 rounded-lg p-3 text-xs text-slate-400 flex items-center gap-2.5 font-mono ${className}`}>
-          <RefreshCw className="w-3.5 h-3.5 text-purple-400 animate-spin shrink-0" />
+        <div className={`bg-[#1a1712] border border-[#3a352c] rounded-lg p-3 text-xs text-slate-400 flex items-center gap-2.5 font-mono ${className}`}>
+          <RefreshCw className="w-3.5 h-3.5 text-[#b23a2e] animate-spin shrink-0" />
           <span>Synthesizing Forensic AI Case Narrative in background...</span>
         </div>
       );
@@ -170,7 +170,7 @@ export function AICaseSummary({ analysis, className = '' }: AICaseSummaryProps) 
   return (
     <div 
       id="ai-case-summary-card"
-      className={`bg-[#1E293B] border border-purple-500/40 rounded-lg p-5 shadow-sm relative overflow-hidden bg-gradient-to-r from-[#1E293B] via-purple-950/20 to-slate-900 ${className}`}
+      className={`bg-[#1a1712] border border-[#3a352c] rounded-xl p-5 shadow-sm relative overflow-hidden ${className}`}
     >
       {/* Header section with badges and quick actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-500/30 pb-3">
@@ -678,7 +678,7 @@ export function OverviewView({
           {/* Left Columns: Evidence Vault, Auth status cards, Geo Origin panel, Metadata & Links */}
           <div className="col-span-12 xl:col-span-7 2xl:col-span-8 space-y-6">
         {/* Evidence Vault & Chain of Custody Immutable Ledger Banner */}
-        <div className="bg-[#1E293B] border border-blue-500/30 rounded-lg p-4 shadow-sm relative overflow-hidden bg-gradient-to-r from-[#1E293B] via-slate-900 to-slate-900">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-4 shadow-sm relative overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
@@ -786,7 +786,7 @@ export function OverviewView({
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* SPF Status */}
-          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm flex flex-col justify-between">
+          <div className="bg-[#1a1712] border border-[#3a352c] p-4 rounded-lg shadow-sm flex flex-col justify-between">
             <div>
               <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1">
@@ -821,7 +821,7 @@ export function OverviewView({
           </div>
 
           {/* DKIM Status */}
-          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm flex flex-col justify-between">
+          <div className="bg-[#1a1712] border border-[#3a352c] p-4 rounded-lg shadow-sm flex flex-col justify-between">
             <div>
               <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1">
@@ -856,7 +856,7 @@ export function OverviewView({
           </div>
 
           {/* DMARC Status */}
-          <div className="bg-[#1E293B] border border-slate-700 p-4 rounded-lg shadow-sm flex flex-col justify-between">
+          <div className="bg-[#1a1712] border border-[#3a352c] p-4 rounded-lg shadow-sm flex flex-col justify-between">
             <div>
               <div className="text-xs text-slate-400 uppercase font-semibold mb-2 flex items-center justify-between">
                 <span className="flex items-center gap-1">
@@ -894,20 +894,20 @@ export function OverviewView({
         </div>
 
         {/* Geographic Origin & Link Resolution Card */}
-        <div id="origin-analysis-card" className="bg-[#1E293B] border border-slate-700 rounded-lg flex flex-col overflow-hidden shadow-sm">
+        <div id="origin-analysis-card" className="bg-[#1a1712] border border-[#3a352c] rounded-lg flex flex-col overflow-hidden shadow-sm">
           {/* Header Bar */}
-          <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+          <div className="p-4 border-b border-[#3a352c] flex justify-between items-center bg-[#221e17]">
             <div className="flex items-center gap-2">
-              <Globe className="w-5 h-5 text-blue-400" />
+              <Globe className="w-5 h-5 text-[#b23a2e]" />
               <span className="text-base font-bold text-slate-100">Geographic Origin & Link Resolution</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs px-2.5 py-1 rounded bg-[#0A192F] text-blue-400 font-mono font-bold border border-blue-500/40 shadow-inner">
+              <span className="text-xs px-2.5 py-1 rounded bg-[#100e0c] text-[#7fa3ba] font-mono font-bold border border-[#3a352c] shadow-inner">
                 IP: {effectiveOriginHop.fromIp}
               </span>
               <button
                 onClick={onNavigateToMap}
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium transition-colors cursor-pointer ml-1"
+                className="text-xs text-[#7fa3ba] hover:text-[#a7c5d9] flex items-center gap-1 font-medium transition-colors cursor-pointer ml-1"
               >
                 <span>Full Map</span>
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -915,7 +915,7 @@ export function OverviewView({
             </div>
           </div>
 
-          <div className="p-5 flex-1 flex flex-col bg-[#0F172A] space-y-4">
+          <div className="p-5 flex-1 flex flex-col bg-[#14120f] space-y-4">
             {/* Subheader tracking marker */}
             <div className="text-blue-400 text-[11px] font-mono tracking-wider flex items-center gap-2 font-semibold">
               <span className="inline-block w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-500/50"></span>
@@ -1113,20 +1113,20 @@ export function OverviewView({
         </div>
 
         {/* Domain Intelligence Card */}
-        <div id="domain-intelligence-card" className="bg-[#1E293B] border border-slate-700 rounded-lg flex flex-col overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+        <div id="domain-intelligence-card" className="bg-[#1a1712] border border-[#3a352c] rounded-lg flex flex-col overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-[#3a352c] flex justify-between items-center bg-[#221e17]">
             <div className="flex items-center gap-2">
               <Globe className="w-5 h-5 text-emerald-400" />
               <span className="text-base font-bold text-slate-100">Domain Intelligence</span>
             </div>
             {effectiveDomainIntelligence.domain && (
-              <span className="text-xs bg-slate-900 text-slate-300 border border-slate-700 px-3 py-1 rounded font-mono font-semibold">
+              <span className="text-xs bg-[#100e0c] text-slate-300 border border-[#3a352c] px-3 py-1 rounded font-mono font-semibold">
                 {effectiveDomainIntelligence.domain}
               </span>
             )}
           </div>
           
-          <div className="p-5 flex-1 flex flex-col bg-[#0F172A] space-y-4">
+          <div className="p-5 flex-1 flex flex-col bg-[#14120f] space-y-4">
             {/* Core Domain Identity Grid (4 Columns matching image) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-slate-900/60 p-4 rounded-lg border border-slate-800">
               <div>
@@ -1315,7 +1315,7 @@ export function OverviewView({
         </div>
 
         {/* Graph-Based Relationship & Relay Path Analysis Card */}
-        <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-5 shadow-sm space-y-4">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-700/70 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded bg-blue-950 border border-blue-800 flex items-center justify-center text-blue-400">
@@ -1350,7 +1350,7 @@ export function OverviewView({
         </div>
 
         {/* Extracted Metadata & URLs */}
-        <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-5 shadow-sm space-y-4">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-slate-700/70 pb-3">
             <span className="text-xs text-slate-400 uppercase font-semibold tracking-wider">
               Extracted Header Metadata
@@ -1563,16 +1563,16 @@ export function OverviewView({
         </div>
 
         {/* Threat Intelligence Log Console */}
-        <div className="bg-[#1E293B] border border-slate-700 rounded-lg flex flex-col overflow-hidden shadow-sm">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg flex flex-col overflow-hidden shadow-sm">
           {/* Threat Intel Header */}
-          <div className="p-4 border-b border-slate-700 flex items-center justify-between bg-slate-800/40">
+          <div className="p-4 border-b border-[#3a352c] flex items-center justify-between bg-[#221e17]">
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
               <span className="text-sm font-semibold text-slate-100">Threat Intelligence Log</span>
             </div>
             <button
               onClick={onNavigateToLogs}
-              className="text-xs text-slate-400 hover:text-blue-400 flex items-center gap-1 cursor-pointer font-mono"
+              className="text-xs text-slate-400 hover:text-[#b23a2e] flex items-center gap-1 cursor-pointer font-mono"
             >
               <span>Live Console</span>
               <Terminal className="w-3 h-3" />
@@ -1580,7 +1580,7 @@ export function OverviewView({
           </div>
 
         {/* Forensic Log Stream */}
-        <div className="flex-1 p-4 font-mono text-[11px] space-y-3 overflow-y-auto max-h-[460px] bg-[#0F172A]/80">
+        <div className="flex-1 p-4 font-mono text-[11px] space-y-3 overflow-y-auto max-h-[460px] bg-[#14120f]">
           {analysis.logs.map((log) => {
             let tagColor = 'text-blue-400';
             if (log.tag === 'DNS') tagColor = 'text-emerald-400';

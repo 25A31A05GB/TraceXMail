@@ -37,9 +37,9 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
   };
 
   return (
-    <div id="hops-view" className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto bg-[#0F172A]">
+    <div id="hops-view" className="flex-1 p-6 flex flex-col gap-6 overflow-y-auto bg-[#14120f]">
       {/* Top Banner */}
-      <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+      <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
         <div>
           <div className="flex items-center gap-2">
             <Network className="w-5 h-5 text-blue-400" />
@@ -88,7 +88,7 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
 
       {/* Interactive Graph View */}
       {viewMode === 'flow' && (
-        <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-4 shadow-sm flex flex-col min-h-[460px]">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-4 shadow-sm flex flex-col min-h-[460px]">
           <div className="flex items-center justify-between mb-3 text-xs text-slate-400 font-sans">
             <span>Interactive Node Directed Acyclic Graph (DAG) — Pan, Zoom, and Drag</span>
             <span className="text-blue-400 font-semibold">TraceXMail Topology Engine</span>
@@ -101,7 +101,7 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
 
       {/* Hop Timeline Strip */}
       {viewMode === 'timeline' && (
-        <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-5 shadow-sm">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-5 shadow-sm">
           <div className="text-xs text-slate-400 uppercase font-semibold mb-4 tracking-wider">
             Chronological Relay Path
           </div>
@@ -184,7 +184,7 @@ export function HopTracerouteView({ analysis }: HopTracerouteProps) {
 
       {/* Selected Hop Detailed Inspector */}
       {activeHop && (
-        <div className="bg-[#1E293B] border border-slate-700 rounded-lg p-6 shadow-sm space-y-6">
+        <div className="bg-[#1a1712] border border-[#3a352c] rounded-lg p-6 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-700/80 pb-4">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-mono font-bold">

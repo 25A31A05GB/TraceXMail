@@ -201,7 +201,7 @@ export function BulkThreatComparisonSummary({
   };
 
   return (
-    <div className="bg-[#1E293B] border border-slate-700/90 rounded-2xl p-5 shadow-xl space-y-5">
+    <div className="bg-[#1a1712] border border-[#3a352c] rounded-2xl p-5 shadow-xl space-y-5">
       {/* Header & Title Bar */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-700/80 pb-4">
         <div>
