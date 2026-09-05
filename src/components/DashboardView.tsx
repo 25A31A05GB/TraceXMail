@@ -58,6 +58,7 @@ import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { getStandardizedVerdict } from '../utils/verdict';
 import { NetworkIntelligenceCard } from './NetworkIntelligenceCard';
+import { BulkThreatComparisonSummary } from './BulkThreatComparisonSummary';
 
 interface DashboardViewProps {
   onSelectAnalysis?: (analysis: EmailAnalysis) => void;
@@ -704,6 +705,12 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
             </div>
           </div>
 
+          {/* Bulk Email File Threat Comparison Bar Chart Section */}
+          <BulkThreatComparisonSummary
+            onSelectAnalysis={onSelectAnalysis}
+            onNavigateToTab={onNavigateToTab}
+          />
+
           {/* Expand Full Dashboard Callout Banner */}
           <div className="p-4 rounded-xl bg-blue-950/30 border border-blue-800/40 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -1195,6 +1202,12 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
           </div>
         );
       })()}
+
+      {/* Bulk Email File Threat Comparison Bar Chart Section */}
+      <BulkThreatComparisonSummary
+        onSelectAnalysis={onSelectAnalysis}
+        onNavigateToTab={onNavigateToTab}
+      />
 
       {/* Email Verdict Distribution (Last 30 Days) Chart */}
       <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-lg space-y-4">

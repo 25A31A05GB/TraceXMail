@@ -221,7 +221,7 @@ function generateFallbackCanvas(analysis?: EmailAnalysis, options?: ExportEviden
  * Captures an HTML element (e.g. EvidenceTagCard #card) and triggers download as PNG image.
  */
 export async function exportEvidenceAsImage(
-  element: HTMLElement,
+  element: HTMLElement | null,
   filename: string = 'TraceXMail-Evidence-Card.png',
   options?: ExportEvidenceOptions
 ): Promise<void> {
@@ -479,7 +479,7 @@ function generateDirectPdfReport(
  * Captures an HTML element and compiles it into an official A4 PDF forensic document.
  */
 export async function exportEvidenceAsPdf(
-  element: HTMLElement,
+  element: HTMLElement | null,
   filename: string = 'TraceXMail-Evidence-Dossier.pdf',
   options?: ExportEvidenceOptions
 ): Promise<void> {

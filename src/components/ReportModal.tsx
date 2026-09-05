@@ -46,6 +46,7 @@ import {
   MAXMIND_README_CONTENT 
 } from '../utils/markdownReport';
 import { getStandardizedVerdict } from '../utils/verdict';
+import { exportEvidenceAsPdf, exportEvidenceAsImage } from '../utils/exportEvidence';
 
 interface ReportModalProps {
   isOpen: boolean;
@@ -158,6 +159,43 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
     downloadAnchor.remove();
   };
 
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingPng, setExportingPng] = useState(false);
+
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const cardEl = document.querySelector('.evidence-card') as HTMLElement || null;
+      await exportEvidenceAsPdf(cardEl, `TraceXMail-Report-${analysis.id || 'case'}.pdf`, {
+        caseId: analysis.id,
+        evidenceId: analysis.evidenceId || analysis.id,
+        title: analysis.subject,
+        analysis
+      });
+    } catch (err) {
+      console.error('Failed PDF export in modal:', err);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportPng = async () => {
+    setExportingPng(true);
+    try {
+      const cardEl = document.querySelector('.evidence-card') as HTMLElement || null;
+      await exportEvidenceAsImage(cardEl, `TraceXMail-Evidence-${analysis.id || 'case'}.png`, {
+        caseId: analysis.id,
+        evidenceId: analysis.evidenceId || analysis.id,
+        title: analysis.subject,
+        analysis
+      });
+    } catch (err) {
+      console.error('Failed PNG export in modal:', err);
+    } finally {
+      setExportingPng(false);
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -191,6 +229,24 @@ export function ReportModal({ isOpen, onClose, analysis, privacyConfig = DEFAULT
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="px-2.5 py-1.5 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-800 text-rose-300 transition-colors flex items-center gap-1.5 text-xs font-semibold shadow-sm disabled:opacity-50"
+              title="Export A4 PDF Dossier"
+            >
+              <Download className={`w-3.5 h-3.5 text-rose-400 ${exportingPdf ? 'animate-bounce' : ''}`} />
+              <span className="hidden sm:inline">{exportingPdf ? 'PDF...' : 'Export PDF'}</span>
+            </button>
+            <button
+              onClick={handleExportPng}
+              disabled={exportingPng}
+              className="px-2.5 py-1.5 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-800 text-amber-300 transition-colors flex items-center gap-1.5 text-xs font-semibold shadow-sm disabled:opacity-50"
+              title="Export High-DPI PNG Card"
+            >
+              <Download className={`w-3.5 h-3.5 text-amber-400 ${exportingPng ? 'animate-bounce' : ''}`} />
+              <span className="hidden sm:inline">{exportingPng ? 'PNG...' : 'Export PNG'}</span>
+            </button>
             <button
               onClick={handlePrint}
               className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"

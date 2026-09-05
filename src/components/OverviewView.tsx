@@ -48,6 +48,7 @@ import { lookupMaxMindGeo } from '../utils/maxmindService';
 import { WhyAffordance } from './WhyAffordance';
 import { RelationshipGraphView } from './RelationshipGraphView';
 import { PlainLanguageSummaryCard } from './PlainLanguageSummaryCard';
+import { exportEvidenceAsPdf, exportEvidenceAsImage } from '../utils/exportEvidence';
 import { getStandardizedVerdict } from '../utils/verdict';
 import { JargonTooltip } from './JargonTooltip';
 
@@ -487,6 +488,45 @@ export function OverviewView({
     }
   };
 
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingPng, setExportingPng] = useState(false);
+
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    try {
+      const cardEl = document.querySelector('.evidence-card') as HTMLElement || document.getElementById('overview-dashboard');
+      const filename = `TraceXMail-Evidence-${analysis.id || 'case'}.pdf`;
+      await exportEvidenceAsPdf(cardEl, filename, {
+        caseId: analysis.id,
+        evidenceId: analysis.evidenceId || analysis.id,
+        title: analysis.subject,
+        analysis
+      });
+    } catch (err) {
+      console.error('Failed to export PDF:', err);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportPng = async () => {
+    setExportingPng(true);
+    try {
+      const cardEl = document.querySelector('.evidence-card') as HTMLElement || document.getElementById('overview-dashboard');
+      const filename = `TraceXMail-Evidence-${analysis.id || 'case'}.png`;
+      await exportEvidenceAsImage(cardEl, filename, {
+        caseId: analysis.id,
+        evidenceId: analysis.evidenceId || analysis.id,
+        title: analysis.subject,
+        analysis
+      });
+    } catch (err) {
+      console.error('Failed to export PNG:', err);
+    } finally {
+      setExportingPng(false);
+    }
+  };
+
   const handleDownloadRawEml = () => {
     const blob = new Blob([analysis.rawEml || ''], { type: 'message/rfc822' });
     const url = URL.createObjectURL(blob);
@@ -573,6 +613,24 @@ export function OverviewView({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
+              className="px-3 py-1.5 rounded bg-rose-950/60 hover:bg-rose-900/60 border border-rose-700/80 text-xs text-rose-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              title="Export official A4 PDF forensic evidence dossier"
+            >
+              <Download className={`w-3.5 h-3.5 text-rose-400 ${exportingPdf ? 'animate-bounce' : ''}`} />
+              <span>{exportingPdf ? 'Building PDF...' : 'Export PDF'}</span>
+            </button>
+            <button
+              onClick={handleExportPng}
+              disabled={exportingPng}
+              className="px-3 py-1.5 rounded bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/80 text-xs text-amber-300 font-mono flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm disabled:opacity-50"
+              title="Export high-DPI PNG evidence card photo"
+            >
+              <Download className={`w-3.5 h-3.5 text-amber-400 ${exportingPng ? 'animate-bounce' : ''}`} />
+              <span>{exportingPng ? 'Rendering PNG...' : 'Export PNG'}</span>
+            </button>
             {onOpenReportModal && (
               <button
                 onClick={onOpenReportModal}
