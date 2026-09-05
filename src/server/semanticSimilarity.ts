@@ -13,6 +13,10 @@
 import crypto from 'crypto';
 import axios from 'axios';
 import { GoogleGenAI } from '@google/genai';
+import { pipeline, env } from '@xenova/transformers';
+
+// Configure transformers environment: allow remote HF downloads, cache locally
+env.allowLocalModels = false;
 
 export interface ReferenceTemplate {
   id: string;
@@ -31,6 +35,10 @@ export interface SemanticSimilarityResult {
     clusters: Record<string, { topScore: number; avgScore: number; sampleCount: number }>;
     nearestTemplateTitle?: string;
     model: string;
+    provider?: 'gemini' | 'local_transformers' | 'none';
+    dimension?: number;
+    fallbackUsed?: boolean;
+    reason?: string;
   };
   error?: string;
 }
@@ -210,13 +218,71 @@ export const REFERENCE_TEMPLATES: ReferenceTemplate[] = [
   }
 ];
 
-// In-Memory Embeddings Cache
-const referenceEmbeddingsCache = new Map<string, number[]>();
-const incomingEmbeddingsCache = new Map<string, number[]>();
-let isPrecomputing = false;
+// STRICT VECTOR ISOLATION:
+// Gemini vectors (768-d) and Local Transformer vectors (384-d) live in completely separate caches.
+// Under NO circumstances are vectors from different embedding spaces ever compared against each other.
+const referenceEmbeddingsGeminiCache = new Map<string, number[]>();
+const incomingEmbeddingsGeminiCache = new Map<string, number[]>();
+let isPrecomputingGemini = false;
+
+const referenceEmbeddingsLocalCache = new Map<string, number[]>();
+const incomingEmbeddingsLocalCache = new Map<string, number[]>();
+let isPrecomputingLocal = false;
+
+// Local Transformer Pipeline State
+let localExtractor: any = null;
+let isInitializingLocalModel = false;
+let localModelStatus: 'UNINITIALIZED' | 'INITIALIZING' | 'READY' | 'FAILED' = 'UNINITIALIZED';
+let localModelError: string | null = null;
 
 /**
- * Computes cosine similarity between two numeric vectors.
+ * Initializes the local Xenova/all-MiniLM-L6-v2 pipeline at server cold-start
+ * and precomputes reference template embeddings so analysts never suffer cold-start latency.
+ */
+export async function initializeLocalEmbeddingModel(): Promise<boolean> {
+  if (localExtractor && localModelStatus === 'READY' && referenceEmbeddingsLocalCache.size >= REFERENCE_TEMPLATES.length) {
+    return true;
+  }
+  if (isInitializingLocalModel) {
+    return false;
+  }
+  isInitializingLocalModel = true;
+  localModelStatus = 'INITIALIZING';
+
+  try {
+    console.log('[SemanticEmbedding] Cold-start initialization: Loading local Xenova/all-MiniLM-L6-v2 pipeline...');
+    localExtractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2', {
+      quantized: true
+    });
+    localModelStatus = 'READY';
+    localModelError = null;
+    console.log('[SemanticEmbedding] Xenova/all-MiniLM-L6-v2 pipeline ready. Pre-computing local reference corpus...');
+    await precomputeLocalReferenceEmbeddings();
+    console.log(`[SemanticEmbedding] Successfully pre-computed ${referenceEmbeddingsLocalCache.size}/${REFERENCE_TEMPLATES.length} reference vectors with local model.`);
+    return true;
+  } catch (err: any) {
+    localModelStatus = 'FAILED';
+    localModelError = err?.message || 'Failed to initialize local transformer model';
+    console.error('[SemanticEmbedding] Local model initialization failed:', localModelError);
+    return false;
+  } finally {
+    isInitializingLocalModel = false;
+  }
+}
+
+export function getLocalEmbeddingModelStatus() {
+  return {
+    status: localModelStatus,
+    isReady: localModelStatus === 'READY',
+    cachedReferenceCount: referenceEmbeddingsLocalCache.size,
+    error: localModelError,
+    modelName: 'Xenova/all-MiniLM-L6-v2',
+    dimension: 384
+  };
+}
+
+/**
+ * Computes cosine similarity between two numeric vectors in the exact same embedding space.
  */
 export function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (!vecA || !vecB || vecA.length !== vecB.length || vecA.length === 0) {
@@ -241,7 +307,61 @@ export function cosineSimilarity(vecA: number[], vecB: number[]): number {
 }
 
 /**
- * Fetches an embedding vector for a given text using text-embedding-004.
+ * Generates an embedding vector using the local offline Xenova/all-MiniLM-L6-v2 model (384-d).
+ */
+export async function embedWithLocalModel(text: string): Promise<number[] | null> {
+  const clean = text.slice(0, 4000).trim();
+  if (!clean) return null;
+
+  const hash = crypto.createHash('sha256').update(clean).digest('hex');
+  if (incomingEmbeddingsLocalCache.has(hash)) {
+    return incomingEmbeddingsLocalCache.get(hash)!;
+  }
+
+  if (!localExtractor) {
+    const ok = await initializeLocalEmbeddingModel();
+    if (!ok || !localExtractor) return null;
+  }
+
+  try {
+    const output = await localExtractor(clean, { pooling: 'mean', normalize: true });
+    const vec: number[] = Array.from(output.data);
+    if (vec.length === 384) {
+      incomingEmbeddingsLocalCache.set(hash, vec);
+      return vec;
+    }
+    return null;
+  } catch (err: any) {
+    console.warn('[SemanticEmbedding] Local embedding error:', err?.message);
+    return null;
+  }
+}
+
+/**
+ * Pre-computes and caches all reference template embeddings using the local model.
+ */
+async function precomputeLocalReferenceEmbeddings(): Promise<boolean> {
+  if (isPrecomputingLocal) return false;
+  isPrecomputingLocal = true;
+
+  try {
+    for (const tmpl of REFERENCE_TEMPLATES) {
+      if (!referenceEmbeddingsLocalCache.has(tmpl.id)) {
+        const output = await localExtractor(tmpl.text, { pooling: 'mean', normalize: true });
+        const vec: number[] = Array.from(output.data);
+        if (vec.length === 384) {
+          referenceEmbeddingsLocalCache.set(tmpl.id, vec);
+        }
+      }
+    }
+    return referenceEmbeddingsLocalCache.size >= REFERENCE_TEMPLATES.length;
+  } finally {
+    isPrecomputingLocal = false;
+  }
+}
+
+/**
+ * Fetches an embedding vector for a given text using Gemini text-embedding-004 (768-d).
  */
 async function fetchGeminiEmbedding(text: string, apiKey: string): Promise<number[] | null> {
   const clean = text.slice(0, 8000).trim();
@@ -249,8 +369,8 @@ async function fetchGeminiEmbedding(text: string, apiKey: string): Promise<numbe
 
   // Check cache first by SHA256
   const hash = crypto.createHash('sha256').update(clean).digest('hex');
-  if (incomingEmbeddingsCache.has(hash)) {
-    return incomingEmbeddingsCache.get(hash)!;
+  if (incomingEmbeddingsGeminiCache.has(hash)) {
+    return incomingEmbeddingsGeminiCache.get(hash)!;
   }
 
   // 1. Try GoogleGenAI SDK
@@ -265,7 +385,7 @@ async function fetchGeminiEmbedding(text: string, apiKey: string): Promise<numbe
     // @ts-ignore
     const values = response?.embedding?.values || response?.values;
     if (Array.isArray(values) && values.length > 0) {
-      incomingEmbeddingsCache.set(hash, values);
+      incomingEmbeddingsGeminiCache.set(hash, values);
       return values;
     }
   } catch (sdkErr: any) {
@@ -291,66 +411,136 @@ async function fetchGeminiEmbedding(text: string, apiKey: string): Promise<numbe
 
     const values = resp.data?.embedding?.values;
     if (Array.isArray(values) && values.length > 0) {
-      incomingEmbeddingsCache.set(hash, values);
+      incomingEmbeddingsGeminiCache.set(hash, values);
       return values;
     }
   } catch (restErr: any) {
-    console.warn('[SemanticEmbedding] API request failed:', restErr?.response?.data || restErr?.message);
+    console.warn('[SemanticEmbedding] Gemini API request failed:', restErr?.response?.data || restErr?.message);
   }
 
   return null;
 }
 
 /**
- * Pre-computes and caches reference template embeddings once.
+ * Pre-computes and caches reference template embeddings using Gemini text-embedding-004.
  */
 export async function ensureReferenceEmbeddingsLoaded(apiKey: string): Promise<boolean> {
-  if (referenceEmbeddingsCache.size >= REFERENCE_TEMPLATES.length) {
+  if (referenceEmbeddingsGeminiCache.size >= REFERENCE_TEMPLATES.length) {
     return true;
   }
 
-  if (isPrecomputing) return false;
-  isPrecomputing = true;
+  if (isPrecomputingGemini) return false;
+  isPrecomputingGemini = true;
 
   try {
     for (const t of REFERENCE_TEMPLATES) {
-      if (!referenceEmbeddingsCache.has(t.id)) {
+      if (!referenceEmbeddingsGeminiCache.has(t.id)) {
         const vec = await fetchGeminiEmbedding(t.text, apiKey);
         if (vec) {
-          referenceEmbeddingsCache.set(t.id, vec);
+          referenceEmbeddingsGeminiCache.set(t.id, vec);
+        } else {
+          // Gemini embedding failed or unsupported; abort loop to allow instant local fallback
+          break;
         }
       }
     }
-    return referenceEmbeddingsCache.size > 0;
+    return referenceEmbeddingsGeminiCache.size > 0;
   } finally {
-    isPrecomputing = false;
+    isPrecomputingGemini = false;
   }
+}
+
+/**
+ * Evaluates cosine similarity of an incoming embedding against a specific reference cache.
+ * GUARANTEES: Both incoming vector and reference vectors belong to the EXACT same embedding space.
+ */
+function evaluateCorpusSimilarity(
+  incomingEmbedding: number[],
+  referenceCache: Map<string, number[]>
+): {
+  classSimilarities: Record<string, number>;
+  clusterDetails: Record<string, { topScore: number; avgScore: number; sampleCount: number }>;
+  nearestTemplateId: string | null;
+  nearestTemplateTitle: string | null;
+  nearestClass: string | null;
+  globalTopSim: number;
+} {
+  const categoryScores: Record<string, number[]> = {
+    Phishing: [],
+    'Fraud-related': [],
+    Impersonated: [],
+    Suspicious: [],
+    Legitimate: []
+  };
+
+  let globalTopSim = 0;
+  let nearestTemplateId: string | null = null;
+  let nearestTemplateTitle: string | null = null;
+  let nearestClass: string | null = null;
+
+  for (const tmpl of REFERENCE_TEMPLATES) {
+    const refVec = referenceCache.get(tmpl.id);
+    if (!refVec) continue;
+
+    const sim = cosineSimilarity(incomingEmbedding, refVec);
+    if (!categoryScores[tmpl.category]) {
+      categoryScores[tmpl.category] = [];
+    }
+    categoryScores[tmpl.category].push(sim);
+
+    if (sim > globalTopSim) {
+      globalTopSim = sim;
+      nearestTemplateId = tmpl.id;
+      nearestTemplateTitle = tmpl.title;
+      nearestClass = tmpl.category;
+    }
+  }
+
+  const classSimilarities: Record<string, number> = {};
+  const clusterDetails: Record<string, { topScore: number; avgScore: number; sampleCount: number }> = {};
+
+  for (const [cat, scores] of Object.entries(categoryScores)) {
+    if (scores.length === 0) {
+      classSimilarities[cat] = 0;
+      clusterDetails[cat] = { topScore: 0, avgScore: 0, sampleCount: 0 };
+      continue;
+    }
+    const top = Math.max(...scores);
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    // Weighted blending: 70% top template match + 30% cluster mean
+    const blended = parseFloat((top * 0.7 + avg * 0.3).toFixed(4));
+    classSimilarities[cat] = blended;
+    clusterDetails[cat] = {
+      topScore: parseFloat(top.toFixed(4)),
+      avgScore: parseFloat(avg.toFixed(4)),
+      sampleCount: scores.length
+    };
+  }
+
+  return {
+    classSimilarities,
+    clusterDetails,
+    nearestTemplateId,
+    nearestTemplateTitle,
+    nearestClass,
+    globalTopSim
+  };
 }
 
 /**
  * LAYER 1 Main Entry Point:
  * Computes semantic embedding similarity against reference email clusters.
+ *
+ * Execution Strategy:
+ * 1. Primary: Gemini text-embedding-004 (768-d) if GEMINI_API_KEY is available and contactable.
+ * 2. Fallback: Local Xenova/all-MiniLM-L6-v2 (384-d) offline embedding pipeline if Gemini is unset, rate-limited, or unavailable.
+ *
+ * CRITICAL INTEGRITY INVARIANT:
+ * Vectors are NEVER compared across different models.
+ * If Gemini is active, incoming 768-d vector is evaluated against Gemini 768-d reference cache.
+ * If local fallback is active, incoming 384-d vector is evaluated against Local 384-d reference cache.
  */
 export async function scoreSemanticSimilarity(text: string): Promise<SemanticSimilarityResult> {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey || apiKey.trim() === '') {
-    return {
-      status: 'UNAVAILABLE',
-      classSimilarities: {
-        Phishing: 0,
-        'Fraud-related': 0,
-        Impersonated: 0,
-        Suspicious: 0,
-        Legitimate: 0
-      },
-      nearestTemplate: null,
-      nearestClass: null,
-      topSimilarity: 0,
-      error: 'GEMINI_API_KEY is not configured in environment. Layer 1 semantic similarity skipped.'
-    };
-  }
-
   if (!text || text.trim().length < 15) {
     return {
       status: 'SKIPPED',
@@ -368,110 +558,97 @@ export async function scoreSemanticSimilarity(text: string): Promise<SemanticSim
     };
   }
 
-  try {
-    // 1. Ensure reference corpus is embedded and cached
-    await ensureReferenceEmbeddingsLoaded(apiKey);
+  const apiKey = process.env.GEMINI_API_KEY;
 
-    // 2. Embed incoming email body
-    const incomingEmbedding = await fetchGeminiEmbedding(text, apiKey);
-    if (!incomingEmbedding) {
-      return {
-        status: 'UNAVAILABLE',
-        classSimilarities: {
-          Phishing: 0,
-          'Fraud-related': 0,
-          Impersonated: 0,
-          Suspicious: 0,
-          Legitimate: 0
-        },
-        nearestTemplate: null,
-        nearestClass: null,
-        topSimilarity: 0,
-        error: 'Failed to generate embedding vector from Gemini text-embedding-004 API.'
-      };
+  // Track if Gemini fails so we can provide transparent diagnostic reporting
+  let geminiFailureReason: string | null = null;
+
+  // ==========================================
+  // PATH 1: Primary Gemini text-embedding-004
+  // ==========================================
+  if (apiKey && apiKey.trim() !== '') {
+    try {
+      await ensureReferenceEmbeddingsLoaded(apiKey);
+      const geminiVector = await fetchGeminiEmbedding(text, apiKey);
+
+      if (geminiVector && geminiVector.length > 0 && referenceEmbeddingsGeminiCache.size > 0) {
+        const evalResult = evaluateCorpusSimilarity(geminiVector, referenceEmbeddingsGeminiCache);
+        return {
+          status: 'AVAILABLE',
+          classSimilarities: evalResult.classSimilarities,
+          nearestTemplate: evalResult.nearestTemplateId,
+          nearestClass: evalResult.nearestClass,
+          topSimilarity: parseFloat(evalResult.globalTopSim.toFixed(4)),
+          details: {
+            clusters: evalResult.clusterDetails,
+            nearestTemplateTitle: evalResult.nearestTemplateTitle || undefined,
+            model: 'text-embedding-004',
+            provider: 'gemini',
+            dimension: geminiVector.length,
+            fallbackUsed: false
+          }
+        };
+      } else {
+        geminiFailureReason = 'Gemini API returned empty or null embedding vector';
+      }
+    } catch (geminiErr: any) {
+      geminiFailureReason = geminiErr?.message || 'Gemini API call failed';
+      console.warn('[SemanticEmbedding] Gemini embedding path failed, engaging local fallback:', geminiFailureReason);
     }
-
-    // 3. Compare similarity against all reference templates
-    const categoryScores: Record<string, number[]> = {
-      Phishing: [],
-      'Fraud-related': [],
-      Impersonated: [],
-      Suspicious: [],
-      Legitimate: []
-    };
-
-    let globalTopSim = 0;
-    let nearestTemplateId: string | null = null;
-    let nearestTemplateTitle: string | null = null;
-    let nearestClass: string | null = null;
-
-    for (const tmpl of REFERENCE_TEMPLATES) {
-      const refVec = referenceEmbeddingsCache.get(tmpl.id);
-      if (!refVec) continue;
-
-      const sim = cosineSimilarity(incomingEmbedding, refVec);
-      if (!categoryScores[tmpl.category]) {
-        categoryScores[tmpl.category] = [];
-      }
-      categoryScores[tmpl.category].push(sim);
-
-      if (sim > globalTopSim) {
-        globalTopSim = sim;
-        nearestTemplateId = tmpl.id;
-        nearestTemplateTitle = tmpl.title;
-        nearestClass = tmpl.category;
-      }
-    }
-
-    // Aggregate class-level similarities (using top match & average)
-    const classSimilarities: Record<string, number> = {};
-    const clusterDetails: Record<string, { topScore: number; avgScore: number; sampleCount: number }> = {};
-
-    for (const [cat, scores] of Object.entries(categoryScores)) {
-      if (scores.length === 0) {
-        classSimilarities[cat] = 0;
-        clusterDetails[cat] = { topScore: 0, avgScore: 0, sampleCount: 0 };
-        continue;
-      }
-      const top = Math.max(...scores);
-      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-      // Weighted blending: 70% top template match + 30% cluster mean
-      const blended = parseFloat((top * 0.7 + avg * 0.3).toFixed(4));
-      classSimilarities[cat] = blended;
-      clusterDetails[cat] = {
-        topScore: parseFloat(top.toFixed(4)),
-        avgScore: parseFloat(avg.toFixed(4)),
-        sampleCount: scores.length
-      };
-    }
-
-    return {
-      status: 'AVAILABLE',
-      classSimilarities,
-      nearestTemplate: nearestTemplateId,
-      nearestClass,
-      topSimilarity: parseFloat(globalTopSim.toFixed(4)),
-      details: {
-        clusters: clusterDetails,
-        nearestTemplateTitle: nearestTemplateTitle || undefined,
-        model: 'text-embedding-004'
-      }
-    };
-  } catch (err: any) {
-    console.warn('[SemanticEmbedding] Scoring Exception:', err?.message);
-    return {
-      status: 'UNAVAILABLE',
-      classSimilarities: {
-        Phishing: 0,
-        'Fraud-related': 0,
-        Impersonated: 0,
-        Suspicious: 0,
-        Legitimate: 0
-      },
-      nearestTemplate: null,
-      nearestClass: null,
-      topSimilarity: 0,
-      error: `Semantic similarity error: ${err?.message || 'Unknown failure'}`
-    };
+  } else {
+    geminiFailureReason = 'GEMINI_API_KEY is unset or empty in environment';
   }
+
+  // ==========================================
+  // PATH 2: Offline Local all-MiniLM-L6-v2 Fallback
+  // ==========================================
+  try {
+    if (!localExtractor) {
+      await initializeLocalEmbeddingModel();
+    }
+
+    if (referenceEmbeddingsLocalCache.size < REFERENCE_TEMPLATES.length) {
+      await precomputeLocalReferenceEmbeddings();
+    }
+
+    const localVector = await embedWithLocalModel(text);
+
+    if (localVector && localVector.length === 384 && referenceEmbeddingsLocalCache.size > 0) {
+      const evalResult = evaluateCorpusSimilarity(localVector, referenceEmbeddingsLocalCache);
+      return {
+        status: 'AVAILABLE',
+        classSimilarities: evalResult.classSimilarities,
+        nearestTemplate: evalResult.nearestTemplateId,
+        nearestClass: evalResult.nearestClass,
+        topSimilarity: parseFloat(evalResult.globalTopSim.toFixed(4)),
+        details: {
+          clusters: evalResult.clusterDetails,
+          nearestTemplateTitle: evalResult.nearestTemplateTitle || undefined,
+          model: 'Xenova/all-MiniLM-L6-v2 (offline local)',
+          provider: 'local_transformers',
+          dimension: 384,
+          fallbackUsed: true,
+          reason: geminiFailureReason || 'Local offline semantic model utilized'
+        }
+      };
+    }
+  } catch (localErr: any) {
+    console.error('[SemanticEmbedding] Local transformer fallback also failed:', localErr?.message);
+  }
+
+  // Both Gemini and Local transformer failed
+  return {
+    status: 'UNAVAILABLE',
+    classSimilarities: {
+      Phishing: 0,
+      'Fraud-related': 0,
+      Impersonated: 0,
+      Suspicious: 0,
+      Legitimate: 0
+    },
+    nearestTemplate: null,
+    nearestClass: null,
+    topSimilarity: 0,
+    error: `Semantic similarity unavailable. Gemini: ${geminiFailureReason || 'unavailable'}; Local MiniLM: ${localModelError || 'uninitialized'}`
+  };
 }

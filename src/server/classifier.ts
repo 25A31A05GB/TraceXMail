@@ -169,14 +169,17 @@ export interface ClassificationResult {
     reason: string;
     disclaimer: string;
   };
+  activeClassifier?: 'logistic_regression' | 'centroid_cosine';
 }
 
 export interface TrainedModelPayload {
   schemaVersion?: string;
   featureSchemaVersion?: string;
+  primaryClassifier?: 'logistic_regression' | 'centroid_cosine';
   metadata?: {
     modelName: string;
     algorithm: string;
+    primaryClassifier?: 'logistic_regression' | 'centroid_cosine';
     trainedAt?: string;
     trainingCorpora?: string[];
     totalSamples?: number;
@@ -190,6 +193,24 @@ export interface TrainedModelPayload {
     baselineAccuracy?: number;
     perClassMetrics?: Record<EmailClassification, { precision: number; recall: number; f1: number; support: number }>;
     confusionMatrix?: number[][];
+    classifierComparison?: {
+      centroid_cosine: {
+        accuracy: number;
+        macroF1: number;
+        weightedF1: number;
+        brierScore: number;
+        ece: number;
+      };
+      logistic_regression: {
+        accuracy: number;
+        macroF1: number;
+        weightedF1: number;
+        brierScore: number;
+        ece: number;
+      };
+      winner: 'logistic_regression' | 'centroid_cosine';
+      promotionReason: string;
+    };
   };
   featureSchema?: string[];
   vocabulary: string[];
@@ -198,6 +219,8 @@ export interface TrainedModelPayload {
   centroids: number[][];
   priors: number[];
   temperature: number;
+  weights?: number[][];
+  bias?: number[];
 }
 
 export const CLASS_NAMES: EmailClassification[] = [
@@ -244,10 +267,27 @@ export class MachineLearningClassifier {
         throw new Error('Invalid model artifact: missing idf weights map');
       }
 
+      const primary = parsed.primaryClassifier || parsed.metadata?.primaryClassifier || 'centroid_cosine';
+      if (primary === 'logistic_regression') {
+        if (!parsed.weights || !Array.isArray(parsed.weights) || parsed.weights.length !== 5) {
+          throw new Error('Invalid model artifact: primaryClassifier is logistic_regression but weights array is missing or invalid');
+        }
+        if (!parsed.bias || !Array.isArray(parsed.bias) || parsed.bias.length !== 5) {
+          throw new Error('Invalid model artifact: primaryClassifier is logistic_regression but bias array is missing or invalid');
+        }
+      }
+
+      if (parsed.weights && (!Array.isArray(parsed.weights) || parsed.weights.length !== 5)) {
+        throw new Error('Invalid model artifact: weights array must have length 5');
+      }
+      if (parsed.bias && (!Array.isArray(parsed.bias) || parsed.bias.length !== 5)) {
+        throw new Error('Invalid model artifact: bias array must have length 5');
+      }
+
       this.model = parsed;
       this.modelStatus = 'OPERATIONAL';
       this.loadError = null;
-      console.log(`[Classifier] Successfully loaded ML model: ${this.model.metadata?.modelName || '5-Class Centroid Model'} (Schema: ${this.model.schemaVersion || '2.3.0'}, Vocab: ${this.model.vocabulary.length})`);
+      console.log(`[Classifier] Successfully loaded ML model: ${this.model.metadata?.modelName || '5-Class Forensic Model'} (Schema: ${this.model.schemaVersion || '2.5.0'}, Primary: ${primary}, Vocab: ${this.model.vocabulary.length})`);
       return true;
     } catch (e: any) {
       this.model = null;
@@ -266,10 +306,13 @@ export class MachineLearningClassifier {
       modelName: this.model?.metadata?.modelName || null,
       schemaVersion: this.model?.schemaVersion || null,
       featureSchemaVersion: this.model?.featureSchemaVersion || null,
+      primaryClassifier: this.model?.primaryClassifier || this.model?.metadata?.primaryClassifier || 'centroid_cosine',
       classes: this.model?.metadata?.classes || CLASS_NAMES,
       vocabularySize: this.model?.vocabulary?.length || 0,
       metadata: this.model?.metadata || null,
-      temperature: this.model?.temperature || 12.0
+      temperature: this.model?.temperature || 12.0,
+      hasLogisticWeights: Boolean(this.model?.weights && this.model?.bias),
+      classifierComparison: this.model?.metadata?.classifierComparison || null
     };
   }
 
@@ -292,7 +335,132 @@ export class MachineLearningClassifier {
   }
 
   /**
-   * Evaluates text through the trained Centroid Cosine ML engine.
+   * Evaluates normalized feature entries with Centroid-Cosine head.
+   */
+  private scoreCentroidCosine(entries: Array<[number, number]>): {
+    probs: number[];
+    bestIdx: number;
+    confidence: number;
+    tokenWeights: Array<{ token: string; weight: number }>;
+  } {
+    const numClasses = CLASS_NAMES.length;
+    const similarities = new Array(numClasses).fill(0);
+
+    for (let c = 0; c < numClasses; c++) {
+      let dot = 0;
+      const centroidRow = this.model!.centroids[c];
+      if (centroidRow) {
+        for (const [fIdx, val] of entries) {
+          dot += (centroidRow[fIdx] || 0) * val;
+        }
+      }
+      similarities[c] = dot;
+    }
+
+    const temperature = this.model!.temperature || 12.0;
+    const maxSim = Math.max(...similarities);
+    let sumExp = 0;
+    const exps = new Array(numClasses);
+    for (let c = 0; c < numClasses; c++) {
+      exps[c] = Math.exp(temperature * (similarities[c] - maxSim));
+      sumExp += exps[c];
+    }
+
+    const probs = exps.map(e => (sumExp > 0 ? e / sumExp : 1 / numClasses));
+
+    let bestIdx = 0;
+    let bestProb = -1;
+    for (let i = 0; i < probs.length; i++) {
+      if (probs[i] > bestProb) {
+        bestProb = probs[i];
+        bestIdx = i;
+      }
+    }
+
+    const tokenWeights: Array<{ token: string; weight: number }> = [];
+    const centroidRow = this.model!.centroids[bestIdx];
+    if (centroidRow) {
+      for (const [fIdx, val] of entries) {
+        const token = this.model!.vocabulary[fIdx];
+        const w = (centroidRow[fIdx] || 0) * val;
+        if (w > 0.005) {
+          tokenWeights.push({ token, weight: parseFloat(w.toFixed(3)) });
+        }
+      }
+    }
+    tokenWeights.sort((a, b) => b.weight - a.weight);
+
+    const sortedProbs = [...probs].sort((a, b) => b - a);
+    const confidence = parseFloat((sortedProbs[0] - (sortedProbs[1] || 0)).toFixed(3));
+
+    return { probs, bestIdx, confidence, tokenWeights };
+  }
+
+  /**
+   * Evaluates normalized feature entries with Trained Multinomial Logistic Regression head.
+   */
+  private scoreLogisticRegression(entries: Array<[number, number]>): {
+    probs: number[];
+    bestIdx: number;
+    confidence: number;
+    tokenWeights: Array<{ token: string; weight: number }>;
+  } {
+    const numClasses = CLASS_NAMES.length;
+    const weights = this.model!.weights!;
+    const bias = this.model!.bias!;
+    const logits = new Array(numClasses).fill(0);
+
+    for (let c = 0; c < numClasses; c++) {
+      let z = bias[c] || 0;
+      const wRow = weights[c];
+      if (wRow) {
+        for (const [fIdx, val] of entries) {
+          z += (wRow[fIdx] || 0) * val;
+        }
+      }
+      logits[c] = z;
+    }
+
+    const maxLogit = Math.max(...logits);
+    let sumExp = 0;
+    const exps = new Array(numClasses);
+    for (let c = 0; c < numClasses; c++) {
+      exps[c] = Math.exp(logits[c] - maxLogit);
+      sumExp += exps[c];
+    }
+
+    const probs = exps.map(e => (sumExp > 0 ? e / sumExp : 1 / numClasses));
+
+    let bestIdx = 0;
+    let bestProb = -1;
+    for (let i = 0; i < probs.length; i++) {
+      if (probs[i] > bestProb) {
+        bestProb = probs[i];
+        bestIdx = i;
+      }
+    }
+
+    const tokenWeights: Array<{ token: string; weight: number }> = [];
+    const wRow = weights[bestIdx];
+    if (wRow) {
+      for (const [fIdx, val] of entries) {
+        const token = this.model!.vocabulary[fIdx];
+        const w = (wRow[fIdx] || 0) * val;
+        if (w > 0.005) {
+          tokenWeights.push({ token, weight: parseFloat(w.toFixed(3)) });
+        }
+      }
+    }
+    tokenWeights.sort((a, b) => b.weight - a.weight);
+
+    const sortedProbs = [...probs].sort((a, b) => b - a);
+    const confidence = parseFloat((sortedProbs[0] - (sortedProbs[1] || 0)).toFixed(3));
+
+    return { probs, bestIdx, confidence, tokenWeights };
+  }
+
+  /**
+   * Evaluates text through the primary trained ML engine (branching on primaryClassifier).
    */
   public predict(input: {
     subject: string;
@@ -310,6 +478,7 @@ export class MachineLearningClassifier {
     probabilities: Record<EmailClassification, number>;
     confidence: number;
     topFeatures: Array<{ token: string; weight: number }>;
+    activeClassifier: 'logistic_regression' | 'centroid_cosine';
   } {
     const defaultProbs: Record<EmailClassification, number> = {
       Legitimate: 0.2,
@@ -319,12 +488,13 @@ export class MachineLearningClassifier {
       'Fraud-related': 0.2
     };
 
-    if (!this.model || !this.model.vocabMap || !this.model.centroids) {
+    if (!this.model || !this.model.vocabMap) {
       return {
         predictedClass: 'Suspicious',
         probabilities: defaultProbs,
         confidence: 0.5,
-        topFeatures: []
+        topFeatures: [],
+        activeClassifier: 'centroid_cosine'
       };
     }
 
@@ -351,39 +521,12 @@ export class MachineLearningClassifier {
       e[1] /= norm;
     }
 
-    const numClasses = CLASS_NAMES.length;
-    const similarities = new Array(numClasses).fill(0);
+    const primary = this.model.primaryClassifier || this.model.metadata?.primaryClassifier || 'centroid_cosine';
+    const scoreResult = primary === 'logistic_regression' && this.model.weights && this.model.bias
+      ? this.scoreLogisticRegression(entries)
+      : this.scoreCentroidCosine(entries);
 
-    for (let c = 0; c < numClasses; c++) {
-      let dot = 0;
-      const centroidRow = this.model.centroids[c];
-      if (centroidRow) {
-        for (const [fIdx, val] of entries) {
-          dot += (centroidRow[fIdx] || 0) * val;
-        }
-      }
-      similarities[c] = dot;
-    }
-
-    const temperature = this.model.temperature || 12.0;
-    const maxSim = Math.max(...similarities);
-    let sumExp = 0;
-    const exps = new Array(numClasses);
-    for (let c = 0; c < numClasses; c++) {
-      exps[c] = Math.exp(temperature * (similarities[c] - maxSim));
-      sumExp += exps[c];
-    }
-
-    const probs = exps.map(e => (sumExp > 0 ? e / sumExp : 1 / numClasses));
-
-    let bestIdx = 0;
-    let bestProb = -1;
-    for (let i = 0; i < probs.length; i++) {
-      if (probs[i] > bestProb) {
-        bestProb = probs[i];
-        bestIdx = i;
-      }
-    }
+    const { probs, bestIdx, confidence, tokenWeights } = scoreResult;
 
     const predictedClass = CLASS_NAMES[bestIdx] || 'Suspicious';
     const resultProbs: Record<EmailClassification, number> = {
@@ -394,27 +537,12 @@ export class MachineLearningClassifier {
       'Fraud-related': parseFloat(probs[4].toFixed(4))
     };
 
-    const tokenWeights: Array<{ token: string; weight: number }> = [];
-    const centroidRow = this.model.centroids[bestIdx];
-    if (centroidRow) {
-      for (const [fIdx, val] of entries) {
-        const token = this.model.vocabulary[fIdx];
-        const w = (centroidRow[fIdx] || 0) * val;
-        if (w > 0.005) {
-          tokenWeights.push({ token, weight: parseFloat(w.toFixed(3)) });
-        }
-      }
-    }
-    tokenWeights.sort((a, b) => b.weight - a.weight);
-
-    const sortedProbs = [...probs].sort((a, b) => b - a);
-    const confidence = parseFloat((sortedProbs[0] - (sortedProbs[1] || 0)).toFixed(3));
-
     return {
       predictedClass,
       probabilities: resultProbs,
       confidence: Math.max(0.1, confidence),
-      topFeatures: tokenWeights.slice(0, 8)
+      topFeatures: tokenWeights.slice(0, 8),
+      activeClassifier: primary
     };
   }
 }
@@ -723,7 +851,8 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     heuristics,
     topVectors,
     infrastructureBreakdown,
-    attribution
+    attribution,
+    activeClassifier: mlOutput.activeClassifier
   };
 }
 
@@ -733,6 +862,7 @@ export interface LayeredClassificationResult extends ClassificationResult {
     probabilities: Record<EmailClassification, number>;
     confidence: number;
     topFeatures: Array<{ token: string; weight: number }>;
+    activeClassifier?: 'logistic_regression' | 'centroid_cosine';
   };
   semantic_similarity: SemanticSimilarityResult;
   llm_linguistic_forensics: LinguisticForensicsResult;
@@ -881,11 +1011,12 @@ export async function classifyEmailContent(input: ClassifierInput): Promise<Laye
   // Tag Semantic similarity finding if strong cluster match observed
   if (semanticSim.status === 'AVAILABLE' && semanticSim.topSimilarity >= 0.75 && semanticSim.nearestClass && semanticSim.nearestClass !== 'Legitimate') {
     if (!updatedHeuristics.some(h => h.id === 'h-semantic-cluster')) {
+      const modelLabel = semanticSim.details?.model || 'semantic embedding model';
       updatedHeuristics.push({
         id: 'h-semantic-cluster',
         title: `Semantic Pattern Match: ${semanticSim.details?.nearestTemplateTitle || semanticSim.nearestClass}`,
         severity: semanticSim.topSimilarity >= 0.85 ? 'HIGH' : 'MEDIUM',
-        description: `Cosine similarity ${(semanticSim.topSimilarity * 100).toFixed(1)}% to canonical ${semanticSim.nearestClass} pattern via Gemini text-embedding-004.`,
+        description: `Cosine similarity ${(semanticSim.topSimilarity * 100).toFixed(1)}% to canonical ${semanticSim.nearestClass} pattern via ${modelLabel}.`,
         triggered: true
       });
     }
@@ -919,7 +1050,8 @@ export async function classifyEmailContent(input: ClassifierInput): Promise<Laye
     predictedClass: baseResult.predictedClass,
     probabilities: baseResult.probabilities,
     confidence: baseResult.confidence,
-    topFeatures: baseResult.topFeatures
+    topFeatures: baseResult.topFeatures,
+    activeClassifier: baseResult.activeClassifier || 'centroid_cosine'
   };
 
   let finalClass = baseResult.predictedClass;

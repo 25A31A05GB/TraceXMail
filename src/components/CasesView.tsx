@@ -31,6 +31,7 @@ import { SAMPLE_ANALYSES } from '../data/samples';
 import { useWebSocketAlerts } from '../hooks/useWebSocketAlerts';
 import { mapBackendCaseToAnalysis } from '../utils/parser';
 import { getStandardizedVerdict } from '../utils/verdict';
+import { UserRole } from '../hooks/useSession';
 
 interface CasesViewProps {
   onSelectAnalysis: (analysis: EmailAnalysis) => void;
@@ -39,6 +40,7 @@ interface CasesViewProps {
   refreshSignal?: number;
   showDemoCases?: boolean;
   onToggleDemoCases?: () => void;
+  role?: UserRole;
 }
 
 export function CasesView({ 
@@ -47,15 +49,17 @@ export function CasesView({
   onOpenNewModal, 
   refreshSignal,
   showDemoCases = false,
-  onToggleDemoCases
+  onToggleDemoCases,
+  role = 'analyst'
 }: CasesViewProps) {
+  const isReadOnly = role === 'read_only';
   const [cases, setCases] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [severityFilter, setSeverityFilter] = useState<string>('ALL');
   const [sourceFilter, setSourceFilter] = useState<string>('ALL');
-  const [maskPii, setMaskPii] = useState<boolean>(false);
+  const [maskPii, setMaskPii] = useState<boolean>(isReadOnly);
 
   // Create Case Modal State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
@@ -395,6 +399,19 @@ export function CasesView({
     }
   };
 
+  const handleUpdateAnalystVerdict = async (newVerdict: string) => {
+    if (!selectedCaseDetail) return;
+    try {
+      const updated = await forensicApi.updateCase(selectedCaseDetail.id, { analyst_verdict: newVerdict });
+      setSelectedCaseDetail((prev: any) => ({ ...prev, ...updated, analyst_verdict: newVerdict }));
+      setCases(prev => prev.map(c => (c.id === selectedCaseDetail.id ? { ...c, ...updated, analyst_verdict: newVerdict } : c)));
+    } catch (err) {
+      console.warn('Fallback updating analyst verdict locally:', err);
+      setSelectedCaseDetail((prev: any) => ({ ...prev, analyst_verdict: newVerdict }));
+      setCases(prev => prev.map(c => (c.id === selectedCaseDetail.id ? { ...c, analyst_verdict: newVerdict } : c)));
+    }
+  };
+
   const handleAddSuggestedMember = async (memberId: string) => {
     if (!selectedCaseDetail) return;
     setAddingMemberLoading(memberId);
@@ -480,20 +497,29 @@ export function CasesView({
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
-          <button
-            onClick={handleOpenCreateModal}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer shadow-md transition-colors"
-          >
-            <FolderPlus className="w-4 h-4" />
-            Create Case
-          </button>
-          <button
-            onClick={onOpenNewModal}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer shadow-md transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Ingest New Email
-          </button>
+          {!isReadOnly && (
+            <>
+              <button
+                onClick={handleOpenCreateModal}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer shadow-md transition-colors"
+              >
+                <FolderPlus className="w-4 h-4" />
+                Create Case
+              </button>
+              <button
+                onClick={onOpenNewModal}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg flex items-center gap-2 cursor-pointer shadow-md transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Ingest New Email
+              </button>
+            </>
+          )}
+          {isReadOnly && (
+            <span className="font-mono text-[11px] px-2.5 py-1.5 rounded-lg bg-[#7d8794]/20 text-[#7d8794] border border-[#7d8794]/30 flex items-center gap-1.5">
+              <span>🔒</span> Read-Only Enclave
+            </span>
+          )}
         </div>
       </div>
 
@@ -1081,7 +1107,7 @@ export function CasesView({
                   <select
                     value={(selectedCaseDetail.status || 'open').toLowerCase()}
                     onChange={(e) => handleUpdateStatus(e.target.value)}
-                    disabled={isUpdatingStatus}
+                    disabled={isUpdatingStatus || isReadOnly}
                     className="w-full bg-slate-900 border border-slate-700 text-slate-200 rounded px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-blue-500"
                   >
                     <option value="open">Open</option>
@@ -1109,6 +1135,47 @@ export function CasesView({
                   <span className="inline-block px-2.5 py-1.5 bg-slate-900 border border-slate-700 text-slate-200 rounded text-xs font-semibold">
                     {selectedCaseDetail.members?.length || selectedCaseDetail.email_ids?.length || 1} emails linked
                   </span>
+                </div>
+              </div>
+
+              {/* C4 Analyst Feedback Loop: Ground-Truth Verdict Override & Discrepancy Calibration */}
+              <div className="bg-slate-950/80 border border-slate-800/80 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-200 flex items-center gap-1.5">
+                    <FlaskConical className="w-3.5 h-3.5 text-violet-400" />
+                    Analyst Verdict & Model Feedback Loop (C4)
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-violet-950/60 border border-violet-700/50 text-violet-300 font-mono">
+                    Retrain Sync Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-2.5 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Model Initial Prediction</div>
+                    <div className="font-bold text-slate-200 flex items-center justify-between">
+                      <span>{selectedCaseDetail.threat_verdict || selectedCaseDetail.category || 'MALICIOUS / PHISHING'}</span>
+                      <span className="text-[11px] font-mono text-slate-400">
+                        {((selectedCaseDetail.ml_confidence || selectedCaseDetail.confidence || 0.88) * 100).toFixed(1)}% conf
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-900/60 rounded-lg border border-slate-800">
+                    <div className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Analyst Final Verdict</div>
+                    <select
+                      value={selectedCaseDetail.analyst_verdict || 'Phishing'}
+                      onChange={(e) => handleUpdateAnalystVerdict(e.target.value)}
+                      disabled={isReadOnly}
+                      className="w-full bg-slate-950 border border-slate-700 text-slate-200 rounded px-2 py-1 text-xs font-bold focus:outline-none focus:border-violet-500"
+                    >
+                      <option value="Phishing">Phishing (Credential / Malicious)</option>
+                      <option value="Fraud-related">Fraud-related (BEC / Wire / Invoice)</option>
+                      <option value="Impersonated">Impersonated (Brand / Executive)</option>
+                      <option value="Suspicious">Suspicious (Unverified / Anomalous)</option>
+                      <option value="Legitimate">Legitimate (Clean / False Positive)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

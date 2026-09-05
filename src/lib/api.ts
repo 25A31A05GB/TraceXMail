@@ -411,8 +411,28 @@ export const forensicApi = {
     return res.data;
   },
 
-  updateCase: async (caseId: string, updates: { status?: string; notes?: string; analyst_notes?: string; severity?: string; tags?: string[] }): Promise<CaseItem> => {
+  updateCase: async (caseId: string, updates: { status?: string; notes?: string; analyst_notes?: string; severity?: string; tags?: string[]; analyst_verdict?: string }): Promise<CaseItem> => {
     const res = await apiClient.patch<CaseItem>(`/cases/${caseId}`, updates);
+    return res.data;
+  },
+
+  closeCase: async (caseId: string, payload: { analyst_verdict?: string; analyst_notes?: string; close_reason?: string; resolution_type?: string }): Promise<any> => {
+    const res = await apiClient.post(`/cases/${caseId}/close`, payload);
+    return res.data;
+  },
+
+  getCorrections: async (params?: { status?: string; case_id?: string }): Promise<any[]> => {
+    const res = await apiClient.get<any[]>('/corrections', { params });
+    return res.data;
+  },
+
+  updateCorrection: async (correctionId: string, updates: { status?: string; review_notes?: string; analyst_verdict?: string }): Promise<any> => {
+    const res = await apiClient.patch(`/corrections/${correctionId}`, updates);
+    return res.data;
+  },
+
+  createCorrection: async (correctionData: any): Promise<any> => {
+    const res = await apiClient.post('/corrections', correctionData);
     return res.data;
   },
 

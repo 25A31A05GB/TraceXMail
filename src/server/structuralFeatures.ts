@@ -370,14 +370,20 @@ export function extractForensicTokens(input: {
     typosquatting?: { is_typosquat?: boolean; target_brand?: string };
   };
   hops?: Array<{ isTor?: boolean; is_tor?: boolean; abuseScore?: number }>;
+  options?: {
+    includeCharNgrams?: boolean;
+  };
 }): string[] {
   const subject = input.subject || '';
   const body = input.bodyText || input.text || '';
   const from = input.from || '';
   const fromDomain = (input.fromDomain || extractDomain(from)).toLowerCase();
+  const includeCharNgrams = input.options?.includeCharNgrams ?? true;
 
   const combined = `${subject} ${subject} ${from} ${fromDomain} ${body.slice(0, 4000)}`;
-  const normalized = combined
+  // Strip zero-width & invisible format characters used in bypass attacks (e.g. \u200B-\u200D, \uFEFF, \u00AD, \u2060)
+  const cleanZeroWidth = combined.replace(/[\u200B-\u200D\uFEFF\u00AD\u2060]/g, '');
+  const normalized = cleanZeroWidth
     .toLowerCase()
     .replace(/https?:\/\/[^\s]+/g, ' url_token ')
     .replace(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g, ' ip_token ')
@@ -391,6 +397,60 @@ export function extractForensicTokens(input: {
   // Word bigrams for syntactic pattern detection
   for (let i = 0; i < words.length - 1; i++) {
     tokens.push(`${words[i]}_${words[i + 1]}`);
+  }
+
+  // Character 3-gram and 4-gram features (Phase C1: catch obfuscations, homoglyphs & spaced words)
+  if (includeCharNgrams) {
+    const seenCharNgrams = new Set<string>();
+    for (const word of words) {
+      if (word === 'url_token' || word === 'ip_token') continue;
+      // 3-grams
+      if (word.length >= 3) {
+        for (let i = 0; i <= word.length - 3; i++) {
+          const g3 = `__c3_${word.slice(i, i + 3)}`;
+          if (!seenCharNgrams.has(g3)) {
+            seenCharNgrams.add(g3);
+            tokens.push(g3);
+          }
+        }
+      }
+      // 4-grams
+      if (word.length >= 4) {
+        for (let i = 0; i <= word.length - 4; i++) {
+          const g4 = `__c4_${word.slice(i, i + 4)}`;
+          if (!seenCharNgrams.has(g4)) {
+            seenCharNgrams.add(g4);
+            tokens.push(g4);
+          }
+        }
+      }
+    }
+
+    // Catch space-obfuscated words (e.g. 'c l i c k' -> 'click', 'p a y p a l' -> 'paypal')
+    const singleLetterSeqMatch = normalized.match(/\b(?:[a-z0-9]\s+){2,}[a-z0-9]\b/g);
+    if (singleLetterSeqMatch) {
+      for (const seq of singleLetterSeqMatch) {
+        const collapsed = seq.replace(/\s+/g, '');
+        if (collapsed.length >= 3) {
+          for (let i = 0; i <= collapsed.length - 3; i++) {
+            const g3 = `__c3_${collapsed.slice(i, i + 3)}`;
+            if (!seenCharNgrams.has(g3)) {
+              seenCharNgrams.add(g3);
+              tokens.push(g3);
+            }
+          }
+        }
+        if (collapsed.length >= 4) {
+          for (let i = 0; i <= collapsed.length - 4; i++) {
+            const g4 = `__c4_${collapsed.slice(i, i + 4)}`;
+            if (!seenCharNgrams.has(g4)) {
+              seenCharNgrams.add(g4);
+              tokens.push(g4);
+            }
+          }
+        }
+      }
+    }
   }
 
   // Evaluate and inject structural identity features

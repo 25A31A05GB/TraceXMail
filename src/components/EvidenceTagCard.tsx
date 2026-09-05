@@ -232,7 +232,9 @@ export function mapAnalysisToEvidenceCardData(analysis: EmailAnalysis): Evidence
     },
     findings,
     score: {
-      label: '5-Class Nearest Centroid Classifier',
+      label: analysis.activeClassifier === 'logistic_regression'
+        ? '5-Class Softmax Logistic Regression'
+        : '5-Class Centroid-Cosine Classifier',
       percent: mlPercentNum,
       resultText: mlPercentText,
       resultLabel: mlResultLabel,

@@ -82,12 +82,14 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
     (hasScore ? (score >= 70 ? 'MALICIOUS PHISH' : score >= 35 ? 'SUSPICIOUS' : 'LEGITIMATE') : 'UNVERIFIED')
   ).toUpperCase();
 
-  // 3. Categorize into MALICIOUS, SUSPICIOUS, or SAFE
+  // 3. Categorize into MALICIOUS, SUSPICIOUS, UNCERTAIN, or SAFE
+  const isUncertain = rawVerdict.includes('UNCERTAIN');
   // If score is verified low (<35/100), composite risk takes precedence over text-only ML labels
-  const isScoreLow = hasScore && score < 35;
+  const isScoreLow = hasScore && score < 35 && !isUncertain;
 
   const isMalicious =
     !isScoreLow &&
+    !isUncertain &&
     (rawVerdict.includes('PHISH') ||
     rawVerdict.includes('FRAUD') ||
     rawVerdict.includes('MALICIOUS') ||
@@ -98,6 +100,7 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
     isScoreLow ||
     ((rawVerdict.includes('LEGIT') || rawVerdict.includes('CLEAN') || rawVerdict.includes('PASS') || rawVerdict.includes('SAFE')) &&
     !isMalicious &&
+    !isUncertain &&
     (!hasScore || score < 35));
 
   const isSuspicious = !isClean && !isMalicious;
@@ -111,7 +114,9 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
 
   // 4. Primary standardized display verdict
   let verdict = isScoreLow ? 'LEGITIMATE' : (analysis?.threatVerdict || analysis?.verdict || analysis?.classification);
-  if (!verdict || (isScoreLow && (verdict.includes('PHISH') || verdict.includes('MALICIOUS')))) {
+  if (isUncertain) {
+    verdict = 'UNCERTAIN';
+  } else if (!verdict || (isScoreLow && (verdict.includes('PHISH') || verdict.includes('MALICIOUS')))) {
     verdict = isMalicious ? 'MALICIOUS PHISH' : isSuspicious ? 'SUSPICIOUS' : 'LEGITIMATE';
   }
 
@@ -119,7 +124,10 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
   let severity: SeverityLevel;
   let severityLabel: string;
 
-  if (score >= 80 || (isMalicious && score >= 70)) {
+  if (isUncertain) {
+    severity = 'MEDIUM';
+    severityLabel = 'UNCERTAIN MARGIN - SOC REVIEW REQUIRED';
+  } else if (score >= 80 || (isMalicious && score >= 70)) {
     severity = 'CRITICAL';
     severityLabel = 'CRITICAL EXPOSURE';
   } else if (score >= 60 || isMalicious) {
@@ -135,7 +143,17 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
 
   // 6. Consistent Color Palettes
   let colors: StandardizedVerdict['colors'];
-  if (severity === 'CRITICAL' || category === 'MALICIOUS') {
+  if (isUncertain) {
+    colors = {
+      text: 'text-purple-300',
+      bg: 'bg-purple-950/80',
+      bgMuted: 'bg-purple-500/10',
+      border: 'border-purple-700/60',
+      borderMuted: 'border-purple-500/20',
+      bar: 'bg-purple-500',
+      badge: 'bg-purple-950/80 text-purple-300 border-purple-700/60'
+    };
+  } else if (severity === 'CRITICAL' || category === 'MALICIOUS') {
     colors = {
       text: 'text-rose-400',
       bg: 'bg-rose-950/80',
@@ -181,7 +199,10 @@ export function getStandardizedVerdict(analysis?: Partial<EmailAnalysis> | null)
   let stampWord: string = 'PHISH';
   let stampStatus: 'bad' | 'warn' | 'good' = 'bad';
 
-  if (category === 'SAFE') {
+  if (isUncertain) {
+    stampWord = 'UNCERTAIN';
+    stampStatus = 'warn';
+  } else if (category === 'SAFE') {
     stampWord = 'LEGITIMATE';
     stampStatus = 'good';
   } else if (category === 'SUSPICIOUS') {

@@ -268,6 +268,19 @@ export interface EmailAnalysis {
   classification?: string;
   probabilities?: Record<string, number>;
   phishingProbability?: number;
+  activeClassifier?: 'logistic_regression' | 'centroid_cosine';
+  semantic_similarity?: {
+    status: 'AVAILABLE' | 'UNAVAILABLE';
+    topSimilarity: number;
+    nearestClass?: string;
+    details?: {
+      provider?: string;
+      model?: string;
+      dimension?: number;
+      fallbackUsed?: boolean;
+      nearestTemplateTitle?: string;
+    };
+  };
   rawHeaders?: string;
   authResults?: AuthResults;
   heuristicSignals?: HeuristicSignal[];
@@ -448,4 +461,38 @@ export interface EvidenceCardData {
     senderBaselineAnomaly?: any;
   };
 }
+
+export type CorrectionStatus = 'pending_review' | 'approved' | 'rejected';
+
+export interface ClassifierCorrection {
+  id: string;
+  case_id: string;
+  original_analysis_id?: string;
+  subject: string;
+  from: string;
+  from_domain: string;
+  body_snippet: string;
+  model_prediction: string;
+  model_confidence: number;
+  model_threat_score: number;
+  analyst_verdict: string;
+  analyst_notes: string;
+  analyst_id: string;
+  analyst_email: string;
+  organization_id?: string;
+  status: CorrectionStatus;
+  created_at: string;
+  reviewed_at?: string;
+  reviewed_by?: string;
+  review_notes?: string;
+}
+
+export interface CaseClosurePayload {
+  status?: string;
+  analyst_verdict?: string;
+  analyst_notes?: string;
+  close_reason?: string;
+  resolution_type?: string;
+}
+
 

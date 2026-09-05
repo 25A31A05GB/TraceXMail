@@ -1,8 +1,165 @@
 {
-  "schema_version": "2.4.0",
+  "schema_version": "2.5.0",
   "feature_schema_version": "1.3.0",
+  "primary_classifier": "centroid_cosine",
+  "classifier_comparison": {
+    "centroid_cosine": {
+      "accuracy": 0.8851,
+      "macro_f1": 0.8994,
+      "weighted_f1": 0.8842,
+      "brier_score": 0.2921,
+      "ece": 0.2868,
+      "confusion_matrix": [
+        [
+          19,
+          2,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          6,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          0,
+          0
+        ],
+        [
+          5,
+          0,
+          3,
+          25,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          6
+        ]
+      ],
+      "per_class_metrics": {
+        "Legitimate": {
+          "precision": 0.7917,
+          "recall": 0.9048,
+          "f1": 0.8445,
+          "support": 21
+        },
+        "Suspicious": {
+          "precision": 0.75,
+          "recall": 1,
+          "f1": 0.8571,
+          "support": 6
+        },
+        "Impersonated": {
+          "precision": 0.875,
+          "recall": 1,
+          "f1": 0.9333,
+          "support": 21
+        },
+        "Phishing": {
+          "precision": 1,
+          "recall": 0.7576,
+          "f1": 0.8621,
+          "support": 33
+        },
+        "Fraud-related": {
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "support": 6
+        }
+      }
+    },
+    "logistic_regression": {
+      "accuracy": 0.8851,
+      "macro_f1": 0.6938,
+      "weighted_f1": 0.8504,
+      "brier_score": 0.2084,
+      "ece": 0.109,
+      "confusion_matrix": [
+        [
+          21,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          4,
+          0,
+          0,
+          2,
+          0
+        ],
+        [
+          0,
+          0,
+          21,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          32,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          2,
+          3
+        ]
+      ],
+      "per_class_metrics": {
+        "Legitimate": {
+          "precision": 0.7778,
+          "recall": 1,
+          "f1": 0.875,
+          "support": 21
+        },
+        "Suspicious": {
+          "precision": 0,
+          "recall": 0,
+          "f1": 0,
+          "support": 6
+        },
+        "Impersonated": {
+          "precision": 1,
+          "recall": 1,
+          "f1": 1,
+          "support": 21
+        },
+        "Phishing": {
+          "precision": 0.8889,
+          "recall": 0.9697,
+          "f1": 0.9275,
+          "support": 33
+        },
+        "Fraud-related": {
+          "precision": 1,
+          "recall": 0.5,
+          "f1": 0.6667,
+          "support": 6
+        }
+      }
+    },
+    "winner": "centroid_cosine",
+    "promotion_reason": "Logistic Regression did not strictly exceed Centroid-Cosine Macro-F1 (69.38% vs 89.94%). Centroid-Cosine retained as primary classifier; Logistic Regression weights retained for secondary head."
+  },
   "metadata": {
-    "generated_at": "2026-09-05T14:25:38.090Z",
+    "generated_at": "2026-09-05T19:47:14.747Z",
     "corpus_path": "/app/applet/data/datasets/real_corpus.json",
     "total_samples": 433,
     "train_samples": 346,
@@ -21,23 +178,43 @@
   "cross_validation_stability": {
     "k_folds": 5,
     "fold_accuracies": [
-      0.9767,
-      0.8851,
       0.9302,
-      0.9655,
-      0.908
+      0.8506,
+      0.8721,
+      0.931,
+      0.8391
     ],
-    "mean_accuracy": 0.9331,
-    "std_accuracy": 0.0343,
+    "mean_accuracy": 0.8846,
+    "std_accuracy": 0.039,
     "fold_macro_f1s": [
-      0.9692,
-      0.8556,
-      0.9398,
-      0.9768,
-      0.9059
+      0.9147,
+      0.815,
+      0.8611,
+      0.9206,
+      0.8291
     ],
-    "mean_macro_f1": 0.9295,
-    "std_macro_f1": 0.0446
+    "mean_macro_f1": 0.8681,
+    "std_macro_f1": 0.0432,
+    "logistic_regression": {
+      "fold_accuracies": [
+        0.8721,
+        0.8621,
+        0.8953,
+        0.8851,
+        0.8046
+      ],
+      "mean_accuracy": 0.8638,
+      "std_accuracy": 0.0317,
+      "fold_macro_f1s": [
+        0.6144,
+        0.7003,
+        0.7186,
+        0.7155,
+        0.6371
+      ],
+      "mean_macro_f1": 0.6772,
+      "std_macro_f1": 0.043
+    }
   },
   "baseline_model": {
     "total_samples": 87,
@@ -50,16 +227,16 @@
   },
   "enhanced_model": {
     "total_samples": 87,
-    "accuracy": 0.9195,
+    "accuracy": 0.8851,
     "majority_baseline": 0.3793,
-    "macro_precision": 0.9068,
-    "macro_recall": 0.9541,
-    "macro_f1": 0.9241,
-    "weighted_f1": 0.9193,
+    "macro_precision": 0.8833,
+    "macro_recall": 0.9325,
+    "macro_f1": 0.8994,
+    "weighted_f1": 0.8842,
     "confusion_matrix": [
       [
-        20,
-        1,
+        19,
+        2,
         0,
         0,
         0
@@ -79,10 +256,10 @@
         0
       ],
       [
-        2,
-        1,
+        5,
+        0,
         3,
-        27,
+        25,
         0
       ],
       [
@@ -95,9 +272,9 @@
     ],
     "per_class_metrics": {
       "Legitimate": {
-        "precision": 0.9091,
-        "recall": 0.9524,
-        "f1": 0.9302,
+        "precision": 0.7917,
+        "recall": 0.9048,
+        "f1": 0.8445,
         "support": 21
       },
       "Suspicious": {
@@ -114,8 +291,8 @@
       },
       "Phishing": {
         "precision": 1,
-        "recall": 0.8182,
-        "f1": 0.9,
+        "recall": 0.7576,
+        "f1": 0.8621,
         "support": 33
       },
       "Fraud-related": {
@@ -127,8 +304,8 @@
     }
   },
   "calibration_metrics": {
-    "brier_score": 0.2435,
-    "expected_calibration_error": 0.2609,
+    "brier_score": 0.2921,
+    "expected_calibration_error": 0.2868,
     "temperature": 12,
     "calibration_method": "Temperature-Scaled Softmax with L2-normalized Centroids",
     "reliability_curve": [
@@ -152,65 +329,65 @@
         "bin_lower": 0.2,
         "bin_upper": 0.3,
         "sample_count": 3,
-        "mean_predicted_confidence": 0.2788,
-        "empirical_accuracy": 0.6667,
-        "calibration_gap": 0.3879
+        "mean_predicted_confidence": 0.2696,
+        "empirical_accuracy": 0,
+        "calibration_gap": 0.2696
       },
       {
         "bin_lower": 0.3,
         "bin_upper": 0.4,
-        "sample_count": 8,
-        "mean_predicted_confidence": 0.3543,
-        "empirical_accuracy": 0.5,
-        "calibration_gap": 0.1457
+        "sample_count": 14,
+        "mean_predicted_confidence": 0.3489,
+        "empirical_accuracy": 0.6429,
+        "calibration_gap": 0.294
       },
       {
         "bin_lower": 0.4,
         "bin_upper": 0.5,
-        "sample_count": 11,
-        "mean_predicted_confidence": 0.4666,
-        "empirical_accuracy": 0.9091,
-        "calibration_gap": 0.4425
+        "sample_count": 16,
+        "mean_predicted_confidence": 0.4574,
+        "empirical_accuracy": 0.9375,
+        "calibration_gap": 0.4801
       },
       {
         "bin_lower": 0.5,
         "bin_upper": 0.6,
-        "sample_count": 20,
-        "mean_predicted_confidence": 0.545,
-        "empirical_accuracy": 0.95,
-        "calibration_gap": 0.405
+        "sample_count": 18,
+        "mean_predicted_confidence": 0.5573,
+        "empirical_accuracy": 0.9444,
+        "calibration_gap": 0.3871
       },
       {
         "bin_lower": 0.6,
         "bin_upper": 0.7,
-        "sample_count": 14,
-        "mean_predicted_confidence": 0.6231,
+        "sample_count": 9,
+        "mean_predicted_confidence": 0.6343,
         "empirical_accuracy": 1,
-        "calibration_gap": 0.3769
+        "calibration_gap": 0.3657
       },
       {
         "bin_lower": 0.7,
         "bin_upper": 0.8,
-        "sample_count": 3,
-        "mean_predicted_confidence": 0.7461,
+        "sample_count": 6,
+        "mean_predicted_confidence": 0.7358,
         "empirical_accuracy": 1,
-        "calibration_gap": 0.2539
+        "calibration_gap": 0.2642
       },
       {
         "bin_lower": 0.8,
         "bin_upper": 0.9,
-        "sample_count": 5,
-        "mean_predicted_confidence": 0.8499,
+        "sample_count": 1,
+        "mean_predicted_confidence": 0.8566,
         "empirical_accuracy": 1,
-        "calibration_gap": 0.1501
+        "calibration_gap": 0.1434
       },
       {
         "bin_lower": 0.9,
         "bin_upper": 1,
-        "sample_count": 23,
-        "mean_predicted_confidence": 0.9734,
+        "sample_count": 20,
+        "mean_predicted_confidence": 0.982,
         "empirical_accuracy": 1,
-        "calibration_gap": 0.0266
+        "calibration_gap": 0.018
       }
     ]
   },
@@ -238,7 +415,7 @@
     "bias": -0.9219,
     "decision_threshold": 0.5,
     "metrics": {
-      "trainedAt": "2026-09-05T14:25:37.706Z",
+      "trainedAt": "2026-09-05T19:47:14.180Z",
       "sampleCount": 433,
       "accuracy": 0.8868,
       "precision": 0.3623,
@@ -257,33 +434,33 @@
     "source_module": "src/server/metaClassifier.ts",
     "features_stacked": 20,
     "coefficients": {
-      "mlProbLegitimate": -0.5324,
-      "mlProbSuspicious": -0.087,
-      "mlProbImpersonated": 0.4849,
-      "mlProbPhishing": 0.2743,
-      "mlProbFraud": 0.1646,
-      "mlConfidence": 0.2558,
-      "authSpfFail": 0.6633,
-      "authDkimFail": 0.8568,
-      "authDmarcFail": 0.6633,
-      "domainAgeRisk": 0.6854,
-      "domainTyposquatRisk": 0.5805,
-      "identityLookalikeDomain": 0.5805,
-      "identityDisplayMismatch": 0.5805,
+      "mlProbLegitimate": -0.4646,
+      "mlProbSuspicious": -0.0975,
+      "mlProbImpersonated": 0.4826,
+      "mlProbPhishing": 0.2443,
+      "mlProbFraud": 0.1429,
+      "mlConfidence": 0.3203,
+      "authSpfFail": 0.6691,
+      "authDkimFail": 0.8634,
+      "authDmarcFail": 0.6691,
+      "domainAgeRisk": 0.6907,
+      "domainTyposquatRisk": 0.5737,
+      "identityLookalikeDomain": 0.5737,
+      "identityDisplayMismatch": 0.5737,
       "identityReplyToMismatch": 0,
       "infraTorOrAbuse": 0,
       "finDollarAmountPresent": 0,
       "finRoutingOrIbanPresent": 0,
-      "becLearnedRiskScore": 0.1838,
-      "semanticSimilarityScore": 0.9501,
-      "heuristicRuleScore": 0.8093
+      "becLearnedRiskScore": 0.1845,
+      "semanticSimilarityScore": 0.9563,
+      "heuristicRuleScore": 0.815
     },
-    "intercept": -1.1354,
+    "intercept": -1.1362,
     "metrics": {
-      "trainedAt": "2026-09-05T14:25:38.065Z",
+      "trainedAt": "2026-09-05T19:47:14.707Z",
       "sampleCount": 433,
-      "testAccuracy": 0.9353,
-      "brierScore": 0.0184,
+      "testAccuracy": 0.9376,
+      "brierScore": 0.0193,
       "aucRoc": 0.996,
       "rSquared": 0.948
     }
@@ -292,13 +469,13 @@
     "holdout_size": 60,
     "leakage_check_passed": true,
     "max_similarity_to_corpus": 0.74,
-    "overall_accuracy": 0.7,
-    "macro_f1": 0.6153,
+    "overall_accuracy": 0.5667,
+    "macro_f1": 0.515,
     "category_performance": {
       "paraphrased_phishing": {
         "total": 21,
-        "correct": 5,
-        "accuracy": 0.2381
+        "correct": 4,
+        "accuracy": 0.1905
       },
       "high_urgency_legitimate": {
         "total": 20,
@@ -307,13 +484,13 @@
       },
       "conversational_bec": {
         "total": 15,
-        "correct": 15,
-        "accuracy": 1
+        "correct": 9,
+        "accuracy": 0.6
       },
       "brand_impersonation_display": {
         "total": 4,
-        "correct": 3,
-        "accuracy": 0.75
+        "correct": 2,
+        "accuracy": 0.5
       }
     },
     "confusion_matrix": [
@@ -325,50 +502,50 @@
         1
       ],
       [
-        0,
-        5,
-        0,
-        0,
-        0
-      ],
-      [
         1,
+        4,
         0,
-        3,
         0,
         0
       ],
       [
-        9,
-        5,
+        2,
+        0,
         2,
         0,
         0
       ],
       [
+        12,
+        4,
         0,
         0,
+        0
+      ],
+      [
+        4,
+        2,
         0,
         0,
-        15
+        9
       ]
     ],
     "per_class_metrics": {
       "Legitimate": {
-        "precision": 0.6552,
+        "precision": 0.5,
         "recall": 0.95,
-        "f1": 0.7755,
+        "f1": 0.6552,
         "support": 20
       },
       "Suspicious": {
-        "precision": 0.5,
-        "recall": 1,
-        "f1": 0.6667,
+        "precision": 0.4,
+        "recall": 0.8,
+        "f1": 0.5333,
         "support": 5
       },
       "Impersonated": {
-        "precision": 0.6,
-        "recall": 0.75,
+        "precision": 1,
+        "recall": 0.5,
         "f1": 0.6667,
         "support": 4
       },
@@ -379,9 +556,9 @@
         "support": 16
       },
       "Fraud-related": {
-        "precision": 0.9375,
-        "recall": 1,
-        "f1": 0.9677,
+        "precision": 0.9,
+        "recall": 0.6,
+        "f1": 0.72,
         "support": 15
       }
     }
@@ -400,7 +577,7 @@
       "impersonated_recall_before": 0.724,
       "impersonated_recall_after": 1,
       "macro_f1_before": 0.858,
-      "macro_f1_after": 0.9241
+      "macro_f1_after": 0.8994
     }
   }
 }

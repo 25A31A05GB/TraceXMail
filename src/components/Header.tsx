@@ -25,6 +25,8 @@ import { subscribeSession, SessionUser } from '../lib/api';
 import { exportEvidenceAsPdf, exportEvidenceAsImage } from '../utils/exportEvidence';
 import { EvidenceTagCard } from './EvidenceTagCard';
 import { AuthModal } from './AuthModal';
+import { UserRole } from '../hooks/useSession';
+import { LogOut } from 'lucide-react';
 
 interface HeaderProps {
   currentAnalysis: EmailAnalysis;
@@ -35,6 +37,10 @@ interface HeaderProps {
   privacyConfig?: PrivacyConfig;
   showDemoCases?: boolean;
   onToggleDemoCases?: () => void;
+  role?: UserRole;
+  userLabel?: string;
+  onSignOut?: () => void;
+  onSwitchRole?: (newRole: UserRole) => void;
 }
 
 export function Header({
@@ -45,13 +51,18 @@ export function Header({
   onOpenPrivacyModal,
   privacyConfig,
   showDemoCases = false,
-  onToggleDemoCases
+  onToggleDemoCases,
+  role = 'analyst',
+  userLabel = 'SA',
+  onSignOut,
+  onSwitchRole
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingPng, setExportingPng] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
   useEffect(() => {
     return subscribeSession((sess) => {
@@ -196,30 +207,100 @@ export function Header({
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2.5">
-        {/* Active Authenticated Session Badge or Sign In Trigger */}
-        {sessionUser ? (
-          <button
-            onClick={() => setIsAuthModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-emerald-950/40 border-emerald-700/60 text-emerald-300 text-xs shadow-sm hover:bg-emerald-900/50 transition-colors cursor-pointer"
-            title={`Active Verified Session: ${sessionUser.email || 'analyst@acmedefense.sec'}\nRole: ${sessionUser.role || 'analyst'} (Supabase JWT)\nOrganization: ${sessionUser.organizationId}`}
+        {/* Role-Differentiated Clearance Badge & Avatar matching design */}
+        <div className="relative">
+          <div 
+            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+            className="flex items-center gap-2 px-2 py-1 rounded-lg hover:bg-[#171b24] transition-colors cursor-pointer border border-transparent hover:border-[#232833]"
+            title={`Clearance: ${role.toUpperCase()} | User: ${sessionUser?.email || userLabel}`}
           >
-            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-slate-400 font-sans text-[11px] hidden sm:inline">Identity:</span>
-            <span className="font-semibold text-emerald-300 font-sans truncate max-w-[130px]">
-              {sessionUser.email ? sessionUser.email.split('@')[0] : sessionUser.label || 'SOC Analyst'}
+            <span className={`font-mono text-[10.5px] px-2 py-0.5 rounded font-medium tracking-wide ${
+              role === 'admin'
+                ? 'bg-[#c9a227]/15 text-[#c9a227] border border-[#c9a227]/30'
+                : role === 'read_only'
+                  ? 'bg-[#7d8794]/20 text-[#7d8794] border border-[#7d8794]/30'
+                  : 'bg-[#5b8dd6]/15 text-[#5b8dd6] border border-[#5b8dd6]/30'
+            }`}>
+              {role === 'read_only' ? 'READ-ONLY' : role.toUpperCase()}
             </span>
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-          </button>
-        ) : (
-          <button
-            onClick={() => setIsAuthModalOpen(true)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-slate-800/90 hover:bg-slate-700 border-slate-700 hover:border-cyan-500/50 text-slate-300 text-xs font-medium shadow-sm transition-all cursor-pointer"
-            title="Sign in with Supabase Auth"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-slate-400" />
-            <span>Sign In</span>
-          </button>
-        )}
+            <div className="w-7 h-7 rounded-full bg-[#171b24] border border-[#232833] flex items-center justify-center text-[11px] font-mono text-[#e7ebf1] font-semibold select-none">
+              {userLabel}
+            </div>
+          </div>
+
+          {userDropdownOpen && (
+            <div className="absolute right-0 mt-1 w-60 bg-[#12151c] border border-[#232833] rounded-lg shadow-xl py-1.5 z-50 text-xs text-[#e7ebf1] animate-in fade-in zoom-in-95 duration-100 divide-y divide-[#232833]">
+              <div className="px-3 py-2 text-[11px] text-[#7d8794]">
+                <div className="font-mono text-[10px] uppercase text-[#4f5763]">Operator Identity</div>
+                <div className="truncate text-[#e7ebf1] font-medium mt-0.5">{sessionUser?.email || userLabel}</div>
+                <div className="font-mono text-[10px] text-[#5b8dd6] mt-0.5">Role: <span className="font-semibold uppercase text-[#e7ebf1]">{role}</span></div>
+              </div>
+
+              {/* Role Switcher */}
+              {onSwitchRole && (
+                <div className="px-2 py-1.5 space-y-1">
+                  <div className="px-1 text-[10px] font-mono text-[#7d8794] uppercase">Switch Enclave Role:</div>
+                  <div className="grid grid-cols-3 gap-1">
+                    <button
+                      onClick={() => {
+                        onSwitchRole('admin');
+                        setUserDropdownOpen(false);
+                      }}
+                      className={`px-1.5 py-1 text-[10px] font-mono rounded text-center transition-colors cursor-pointer ${
+                        role === 'admin' 
+                          ? 'bg-[#c9a227]/30 text-[#c9a227] font-bold border border-[#c9a227]/50' 
+                          : 'bg-[#1a1e27] text-[#7d8794] hover:text-[#e7ebf1]'
+                      }`}
+                    >
+                      ADMIN
+                    </button>
+                    <button
+                      onClick={() => {
+                        onSwitchRole('analyst');
+                        setUserDropdownOpen(false);
+                      }}
+                      className={`px-1.5 py-1 text-[10px] font-mono rounded text-center transition-colors cursor-pointer ${
+                        role === 'analyst' 
+                          ? 'bg-[#5b8dd6]/30 text-[#5b8dd6] font-bold border border-[#5b8dd6]/50' 
+                          : 'bg-[#1a1e27] text-[#7d8794] hover:text-[#e7ebf1]'
+                      }`}
+                    >
+                      ANALYST
+                    </button>
+                    <button
+                      onClick={() => {
+                        onSwitchRole('read_only');
+                        setUserDropdownOpen(false);
+                      }}
+                      className={`px-1.5 py-1 text-[10px] font-mono rounded text-center transition-colors cursor-pointer ${
+                        role === 'read_only' 
+                          ? 'bg-[#7d8794]/30 text-[#7d8794] font-bold border border-[#7d8794]/50' 
+                          : 'bg-[#1a1e27] text-[#7d8794] hover:text-[#e7ebf1]'
+                      }`}
+                    >
+                      AUDITOR
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {onSignOut && (
+                <div className="py-1">
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      onSignOut();
+                    }}
+                    className="w-full text-left px-3 py-1.5 text-[#c25a4a] hover:bg-[#c25a4a]/10 flex items-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign out of enclave</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {false && onToggleDemoCases && (
           <button

@@ -453,34 +453,61 @@ export function LandingView({
           </div>
 
           <div className="roles">
-            <div className="role admin">
-              <div className="role-label mono">CLEARANCE · ADMIN</div>
-              <h3 className="font-sans font-semibold text-[16.5px] text-[var(--paper)] mb-2.5">
-                Admin
+            <div className="role admin group hover:border-[var(--stamp)] transition-all">
+              <div className="role-label mono flex items-center justify-between">
+                <span>CLEARANCE · ADMIN</span>
+                <span className="text-[10px] text-[var(--stamp)] font-bold">FULL CONTROL</span>
+              </div>
+              <h3 className="font-display font-semibold text-[17px] text-[var(--paper)] mb-2.5">
+                SOC Commander / Admin
               </h3>
-              <p className="text-[var(--paper-dim)] text-[14px] leading-relaxed">
-                Manages the organization, invites the team, and sets who can see unmasked evidence.
+              <p className="text-[var(--paper-dim)] text-[14px] leading-relaxed mb-4">
+                Manages the organization, provisions operators, inspects raw telemetry, and controls unmasked evidence access.
               </p>
+              <button
+                onClick={onOpenConsole}
+                className="text-xs text-[var(--stamp)] font-mono font-medium hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0"
+              >
+                <span>Launch with Admin Clearance →</span>
+              </button>
             </div>
 
-            <div className="role">
-              <div className="role-label mono">CLEARANCE · ANALYST</div>
-              <h3 className="font-sans font-semibold text-[16.5px] text-[var(--paper)] mb-2.5">
-                Analyst
+            <div className="role group hover:border-[var(--slate)] transition-all">
+              <div className="role-label mono flex items-center justify-between">
+                <span>CLEARANCE · ANALYST</span>
+                <span className="text-[10px] text-[var(--slate)] font-bold">INVESTIGATION</span>
+              </div>
+              <h3 className="font-display font-semibold text-[17px] text-[var(--paper)] mb-2.5">
+                Forensic Analyst (Tier 2)
               </h3>
-              <p className="text-[var(--paper-dim)] text-[14px] leading-relaxed">
-                Uploads, investigates, and closes cases — the full working view, evidence and all.
+              <p className="text-[var(--paper-dim)] text-[14px] leading-relaxed mb-4">
+                Uploads RFC822/EML streams, executes hop triangulation, correlates campaigns, and generates signed reports.
               </p>
+              <button
+                onClick={onOpenConsole}
+                className="text-xs text-[var(--slate)] font-mono font-medium hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0"
+              >
+                <span>Launch with Analyst Clearance →</span>
+              </button>
             </div>
 
-            <div className="role readonly">
-              <div className="role-label mono">CLEARANCE · READ-ONLY</div>
-              <h3 className="font-sans font-semibold text-[16.5px] text-[var(--paper)] mb-2.5">
-                Auditor
+            <div className="role readonly group hover:border-[var(--paper-dim)] transition-all">
+              <div className="role-label mono flex items-center justify-between">
+                <span>CLEARANCE · AUDITOR</span>
+                <span className="text-[10px] text-[var(--paper-muted)] font-bold">PII MASKED</span>
+              </div>
+              <h3 className="font-display font-semibold text-[17px] text-[var(--paper)] mb-2.5">
+                Compliance Auditor
               </h3>
-              <p className="text-[var(--paper-dim)] text-[14px] leading-relaxed">
-                Sees the same cases with personal data masked by default, and can&apos;t alter what&apos;s on file.
+              <p className="text-[var(--paper-dim)] text-[14px] leading-relaxed mb-4">
+                Inspects case findings and immutable cryptographic audit trails with personal identifiable data masked by default.
               </p>
+              <button
+                onClick={onOpenConsole}
+                className="text-xs text-[var(--paper-dim)] font-mono font-medium hover:underline flex items-center gap-1 cursor-pointer bg-transparent border-0 p-0"
+              >
+                <span>Launch with Auditor Clearance →</span>
+              </button>
             </div>
           </div>
         </div>

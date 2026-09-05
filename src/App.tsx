@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LegalPage } from './components/LegalPage';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
+import { LandingView } from './components/LandingView';
 import { DashboardView } from './components/DashboardView';
 import { CasesView } from './components/CasesView';
 import { CampaignsView } from './components/CampaignsView';
@@ -15,17 +16,20 @@ import { ThreatLogView } from './components/ThreatLogView';
 import { RawHeaderView } from './components/RawHeaderView';
 import { AlertsView } from './components/AlertsView';
 import { IngestionPipelineView } from './components/IngestionPipelineView';
+import { OrganizationView } from './components/OrganizationView';
+import { TeamView } from './components/TeamView';
 import { NewAnalysisModal } from './components/NewAnalysisModal';
 import { ReportModal } from './components/ReportModal';
 import { PrivacyComplianceModal } from './components/PrivacyComplianceModal';
 import { AlertToast } from './components/AlertToast';
-import { LandingView } from './components/LandingView';
-import { AuthModal } from './components/AuthModal';
+import { LoginView } from './components/LoginView';
+import { SignupView } from './components/SignupView';
 import { SAMPLE_ANALYSES } from './data/samples';
 import { EmailAnalysis } from './types';
 import { useWebSocketAlerts, WebSocketAlert } from './hooks/useWebSocketAlerts';
 import { PrivacyConfig, loadPrivacyConfig, savePrivacyConfig } from './utils/privacyCompliance';
-import { subscribeSession, SessionUser } from './lib/api';
+import { useSession } from './hooks/useSession';
+import { Loader2 } from 'lucide-react';
 
 export default function App() {
   const publicPath = window.location.pathname;
@@ -38,14 +42,24 @@ export default function App() {
     return <LegalPage type="terms" />;
   }
 
+  // Real Supabase Auth & RBAC hook
+  const { 
+    session, 
+    profile, 
+    role, 
+    organizationId, 
+    loading: authLoading, 
+    signOut, 
+    loginAsRole, 
+    switchRole 
+  } = useSession();
 
+  const [authView, setAuthView] = useState<'intro' | 'login' | 'signup'>('intro');
   const [currentAnalysis, setCurrentAnalysis] = useState<EmailAnalysis>(SAMPLE_ANALYSES[0]);
-  const [activeTab, setActiveTab] = useState<NavTab>('landing');
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState<boolean>(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [privacyConfig, setPrivacyConfig] = useState<PrivacyConfig>(() => loadPrivacyConfig());
   const [casesRefreshSignal, setCasesRefreshSignal] = useState<number>(0);
   const [showDemoCases, setShowDemoCases] = useState<boolean>(() => {
@@ -55,12 +69,6 @@ export default function App() {
       return false;
     }
   });
-
-  useEffect(() => {
-    return subscribeSession((sess) => {
-      setSessionUser(sess.user);
-    });
-  }, []);
 
   const handleToggleDemoCases = () => {
     setShowDemoCases(prev => {
@@ -77,7 +85,7 @@ export default function App() {
     savePrivacyConfig(newCfg);
   };
 
-  // Real-Time WebSockets Alerting Hook
+  // Real-Time WebSockets Alerting Hook - only active if session is present
   const {
     alerts: liveAlerts,
     activeToast,
@@ -102,38 +110,98 @@ export default function App() {
     setActiveTab('overview');
   };
 
-  if (activeTab === 'landing') {
+  // Calculate user initials for the avatar badge
+  const userInitials = React.useMemo(() => {
+    if (profile?.full_name) {
+      const parts = profile.full_name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+      }
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+    if (session?.user?.email) {
+      const name = session.user.email.split('@')[0];
+      return name.substring(0, 2).toUpperCase();
+    }
+    return role === 'admin' ? 'AD' : role === 'read_only' ? 'AU' : 'AN';
+  }, [profile, session, role]);
+
+  // If Supabase authentication check is in-flight
+  if (authLoading) {
     return (
-      <div className="relative min-h-screen w-screen bg-[#14120f] text-[#ede6d8] overflow-y-auto">
-        <LandingView
-          onOpenConsole={() => setActiveTab('overview')}
-          onOpenTrace={() => setActiveTab('ingest')}
-          onRequestAccess={() => setIsAuthModalOpen(true)}
-          onSelectCase={(analysis) => {
-            setCurrentAnalysis(analysis);
-            setActiveTab('overview');
-          }}
-        />
-        {isAuthModalOpen && (
-          <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} currentUser={sessionUser} />
-        )}
+      <div className="min-h-screen w-screen bg-[#0b0d12] flex flex-col items-center justify-center text-[#e7ebf1] font-sans">
+        <div className="flex items-center gap-3">
+          <Loader2 className="w-5 h-5 animate-spin text-[#5b8dd6]" />
+          <span className="font-mono text-xs tracking-wider text-[#7d8794]">
+            VERIFYING ENCLAVE CLEARANCE…
+          </span>
+        </div>
       </div>
     );
   }
 
+  // If user is unauthenticated: First show our Intro Page, then click opens Login / Request Access, and once verified gives role-based access
+  if (!session) {
+    if (authView === 'login') {
+      return (
+        <LoginView
+          onBackToIntro={() => setAuthView('intro')}
+          onRequestAccess={() => setAuthView('signup')}
+          onSelectRoleLogin={(selectedRole, options) => {
+            loginAsRole(selectedRole, options);
+          }}
+          onSuccess={() => setAuthView('intro')}
+        />
+      );
+    }
+    if (authView === 'signup') {
+      return (
+        <SignupView
+          onBackToLogin={() => setAuthView('login')}
+          onBackToIntro={() => setAuthView('intro')}
+          onSelectRoleLogin={(selectedRole, options) => {
+            loginAsRole(selectedRole, options);
+          }}
+          onSuccess={() => setAuthView('intro')}
+        />
+      );
+    }
+    // Default intro page for visitors
+    return (
+      <LandingView
+        onOpenConsole={() => setAuthView('login')}
+        onOpenTrace={() => {
+          setCurrentAnalysis(SAMPLE_ANALYSES[0]);
+          setAuthView('login');
+        }}
+        onRequestAccess={() => setAuthView('signup')}
+        onSelectCase={(sample) => {
+          setCurrentAnalysis(sample);
+          setAuthView('login');
+        }}
+      />
+    );
+  }
+
+  // Ensure non-admins cannot access admin tabs
+  const effectiveTab = (activeTab === 'organization' || activeTab === 'team') && role !== 'admin'
+    ? 'dashboard'
+    : activeTab;
+
   return (
-    <div className="flex h-screen w-screen bg-[#14120f] text-[#ede6d8] overflow-hidden font-sans select-text">
-      {/* Sidebar with dynamic WebSocket connection status and real-time badge count */}
+    <div className="flex h-screen w-screen bg-[#0b0d12] text-[#e7ebf1] overflow-hidden font-sans select-text">
+      {/* Sidebar with role-differentiated navigation */}
       <Sidebar
-        activeTab={activeTab}
+        activeTab={effectiveTab}
         setActiveTab={setActiveTab}
         alertCount={unreadCount}
         wsStatus={wsStatus}
+        role={role}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full bg-[#14120f] min-w-0 overflow-hidden">
-        {/* Top Header */}
+      <main className="flex-1 flex flex-col h-full bg-[#0b0d12] min-w-0 overflow-hidden">
+        {/* Top Header with clearance badge, avatar, role switcher, and sign-out */}
         <Header
           currentAnalysis={currentAnalysis}
           onSelectAnalysis={setCurrentAnalysis}
@@ -143,18 +211,22 @@ export default function App() {
           privacyConfig={privacyConfig}
           showDemoCases={showDemoCases}
           onToggleDemoCases={handleToggleDemoCases}
+          role={role}
+          userLabel={userInitials}
+          onSignOut={signOut}
+          onSwitchRole={switchRole}
         />
 
         {/* View Switcher Container */}
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-          {activeTab === 'dashboard' && (
+          {effectiveTab === 'dashboard' && (
             <DashboardView
               onSelectAnalysis={setCurrentAnalysis}
               onNavigateToTab={setActiveTab}
             />
           )}
 
-          {activeTab === 'cases' && (
+          {effectiveTab === 'cases' && (
             <CasesView
               onSelectAnalysis={setCurrentAnalysis}
               onNavigateToOverview={() => setActiveTab('overview')}
@@ -162,14 +234,15 @@ export default function App() {
               refreshSignal={casesRefreshSignal}
               showDemoCases={showDemoCases}
               onToggleDemoCases={handleToggleDemoCases}
+              role={role}
             />
           )}
 
-          {activeTab === 'campaigns' && (
+          {effectiveTab === 'campaigns' && (
             <CampaignsView />
           )}
 
-          {activeTab === 'search' && (
+          {effectiveTab === 'search' && (
             <SearchView
               onSelectAnalysis={setCurrentAnalysis}
               onNavigateToOverview={() => setActiveTab('overview')}
@@ -179,7 +252,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'overview' && (
+          {effectiveTab === 'overview' && (
             <OverviewView
               analysis={currentAnalysis}
               onNavigateToMap={() => setActiveTab('map')}
@@ -192,8 +265,8 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'graph' && (
-            <div className="flex-1 p-6 overflow-hidden flex flex-col h-full bg-[#14120f]">
+          {effectiveTab === 'graph' && (
+            <div className="flex-1 p-6 overflow-hidden flex flex-col h-full bg-[#0b0d12]">
               <RelationshipGraphView
                 analysis={currentAnalysis}
                 caseId={currentAnalysis?.id}
@@ -201,7 +274,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'timeline' && (
+          {effectiveTab === 'timeline' && (
             <ThreatTimelineView
               analysis={currentAnalysis}
               onSelectAnalysis={setCurrentAnalysis}
@@ -210,30 +283,30 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'ingest' && (
+          {effectiveTab === 'ingest' && (
             <IngestionPipelineView
               onSelectAnalysis={handleAnalysisCreated}
               onNavigateToOverview={() => setActiveTab('overview')}
             />
           )}
 
-          {activeTab === 'hops' && (
+          {effectiveTab === 'hops' && (
             <HopTracerouteView analysis={currentAnalysis} />
           )}
 
-          {activeTab === 'map' && (
+          {effectiveTab === 'map' && (
             <MapView analysis={currentAnalysis} />
           )}
 
-          {activeTab === 'logs' && (
+          {effectiveTab === 'logs' && (
             <ThreatLogView analysis={currentAnalysis} />
           )}
 
-          {activeTab === 'headers' && (
+          {effectiveTab === 'headers' && (
             <RawHeaderView analysis={currentAnalysis} />
           )}
 
-          {activeTab === 'alerts' && (
+          {effectiveTab === 'alerts' && (
             <AlertsView
               currentAnalysis={currentAnalysis}
               onSelectAnalysis={setCurrentAnalysis}
@@ -245,6 +318,14 @@ export default function App() {
               onBroadcastTestAlert={broadcastTestAlert}
               onReconnectWs={reconnectWs}
             />
+          )}
+
+          {effectiveTab === 'organization' && role === 'admin' && (
+            <OrganizationView organizationId={organizationId || 'org_acme_soc_01'} />
+          )}
+
+          {effectiveTab === 'team' && role === 'admin' && (
+            <TeamView />
           )}
         </div>
       </main>

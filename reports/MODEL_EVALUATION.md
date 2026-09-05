@@ -1,6 +1,6 @@
 # TraceXMail Scientific ML Model Evaluation Report (v2.4)
 
-**Generated:** 2026-09-05T14:25:38.090Z  
+**Generated:** 2026-09-05T19:47:14.747Z  
 **Corpus Size:** 433 clean deduplicated records  
 **Adversarial Holdout:** 60 zero-leakage records  
 **Max Intra-Class Duplication Rate:** 0.00% (Target: < 15.0%)  
@@ -10,37 +10,37 @@
 ## 1. Cross-Validation Stability (5-Fold Stratified)
 *Strict train-only vocabulary and IDF fit preventing data leakage.*
 
-| Fold | Validation Samples | Accuracy | Macro F1 |
-|------|--------------------|----------|----------|
-| Fold 1 | 86 | 97.67% | 96.92% |
-| Fold 2 | 87 | 88.51% | 85.56% |
-| Fold 3 | 86 | 93.02% | 93.98% |
-| Fold 4 | 87 | 96.55% | 97.68% |
-| Fold 5 | 87 | 90.80% | 90.59% |
-| **Mean ± Std** | **433 Total** | **93.31% ± 3.43%** | **92.95% ± 4.46%** |
+| Fold | Accuracy | Macro F1 | Weighted F1 | Brier Score |
+|------|----------|----------|-------------|-------------|
+| Fold 1 | 93.02% | 91.47% | 93.13% | 0.2841 |
+| Fold 2 | 85.06% | 81.50% | 84.65% | 0.3174 |
+| Fold 3 | 87.21% | 86.11% | 87.32% | 0.3004 |
+| Fold 4 | 93.10% | 92.06% | 93.01% | 0.2049 |
+| Fold 5 | 83.91% | 82.91% | 84.57% | 0.3657 |
+| **Mean ± Std** | **88.46% ± 3.90%** | **86.81% ± 4.32%** | **88.54% ± 3.83%** | **0.2945 ± 0.0525** |
 
 ---
 
 ## 2. Held-out Test Set Performance (80/20 Stratified Partition)
-- **Overall Accuracy:** 91.95% (80/87)
+- **Overall Accuracy:** 88.51% (77/87)
 - **Majority Class Baseline:** 37.93%
-- **Macro-averaged F1 Score:** 92.41%
-- **Weighted F1 Score:** 91.93%
+- **Macro-averaged F1 Score:** 89.94%
+- **Weighted F1 Score:** 88.42%
 
 ### Per-Class Performance
 | Class | Precision | Recall | F1 Score | Support |
 |-------|-----------|--------|----------|---------|
-| Legitimate | 90.9% | 95.2% | 93.0% | 21 |
+| Legitimate | 79.2% | 90.5% | 84.5% | 21 |
 | Suspicious | 75.0% | 100.0% | 85.7% | 6 |
 | Impersonated | 87.5% | 100.0% | 93.3% | 21 |
-| Phishing | 100.0% | 81.8% | 90.0% | 33 |
+| Phishing | 100.0% | 75.8% | 86.2% | 33 |
 | Fraud-related | 100.0% | 100.0% | 100.0% | 6 |
 
 ---
 
 ## 3. Probability Calibration (Phase 4)
-- **Multi-Class Brier Score:** `0.2435`
-- **Expected Calibration Error (ECE):** `26.09%`
+- **Multi-Class Brier Score:** `0.2921`
+- **Expected Calibration Error (ECE):** `28.68%`
 - **Calibration Temperature:** `12`
 
 ### 10-Bin Reliability Curve
@@ -48,14 +48,14 @@
 |-----------|---------|-----------------|--------------------|-----------------|
 | [0.0, 0.1) | 0 | 5.0% | 0.0% | 5.0% |
 | [0.1, 0.2) | 0 | 15.0% | 0.0% | 15.0% |
-| [0.2, 0.3) | 3 | 27.9% | 66.7% | 38.8% |
-| [0.3, 0.4) | 8 | 35.4% | 50.0% | 14.6% |
-| [0.4, 0.5) | 11 | 46.7% | 90.9% | 44.3% |
-| [0.5, 0.6) | 20 | 54.5% | 95.0% | 40.5% |
-| [0.6, 0.7) | 14 | 62.3% | 100.0% | 37.7% |
-| [0.7, 0.8) | 3 | 74.6% | 100.0% | 25.4% |
-| [0.8, 0.9) | 5 | 85.0% | 100.0% | 15.0% |
-| [0.9, 1.0) | 23 | 97.3% | 100.0% | 2.7% |
+| [0.2, 0.3) | 3 | 27.0% | 0.0% | 27.0% |
+| [0.3, 0.4) | 14 | 34.9% | 64.3% | 29.4% |
+| [0.4, 0.5) | 16 | 45.7% | 93.8% | 48.0% |
+| [0.5, 0.6) | 18 | 55.7% | 94.4% | 38.7% |
+| [0.6, 0.7) | 9 | 63.4% | 100.0% | 36.6% |
+| [0.7, 0.8) | 6 | 73.6% | 100.0% | 26.4% |
+| [0.8, 0.9) | 1 | 85.7% | 100.0% | 14.3% |
+| [0.9, 1.0) | 20 | 98.2% | 100.0% | 1.8% |
 
 ---
 
@@ -72,20 +72,20 @@
 ## 5. Phase 5 Learned Meta-Classifier (Stacking Ensemble)
 - **Algorithm:** Stacked Supervised Logistic Regression
 - **Stacked Dimensions:** 20 forensic signals across Base ML probabilities, SPF/DKIM/DMARC auth flags, domain age, typosquatting, brand display mismatch, Tor/abuse relays, and BEC scores.
-- **Accuracy:** 93.53%
-- **Brier Score:** `0.0184`
+- **Accuracy:** 93.76%
+- **Brier Score:** `0.0193`
 - **ROC-AUC:** `0.996`
 
 ---
 
 ## 6. Adversarial Holdout Evaluation (60 Challenging Samples)
 - **Zero-Leakage Verified:** Cosine similarity < 0.85 against all corpus samples.
-- **Overall Holdout Accuracy:** 70.00%
-- **Holdout Macro-F1:** 61.53%
+- **Overall Holdout Accuracy:** 56.67%
+- **Holdout Macro-F1:** 51.50%
 
 | Category | Total | Correct | Accuracy |
 |----------|-------|---------|----------|
-| paraphrased_phishing | 21 | 5 | 23.8% |
+| paraphrased_phishing | 21 | 4 | 19.1% |
 | high_urgency_legitimate | 20 | 19 | 95.0% |
-| conversational_bec | 15 | 15 | 100.0% |
-| brand_impersonation_display | 4 | 3 | 75.0% |
+| conversational_bec | 15 | 9 | 60.0% |
+| brand_impersonation_display | 4 | 2 | 50.0% |

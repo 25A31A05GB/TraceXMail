@@ -40,6 +40,10 @@ import {
   type LayeredClassificationResult
 } from './src/server/classifier';
 import {
+  initializeLocalEmbeddingModel,
+  getLocalEmbeddingModelStatus
+} from './src/server/semanticSimilarity';
+import {
   extractFinancialEntities,
   getWeightedSocialEngineeringScore
 } from './src/server/structuralFeatures';
@@ -97,6 +101,15 @@ import {
   handleGetBandwidthPayload
 } from './src/server/networkIntelligenceService';
 import { sendEmailAlert, getEmailAlertConfig } from './src/server/emailAlertService';
+
+import {
+  recordCorrectionIfDiscrepancy,
+  getCorrections,
+  updateCorrection,
+  normalizeVerdictLabel,
+  loadCorrections,
+  type ClassifierCorrection
+} from './src/server/classifierFeedback';
 
 // Multer memory storage for uploads
 const upload = multer({ storage: multer.memoryStorage() });
@@ -943,6 +956,7 @@ async function parseRawEmailToAnalysis(
     verdict,
     mlConfidence,
     phishingProbability,
+    activeClassifier: classification.activeClassifier,
     nlp_layers: classification.nlp_layers,
     tfidf_classification: classification.tfidf_classification,
     semantic_similarity: classification.semantic_similarity,
@@ -1408,7 +1422,11 @@ async function startServer() {
     if (!supabase) {
       return res.status(503).json({ error: 'Database not configured' });
     }
+    const user = (req as AuthenticatedRequest).user!;
     const { caseId } = req.params;
+
+    // Fetch existing case for discrepancy comparison
+    const { data: existing } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
 
     const updates = { ...req.body };
     delete updates.organization_id;
@@ -1422,7 +1440,215 @@ async function startServer() {
     if (!data) {
       return res.status(404).json({ error: 'Case not found' });
     }
+
+    // Check for analyst verdict discrepancy (C4 Analyst Feedback Loop)
+    if (existing && (req.body.analyst_verdict || req.body.status === 'CLOSED')) {
+      const correction = recordCorrectionIfDiscrepancy(existing, {
+        analyst_verdict: req.body.analyst_verdict,
+        analyst_notes: req.body.analyst_notes || req.body.notes || req.body.close_reason,
+        user: {
+          userId: user.userId,
+          email: user.email,
+          organizationId: user.organizationId
+        }
+      });
+      if (correction) {
+        try {
+          await logAuditAction({
+            organization_id: user.organizationId,
+            case_id: caseId,
+            user_id: user.userId,
+            user_email: user.email,
+            user_role: user.role,
+            action: 'CLASSIFIER_CORRECTION_LOGGED',
+            resource_type: 'correction',
+            resource_id: correction.id,
+            details: {
+              model_prediction: correction.model_prediction,
+              analyst_verdict: correction.analyst_verdict,
+              notes: correction.analyst_notes
+            }
+          }, supabase);
+        } catch (auditErr) {
+          console.warn('[Audit] Could not log correction audit event:', auditErr);
+        }
+      }
+    }
+
     res.json(data);
+  });
+
+  // Explicit Case Closure with Analyst Verdict (C4)
+  app.post('/api/cases/:caseId/close', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const user = (req as AuthenticatedRequest).user!;
+    const { caseId } = req.params;
+    const { analyst_verdict, analyst_notes, close_reason, resolution_type = 'RESOLVED' } = req.body;
+
+    const { data: existing, error: findError } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
+    if (findError || !existing) {
+      return res.status(404).json({ error: 'Case not found' });
+    }
+
+    const updates: any = {
+      status: 'CLOSED',
+      updated_at: new Date().toISOString(),
+      resolution_type
+    };
+    if (analyst_notes) updates.analyst_notes = analyst_notes;
+    if (analyst_verdict) updates.analyst_verdict = normalizeVerdictLabel(analyst_verdict);
+
+    const { data: updatedCase, error: updateError } = await supabase.from('cases').update(updates).eq('id', caseId).select().maybeSingle();
+    if (updateError) {
+      return res.status(500).json({ error: `Failed to close case: ${updateError.message}` });
+    }
+
+    // Record discrepancy in classifier feedback loop
+    const correction = recordCorrectionIfDiscrepancy(existing, {
+      analyst_verdict: analyst_verdict || existing.analyst_verdict,
+      analyst_notes: analyst_notes || close_reason || 'Case closed by analyst',
+      user: {
+        userId: user.userId,
+        email: user.email,
+        organizationId: user.organizationId
+      }
+    });
+
+    if (correction) {
+      try {
+        await logAuditAction({
+          organization_id: user.organizationId,
+          case_id: caseId,
+          user_id: user.userId,
+          user_email: user.email,
+          user_role: user.role,
+          action: 'CLASSIFIER_CORRECTION_LOGGED',
+          resource_type: 'correction',
+          resource_id: correction.id,
+          details: {
+            model_prediction: correction.model_prediction,
+            analyst_verdict: correction.analyst_verdict,
+            notes: correction.analyst_notes
+          }
+        }, supabase);
+      } catch (auditErr) {
+        console.warn('[Audit] Could not log correction audit event:', auditErr);
+      }
+    }
+
+    try {
+      await logAuditAction({
+        organization_id: user.organizationId,
+        case_id: caseId,
+        user_id: user.userId,
+        user_email: user.email,
+        user_role: user.role,
+        action: 'CASE_CLOSED',
+        resource_type: 'case',
+        resource_id: caseId,
+        details: {
+          analyst_verdict: analyst_verdict || 'N/A',
+          resolution_type,
+          discrepancy_logged: Boolean(correction)
+        }
+      }, supabase);
+    } catch (auditErr) {
+      console.warn('[Audit] Could not log case closure audit event:', auditErr);
+    }
+
+    res.json({
+      status: 'success',
+      message: `Case ${caseId} closed successfully.`,
+      case: updatedCase,
+      correction_logged: correction || null
+    });
+  });
+
+  // Classifier Corrections Feedback API (C4)
+  app.get('/api/corrections', requireAuth, async (req, res) => {
+    const user = (req as AuthenticatedRequest).user!;
+    const { status, case_id } = req.query;
+    const list = getCorrections({
+      status: status as string,
+      case_id: case_id as string,
+      organization_id: user.organizationId
+    });
+    res.json(list);
+  });
+
+  app.get('/api/corrections/:id', requireAuth, async (req, res) => {
+    const list = getCorrections();
+    const found = list.find(c => c.id === req.params.id);
+    if (!found) {
+      return res.status(404).json({ error: 'Correction record not found' });
+    }
+    res.json(found);
+  });
+
+  app.patch('/api/corrections/:id', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const user = (req as AuthenticatedRequest).user!;
+    const { status, review_notes, analyst_verdict } = req.body;
+    const updated = updateCorrection(req.params.id, {
+      status,
+      review_notes,
+      reviewed_by: user.email || user.userId,
+      analyst_verdict
+    });
+    if (!updated) {
+      return res.status(404).json({ error: 'Correction record not found' });
+    }
+    res.json(updated);
+  });
+
+  app.post('/api/corrections', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const user = (req as AuthenticatedRequest).user!;
+    const {
+      case_id,
+      subject,
+      from,
+      from_domain,
+      body_snippet,
+      model_prediction,
+      model_confidence,
+      model_threat_score,
+      analyst_verdict,
+      analyst_notes
+    } = req.body;
+
+    if (!analyst_verdict) {
+      return res.status(400).json({ error: 'analyst_verdict is required' });
+    }
+
+    const newCorrection: ClassifierCorrection = {
+      id: `corr_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      case_id: case_id || `case-${Date.now()}`,
+      original_analysis_id: case_id || `case-${Date.now()}`,
+      subject: subject || 'Manual Correction Entry',
+      from: from || 'sender@domain.com',
+      from_domain: from_domain || 'domain.com',
+      body_snippet: body_snippet || '',
+      model_prediction: normalizeVerdictLabel(model_prediction || 'Legitimate'),
+      model_confidence: model_confidence !== undefined ? Number(model_confidence) : 0.85,
+      model_threat_score: model_threat_score !== undefined ? Number(model_threat_score) : 75,
+      analyst_verdict: normalizeVerdictLabel(analyst_verdict),
+      analyst_notes: analyst_notes || 'Manual feedback entry submitted by analyst',
+      analyst_id: user.userId,
+      analyst_email: user.email,
+      organization_id: user.organizationId,
+      status: 'pending_review',
+      created_at: new Date().toISOString()
+    };
+
+    const currentList = getCorrections();
+    currentList.unshift(newCorrection);
+    // save to disk via classifierFeedback
+    const { saveCorrections } = await import('./src/server/classifierFeedback');
+    saveCorrections(currentList);
+
+    res.status(201).json(newCorrection);
   });
 
   app.post('/api/cases/:caseId/emails', (req, res) => {
@@ -1991,6 +2217,10 @@ Link: https://verify-auth-portal.net/login`;
       vocabulary_size: status.vocabularySize,
       calibration_temperature: status.temperature,
       calibration_metrics: evaluationReport?.calibration_metrics || null,
+      primary_classifier: status.primaryClassifier,
+      has_logistic_weights: status.hasLogisticWeights,
+      classifier_comparison: status.classifierComparison,
+      semantic_embedding_fallback: getLocalEmbeddingModelStatus(),
       bec_learned_model: evaluationReport?.bec_learned_model || null,
       meta_classifier: evaluationReport?.meta_classifier || null,
       adversarial_holdout: evaluationReport?.adversarial_holdout || null,
@@ -2014,6 +2244,9 @@ Link: https://verify-auth-portal.net/login`;
   app.get('/api/v1/ml/metrics', handleMlMetrics);
   app.get('/api/ml/status', handleMlMetrics);
   app.get('/api/v1/ml/status', handleMlMetrics);
+  app.get('/api/ml/semantic-status', (_req, res) => {
+    res.json(getLocalEmbeddingModelStatus());
+  });
 
   // Dedicated Live Domain Intelligence endpoint
   app.get(['/api/v1/cases/:caseId/domain-intelligence', '/api/domain-intelligence/:domain'], async (req, res) => {
@@ -3064,6 +3297,10 @@ If authentication (SPF/DKIM/DMARC) passed but the threat score is elevated, expl
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`[TraceXMail] Express + WebSocket server running on http://0.0.0.0:${PORT}`);
+    // Cold-start download & initialization of offline semantic transformer model
+    initializeLocalEmbeddingModel().catch((err) => {
+      console.warn('[TraceXMail] Error warming up offline local embedding model:', err?.message || err);
+    });
   });
 }
 

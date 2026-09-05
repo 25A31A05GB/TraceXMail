@@ -36,7 +36,7 @@
   "bias": -0.9219,
   "decisionThreshold": 0.5,
   "metrics": {
-    "trainedAt": "2026-09-05T14:25:37.706Z",
+    "trainedAt": "2026-09-05T19:47:14.180Z",
     "sampleCount": 433,
     "accuracy": 0.8868,
     "precision": 0.3623,
