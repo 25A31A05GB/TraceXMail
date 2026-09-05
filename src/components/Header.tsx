@@ -13,12 +13,17 @@ import {
   Scale,
   EyeOff,
   FlaskConical,
-  UserCheck
+  UserCheck,
+  FileText,
+  Image as ImageIcon,
+  Loader2
 } from 'lucide-react';
 import { EmailAnalysis } from '../types';
 import { SAMPLE_ANALYSES } from '../data/samples';
 import { PrivacyConfig } from '../utils/privacyCompliance';
 import { subscribeSession, SessionUser } from '../lib/api';
+import { exportEvidenceAsPdf, exportEvidenceAsImage } from '../utils/exportEvidence';
+import { EvidenceTagCard } from './EvidenceTagCard';
 
 interface HeaderProps {
   currentAnalysis: EmailAnalysis;
@@ -43,12 +48,63 @@ export function Header({
 }: HeaderProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingPng, setExportingPng] = useState(false);
 
   useEffect(() => {
     return subscribeSession((sess) => {
       setSessionUser(sess.user);
     });
   }, []);
+
+  const getExportTargetElement = (): HTMLElement | null => {
+    // Prefer visible .evidence-card or #card in main view first, fallback to header target card
+    const visibleCard = document.querySelector('main .evidence-card') as HTMLElement || 
+                        document.querySelector('.evidence-card') as HTMLElement || 
+                        document.getElementById('card');
+    if (visibleCard) return visibleCard;
+
+    const headerHiddenCard = document.getElementById('header-evidence-export-target')?.querySelector('.evidence-card') as HTMLElement;
+    return headerHiddenCard || null;
+  };
+
+  const handleExportPdf = async () => {
+    const target = getExportTargetElement();
+    if (!target) {
+      console.warn('Export target evidence card was not found in DOM');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const filename = `TraceXMail-Evidence-${currentAnalysis.id || 'case'}.pdf`;
+      await exportEvidenceAsPdf(target, filename, {
+        caseId: currentAnalysis.id,
+        evidenceId: currentAnalysis.evidenceId || currentAnalysis.id,
+        title: currentAnalysis.subject
+      });
+    } catch (err) {
+      console.error('Failed to export Evidence as PDF:', err);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+  const handleExportPng = async () => {
+    const target = getExportTargetElement();
+    if (!target) {
+      console.warn('Export target evidence card was not found in DOM');
+      return;
+    }
+    setExportingPng(true);
+    try {
+      const filename = `TraceXMail-Evidence-${currentAnalysis.id || 'case'}.png`;
+      await exportEvidenceAsImage(target, filename);
+    } catch (err) {
+      console.error('Failed to export Evidence as PNG:', err);
+    } finally {
+      setExportingPng(false);
+    }
+  };
 
   const getVerdictBadge = (verdict: string) => {
     switch (verdict?.toUpperCase()) {
@@ -189,11 +245,41 @@ export function Header({
         )}
 
         <button
+          onClick={handleExportPdf}
+          disabled={exportingPdf}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/90 hover:border-cyan-500/50 text-xs font-medium text-slate-200 transition-all cursor-pointer disabled:opacity-50"
+          title="Export Evidence Card as PDF Dossier"
+        >
+          {exportingPdf ? (
+            <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+          ) : (
+            <FileText className="w-3.5 h-3.5 text-rose-400" />
+          )}
+          <span className="hidden sm:inline font-sans">Export as PDF</span>
+          <span className="sm:hidden font-sans">PDF</span>
+        </button>
+
+        <button
+          onClick={handleExportPng}
+          disabled={exportingPng}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-slate-700/90 hover:border-cyan-500/50 text-xs font-medium text-slate-200 transition-all cursor-pointer disabled:opacity-50"
+          title="Export Evidence Card as PNG Image"
+        >
+          {exportingPng ? (
+            <Loader2 className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+          ) : (
+            <ImageIcon className="w-3.5 h-3.5 text-emerald-400" />
+          )}
+          <span className="hidden sm:inline font-sans">Export as PNG</span>
+          <span className="sm:hidden font-sans">PNG</span>
+        </button>
+
+        <button
           onClick={onOpenReportModal}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-colors"
         >
           <FileDown className="w-3.5 h-3.5 text-cyan-400" />
-          <span className="hidden sm:inline">Export Forensic Report</span>
+          <span className="hidden xl:inline">Export Forensic Report</span>
         </button>
 
         <button
@@ -203,6 +289,15 @@ export function Header({
           <Plus className="w-4 h-4" />
           <span>New Analysis</span>
         </button>
+      </div>
+
+      {/* Hidden Evidence Card Export Target Container */}
+      <div 
+        id="header-evidence-export-target" 
+        className="fixed -left-[9999px] -top-[9999px] w-[720px] pointer-events-none opacity-0 z-[-9999] aria-hidden"
+        aria-hidden="true"
+      >
+        <EvidenceTagCard analysis={currentAnalysis} />
       </div>
     </header>
   );

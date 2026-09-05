@@ -637,59 +637,70 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
             </div>
           </div>
 
-          {/* Minimized Recent Incidents Queue */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
+          {/* Minimized Recent Incidents Queue - Prioritizing Case ID & Threat Score */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
                 <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  Active Forensic Incidents (Quick Access)
+                  Active Forensic Incidents (Case ID &amp; Threat Score Overview)
                 </span>
               </div>
               <button
                 onClick={() => onNavigateToTab?.('cases')}
-                className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer"
+                className="text-xs text-blue-400 hover:text-blue-300 font-semibold cursor-pointer transition-colors"
               >
                 View All Cases →
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {SAMPLE_ANALYSES.slice(0, 4).map((sample) => (
-                <div
-                  key={sample.id}
-                  onClick={() => {
-                    onSelectAnalysis?.(sample);
-                    onNavigateToTab?.('overview');
-                  }}
-                  className="p-3 rounded-lg bg-slate-950 border border-slate-800 hover:border-blue-500/60 cursor-pointer transition-all flex items-center justify-between gap-3 group"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.2 rounded border ${
-                        sample.threatVerdict === 'MALICIOUS'
-                          ? 'bg-rose-950/80 border-rose-700 text-rose-300'
-                          : sample.threatVerdict === 'SUSPICIOUS'
-                          ? 'bg-amber-950/80 border-amber-700 text-amber-300'
-                          : 'bg-emerald-950/80 border-emerald-700 text-emerald-300'
-                      }`}>
-                        {sample.threatVerdict}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+              {SAMPLE_ANALYSES.slice(0, 4).map((sample) => {
+                const verdictInfo = getStandardizedVerdict(sample);
+                return (
+                  <div
+                    key={sample.id}
+                    onClick={() => {
+                      onSelectAnalysis?.(sample);
+                      onNavigateToTab?.('overview');
+                    }}
+                    className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 hover:border-blue-500/70 cursor-pointer transition-all flex flex-col justify-between gap-3 group shadow-md hover:shadow-blue-500/10"
+                  >
+                    {/* Header: Case ID & Threat Score Priority */}
+                    <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                      <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-900 border border-slate-700/80 text-cyan-300 font-mono text-[11px] font-bold shadow-inner">
+                        <ShieldAlert className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span>{sample.id}</span>
+                      </div>
+                      <div className={`px-2 py-0.5 rounded-md border font-mono text-[11px] font-black flex items-center gap-1 shadow-sm ${verdictInfo.colors.badge}`}>
+                        <Zap className="w-3 h-3 shrink-0" />
+                        <span>{verdictInfo.score}/100</span>
+                      </div>
+                    </div>
+
+                    {/* Middle: Subject & Sender */}
+                    <div className="space-y-1">
+                      <div className="text-xs font-bold text-slate-100 line-clamp-2 group-hover:text-blue-300 transition-colors leading-tight">
+                        {sample.subject || sample.headers?.subject || 'Untitled Email Analysis'}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono truncate">
+                        {sample.from || sample.headers?.from || 'Unknown Sender'}
+                      </div>
+                    </div>
+
+                    {/* Footer: Verdict Tag & Inspect CTA */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px] font-mono">
+                      <span className={`px-1.5 py-0.5 rounded font-bold uppercase ${verdictInfo.colors.badge}`}>
+                        {verdictInfo.verdict}
                       </span>
-                      <span className="text-[11px] font-mono text-slate-500">{sample.id}</span>
-                    </div>
-                    <div className="text-xs font-semibold text-slate-200 truncate group-hover:text-blue-300 transition-colors">
-                      {sample.subject}
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-mono truncate mt-0.5">
-                      {sample.from}
+                      <div className="flex items-center gap-1 text-blue-400 font-semibold group-hover:translate-x-1 transition-transform">
+                        <span>Inspect</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                   </div>
-                  <div className="shrink-0 flex items-center gap-1 text-[11px] font-semibold text-blue-400 group-hover:translate-x-1 transition-transform">
-                    <span>Inspect</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -791,6 +802,86 @@ export function DashboardView({ onSelectAnalysis, onNavigateToTab }: DashboardVi
           <div className="text-[11px] text-slate-400 font-mono mt-1">
             Threat Intelligence &amp; Behavioral Analysis
           </div>
+        </div>
+      </div>
+
+      {/* PRIORITIZED ACTIVE CASES & THREAT SCORE MATRIX */}
+      <div className="bg-[#1E293B] border border-slate-700 rounded-xl p-5 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-rose-950/80 border border-rose-700/60 flex items-center justify-center text-rose-400 shadow-md">
+              <ShieldAlert className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white tracking-tight uppercase">
+                Active Forensic Cases &amp; Threat Score Queue
+              </h3>
+              <p className="text-[11px] text-slate-400 font-sans">
+                Priority-ranked investigation queue with instant Case ID and Threat Score visibility
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigateToTab?.('cases')}
+            className="text-xs text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 font-mono self-start sm:self-auto cursor-pointer transition-colors"
+          >
+            <span>Full Case Inventory ({SAMPLE_ANALYSES.length})</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {SAMPLE_ANALYSES.map((sample) => {
+            const verdictInfo = getStandardizedVerdict(sample);
+            const isSelected = selectedAnalysisId === sample.id;
+            return (
+              <div
+                key={sample.id}
+                onClick={() => {
+                  setSelectedAnalysisId(sample.id);
+                  if (onSelectAnalysis) onSelectAnalysis(sample);
+                }}
+                className={`p-3.5 rounded-xl border cursor-pointer transition-all flex flex-col justify-between gap-3 group ${
+                  isSelected
+                    ? 'bg-blue-950/70 border-blue-500 shadow-lg ring-1 ring-blue-500/50'
+                    : 'bg-slate-950/80 border-slate-800 hover:border-slate-700 hover:bg-slate-900/60'
+                }`}
+              >
+                {/* Header: Case ID & Threat Score */}
+                <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-cyan-300 font-mono text-xs font-bold">
+                    <ShieldAlert className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>{sample.id}</span>
+                  </div>
+                  <div className={`px-2.5 py-0.5 rounded-md border font-mono text-xs font-black flex items-center gap-1 shadow-sm ${verdictInfo.colors.badge}`}>
+                    <Zap className="w-3 h-3 shrink-0" />
+                    <span>{verdictInfo.score}/100</span>
+                  </div>
+                </div>
+
+                {/* Details */}
+                <div className="space-y-1">
+                  <div className="text-xs font-bold text-slate-100 line-clamp-2 leading-tight group-hover:text-blue-300 transition-colors">
+                    {sample.subject || sample.headers?.subject || 'Forensic EML Analysis'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-mono truncate">
+                    {sample.from || sample.headers?.from || 'Unknown Sender'}
+                  </div>
+                </div>
+
+                {/* Footer Tag & Select Action */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[10px] font-mono">
+                  <span className={`px-2 py-0.5 rounded font-bold uppercase ${verdictInfo.colors.badge}`}>
+                    {verdictInfo.verdict}
+                  </span>
+                  <span className={`text-[11px] font-semibold flex items-center gap-1 ${isSelected ? 'text-blue-300 font-bold' : 'text-slate-400 group-hover:text-blue-400'}`}>
+                    <span>{isSelected ? 'Active Focus' : 'Triage Case'}</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
