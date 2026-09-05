@@ -1991,9 +1991,41 @@ Link: https://verify-auth-portal.net/login`;
     });
   };
 
-  app.post('/api/v1/analyze', upload.single('file'), handleAnalyze);
-  app.post('/api/analyze/raw', upload.single('file'), handleAnalyze);
-  app.post('/api/analyze', upload.single('file'), handleAnalyze);
+  const handleAnalyzeBatch = async (req: express.Request, res: express.Response) => {
+    try {
+      const files: Express.Multer.File[] = (req.files as Express.Multer.File[]) || (req.file ? [req.file] : []);
+      if (!files || files.length === 0) {
+        return handleAnalyze(req, res);
+      }
+
+      const results = [];
+      for (const file of files) {
+        const rawContent = file.buffer.toString('utf-8');
+        const fileName = file.originalname || 'batch_file.eml';
+        const parsed = await parseRawEmailToAnalysis(rawContent, fileName);
+        results.push(parsed);
+      }
+
+      res.json({
+        success: true,
+        status: 'success',
+        count: results.length,
+        items: results.map(r => ({
+          case: r.case,
+          analysis: r.analysis
+        }))
+      });
+    } catch (err: any) {
+      console.error('[Server] Batch analysis endpoint error:', err);
+      res.status(500).json({ error: err.message || 'Batch analysis failed' });
+    }
+  };
+
+  app.post('/api/v1/analyze', upload.array('files', 20), handleAnalyze);
+  app.post('/api/v1/analyze/batch', upload.array('files', 20), handleAnalyzeBatch);
+  app.post('/api/analyze/raw', upload.array('files', 20), handleAnalyze);
+  app.post('/api/analyze/batch', upload.array('files', 20), handleAnalyzeBatch);
+  app.post('/api/analyze', upload.array('files', 20), handleAnalyze);
 
   // Machine Learning Model Metrics & Forensic Evaluation Telemetry
   const handleMlMetrics = (_req: express.Request, res: express.Response) => {

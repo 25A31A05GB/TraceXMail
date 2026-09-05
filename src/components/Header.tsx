@@ -70,17 +70,14 @@ export function Header({
 
   const handleExportPdf = async () => {
     const target = getExportTargetElement();
-    if (!target) {
-      console.warn('Export target evidence card was not found in DOM');
-      return;
-    }
     setExportingPdf(true);
     try {
       const filename = `TraceXMail-Evidence-${currentAnalysis.id || 'case'}.pdf`;
-      await exportEvidenceAsPdf(target, filename, {
+      await exportEvidenceAsPdf(target!, filename, {
         caseId: currentAnalysis.id,
         evidenceId: currentAnalysis.evidenceId || currentAnalysis.id,
-        title: currentAnalysis.subject
+        title: currentAnalysis.subject,
+        analysis: currentAnalysis
       });
     } catch (err) {
       console.error('Failed to export Evidence as PDF:', err);
@@ -91,14 +88,15 @@ export function Header({
 
   const handleExportPng = async () => {
     const target = getExportTargetElement();
-    if (!target) {
-      console.warn('Export target evidence card was not found in DOM');
-      return;
-    }
     setExportingPng(true);
     try {
       const filename = `TraceXMail-Evidence-${currentAnalysis.id || 'case'}.png`;
-      await exportEvidenceAsImage(target, filename);
+      await exportEvidenceAsImage(target!, filename, {
+        caseId: currentAnalysis.id,
+        evidenceId: currentAnalysis.evidenceId || currentAnalysis.id,
+        title: currentAnalysis.subject,
+        analysis: currentAnalysis
+      });
     } catch (err) {
       console.error('Failed to export Evidence as PNG:', err);
     } finally {

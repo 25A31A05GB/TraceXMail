@@ -34,9 +34,95 @@ export function IngestionPipelineView({
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [batchStatus, setBatchStatus] = useState<{
+    total: number;
+    current: number;
+    currentFilename: string;
+    results: EmailAnalysis[];
+  } | null>(null);
 
   const progress = useAnalysisProgress();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleProcessBatch = async (files: File[]) => {
+    if (files.length === 0) return;
+    setError(null);
+    setIsProcessing(true);
+    setBatchStatus({
+      total: files.length,
+      current: 1,
+      currentFilename: files[0].name,
+      results: []
+    });
+
+    const results: EmailAnalysis[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setBatchStatus({
+        total: files.length,
+        current: i + 1,
+        currentFilename: file.name,
+        results: [...results]
+      });
+
+      try {
+        const content = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve((e.target?.result as string) || '');
+          reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+          reader.readAsText(file);
+        });
+
+        let backendResult: any = null;
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('source', 'batch_email_upload');
+          formData.append('filename', file.name);
+
+          const res = await apiFetch('/api/v1/analyze', {
+            method: 'POST',
+            body: formData
+          });
+          if (res.ok) {
+            backendResult = await res.json();
+          }
+        } catch (err) {
+          console.warn(`[IngestionPipeline] Backend direct call failed for ${file.name}:`, err);
+        }
+
+        let finalAnalysis: EmailAnalysis;
+        if (backendResult?.analysis || backendResult?.case) {
+          finalAnalysis = mapBackendCaseToAnalysis(backendResult.analysis || backendResult, content, file.name);
+        } else {
+          finalAnalysis = parseRawEml(content, file.name);
+        }
+
+        results.push(finalAnalysis);
+      } catch (err: any) {
+        console.error(`Error processing ${file.name}:`, err);
+      }
+    }
+
+    setBatchStatus({
+      total: files.length,
+      current: files.length,
+      currentFilename: 'Completed Batch Analysis',
+      results
+    });
+
+    await new Promise((r) => setTimeout(r, 600));
+
+    if (results.length > 0) {
+      const sortedByThreat = [...results].sort((a, b) => (b.threatScore || 0) - (a.threatScore || 0));
+      onSelectAnalysis(sortedByThreat[0]);
+      onNavigateToOverview();
+    }
+
+    setIsProcessing(false);
+    setBatchStatus(null);
+  };
 
   const handleProcessEmail = async (content: string, name: string) => {
     if (!content.trim()) {
@@ -68,7 +154,7 @@ export function IngestionPipelineView({
       }
 
       progress.finish();
-      await new Promise(r => setTimeout(r, 400));
+      await new Promise((r) => setTimeout(r, 400));
 
       let finalAnalysis: EmailAnalysis;
       if (backendResult?.analysis || backendResult?.case) {
@@ -87,32 +173,17 @@ export function IngestionPipelineView({
   };
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      setRawText(content);
-      handleProcessEmail(content, file.name);
-    };
-    reader.readAsText(file);
+    const files = Array.from(e.target.files || []) as File[];
+    if (files.length === 0) return;
+    handleProcessBatch(files);
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) {
-      setFileName(file.name);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        setRawText(content);
-        handleProcessEmail(content, file.name);
-      };
-      reader.readAsText(file);
-    }
+    const files = Array.from(e.dataTransfer.files || []) as File[];
+    if (files.length === 0) return;
+    handleProcessBatch(files);
   };
 
   return (
@@ -146,11 +217,76 @@ export function IngestionPipelineView({
       {/* Real-Time Forensic Pipeline Telemetry (Visible during active ingestion) */}
       {isProcessing && (
         <div className="animate-in fade-in duration-200">
-          <AnalysisProgressPanel
-            stageStatus={progress.stageStatus}
-            stageDetail={progress.stageDetail}
-            startedAt={progress.startedAt}
-          />
+          {batchStatus ? (
+            <div className="space-y-4 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-950/80 border border-cyan-800 flex items-center justify-center text-cyan-400">
+                    <Database className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wide">
+                      Multi-File Ingestion Pipeline
+                    </h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Ingesting &amp; Analyzing File {batchStatus.current} of {batchStatus.total}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-cyan-950 border border-cyan-700/80 text-cyan-300">
+                  {Math.round((batchStatus.current / batchStatus.total) * 100)}% Complete
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
+                <div
+                  className="bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-500 h-full transition-all duration-300"
+                  style={{ width: `${(batchStatus.current / batchStatus.total) * 100}%` }}
+                />
+              </div>
+
+              <div className="text-xs text-slate-300 font-mono truncate">
+                <span className="text-slate-500">Current EML Stream:</span> {batchStatus.currentFilename}
+              </div>
+
+              {batchStatus.results.length > 0 && (
+                <div className="space-y-2 pt-3 border-t border-slate-800/80">
+                  <div className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    Batch Ingestion Queue ({batchStatus.results.length} processed):
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {batchStatus.results.map((res, idx) => (
+                      <div
+                        key={res.id || idx}
+                        className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-slate-200 truncate">{res.subject || res.name}</div>
+                          <div className="text-[10px] text-slate-500 font-mono truncate">{res.id} • {res.from}</div>
+                        </div>
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border shrink-0 ${
+                          (res.threatScore || 0) >= 80
+                            ? 'bg-rose-950 text-rose-300 border-rose-800'
+                            : (res.threatScore || 0) >= 50
+                            ? 'bg-amber-950 text-amber-300 border-amber-800'
+                            : 'bg-emerald-950 text-emerald-300 border-emerald-800'
+                        }`}>
+                          Score: {res.threatScore || 0}/100
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <AnalysisProgressPanel
+              stageStatus={progress.stageStatus}
+              stageDetail={progress.stageDetail}
+              startedAt={progress.startedAt}
+            />
+          )}
         </div>
       )}
 
@@ -182,7 +318,7 @@ export function IngestionPipelineView({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            Upload File (.eml / .msg)
+            Upload Files (.eml / .msg / Batch)
           </button>
           <button
             onClick={() => setActiveTab('batch')}
@@ -209,7 +345,7 @@ export function IngestionPipelineView({
               <button
                 disabled={isProcessing || !rawText.trim()}
                 onClick={() => handleProcessEmail(rawText, 'pasted_message.eml')}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-lg shadow-cyan-950/40 disabled:opacity-50 transition-all"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-lg shadow-cyan-950/40 disabled:opacity-50 transition-all cursor-pointer"
               >
                 <span>Execute Forensic Pipeline</span>
                 <ArrowRight className="w-4 h-4" />
@@ -233,14 +369,15 @@ export function IngestionPipelineView({
             >
               <Upload className="w-10 h-10 mx-auto text-cyan-400 mb-3 opacity-80" />
               <p className="text-sm font-semibold text-slate-200">
-                Click to browse or drag &amp; drop an email file here
+                Click to browse or drag &amp; drop single or multiple email files here
               </p>
-              <p className="text-xs text-slate-500 mt-1">
-                Supports .eml, .msg, .txt RFC822 files up to 25MB
+              <p className="text-xs text-slate-400 font-mono mt-1">
+                Multi-file batch ingestion enabled — select multiple .eml, .msg, or .txt files
               </p>
               <input
                 type="file"
                 ref={fileInputRef}
+                multiple
                 onChange={handleFileUpload}
                 accept=".eml,.msg,.txt"
                 className="hidden"

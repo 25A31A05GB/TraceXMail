@@ -840,7 +840,7 @@ export function parseRawEml(raw: string, filename = 'custom_analysis.eml'): Emai
   const evidenceId = generateEvidenceId();
 
   return {
-    id: `custom-${Date.now()}`,
+    id: `EML-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
     sessionId,
     trackingId,
     evidenceId,

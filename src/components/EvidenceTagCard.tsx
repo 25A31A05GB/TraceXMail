@@ -377,14 +377,14 @@ export function EvidenceTagCard({
   };
 
   const handleExportPdf = async () => {
-    if (!cardRef.current) return;
     setExportingPdf(true);
     try {
       const filename = `TraceXMail-Evidence-${cardData.evidenceId || cardData.caseId || 'artifact'}.pdf`;
-      await exportEvidenceAsPdf(cardRef.current, filename, {
+      await exportEvidenceAsPdf(cardRef.current!, filename, {
         caseId: cardData.caseId,
         evidenceId: cardData.evidenceId,
-        title: cardData.subject
+        title: cardData.subject,
+        analysis
       });
     } catch (err) {
       console.error('Failed to export Evidence as PDF:', err);
@@ -394,11 +394,15 @@ export function EvidenceTagCard({
   };
 
   const handleExportImage = async () => {
-    if (!cardRef.current) return;
     setExportingImage(true);
     try {
       const filename = `TraceXMail-Evidence-${cardData.evidenceId || cardData.caseId || 'artifact'}.png`;
-      await exportEvidenceAsImage(cardRef.current, filename);
+      await exportEvidenceAsImage(cardRef.current!, filename, {
+        caseId: cardData.caseId,
+        evidenceId: cardData.evidenceId,
+        title: cardData.subject,
+        analysis
+      });
     } catch (err) {
       console.error('Failed to export Evidence as Image:', err);
     } finally {
