@@ -1,30 +1,60 @@
 {
-  "model": "TraceXMail BEC Weights Matrix v2.1",
-  "version": "2.1.0",
+  "layer": "HEURISTIC_RULE_DICTIONARY",
+  "title": "TraceXMail Static Forensic Lexicon & Heuristic Fallback",
+  "version": "2.1.0-heuristic",
+  "ml_status": "NON_ML_HEURISTIC_LAYER",
+  "description": "Static hand-tuned keyword-multiplier dictionary (48 features) used as deterministic fallback rules. This is NOT a machine-learned model. For trained ML inference on payment diversion, refer to data/datasets/bec_learned_model.json.",
   "categories": {
     "EXECUTIVE_IMPERSONATION": {
-      "keywords": ["ceo", "cfo", "president", "director", "executive", "urgent transfer", "wire instruction"],
+      "keywords": [
+        "ceo",
+        "cfo",
+        "president",
+        "director",
+        "executive",
+        "urgent transfer",
+        "wire instruction"
+      ],
       "base_weight": 0.88,
       "urgency_multiplier": 1.45
     },
     "PAYROLL_REDIRECT": {
-      "keywords": ["direct deposit", "payroll update", "bank account change", "voided check", "w2 form"],
+      "keywords": [
+        "direct deposit",
+        "payroll update",
+        "bank account change",
+        "voided check",
+        "w2 form"
+      ],
       "base_weight": 0.92,
       "urgency_multiplier": 1.3
     },
     "INVOICE_FRAUD": {
-      "keywords": ["updated invoice", "new banking details", "swift payment", "vendor remittance", "past due balance"],
+      "keywords": [
+        "updated invoice",
+        "new banking details",
+        "swift payment",
+        "vendor remittance",
+        "past due balance"
+      ],
       "base_weight": 0.85,
       "urgency_multiplier": 1.2
     },
     "GIFT_CARD_SCAM": {
-      "keywords": ["apple gift card", "steam card", "discreet favor", "in a meeting", "buy cards"],
+      "keywords": [
+        "apple gift card",
+        "steam card",
+        "discreet favor",
+        "in a meeting",
+        "buy cards"
+      ],
       "base_weight": 0.95,
       "urgency_multiplier": 1.6
     }
   },
   "metadata": {
-    "trained_date": "2024-07-20",
-    "features_count": 48
+    "historical_hand_tuned_date": "2024-07-20",
+    "features_count": 48,
+    "architecture_note": "Replaced by Phase 3 learned Logistic Regression model in src/server/becLearnedModel.ts."
   }
 }

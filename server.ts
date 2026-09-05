@@ -160,234 +160,42 @@ function analyzeContentRisk(subject: string, body: string): { score: number; heu
   return { score, heuristics };
 }
 
-// In-Memory Data Store (tagged with is_demo: true for seed corpus)
-const INITIAL_CASES = [
-  {
-    id: 'sample-paypal-phish',
-    title: 'Nazario Phish: PayPal Urgent Restriction',
-    description: 'Credential harvesting attack impersonating PayPal Security Center with Tor exit node origin relay and spoofed headers.',
-    status: 'OPEN',
-    severity: 'CRITICAL',
-    threat_score: 98,
-    created_at: '2024-07-18T13:12:15.000Z',
-    from_domain: 'paypal-account-security-update.com',
-    origin_ip: '185.220.101.5',
-    origin_country: 'Bulgaria',
-    origin_asn: 'AS200548',
-    origin_asn_org: 'Zettahost Cyber Ltd',
-    infra_type: 'TOR_EXIT_NODE',
-    tags: ['BEC', 'PayPal', 'Phishing', 'Tor Relay'],
-    assigned_user: 'Senior Forensic Analyst',
-    is_demo: true,
-    source: 'sample_corpus',
-    ml_confidence: 0.98,
-    phishing_probability: 0.99,
-    auth: {
-      spf: { status: 'SOFTFAIL', record: 'v=spf1 include:_spf.paypal.com ~all', ip: '185.220.101.5', domain: 'paypal-account-security-update.com', details: 'Unauthorized sending IP on Tor relay' },
-      dkim: { status: 'NONE', selector: 'NONE', domain: 'paypal-account-security-update.com', details: 'No DKIM signature present' },
-      dmarc: { status: 'FAIL', policy: 'reject', domain: 'paypal-account-security-update.com', details: 'DMARC alignment failed' },
-      arc: { status: 'NONE', details: 'No ARC chain' }
-    },
-    heuristics: [
-      { id: 'h-typo', severity: 'CRITICAL', title: 'Typosquatting Brand Impersonation', description: 'Deceptive lookalike domain spoofing PayPal.' },
-      { id: 'h-tor', severity: 'HIGH', title: 'Tor Exit Node Relay Origin', description: 'Origin IP 185.220.101.5 is a known Tor exit node.' },
-      { id: 'h-urgency', severity: 'MEDIUM', title: 'Urgency/Pressure Language', description: 'Urgent action pressure detected.' }
-    ]
-  },
-  {
-    id: 'sample-m365-phish',
-    title: 'M365 Auth Harvester: Password Expiration Notice',
-    description: 'Targeted spear phishing with obfuscated JavaScript payload attempting Microsoft 365 session token theft.',
-    status: 'IN_PROGRESS',
-    severity: 'HIGH',
-    threat_score: 86,
-    created_at: '2024-07-17T09:44:10.000Z',
-    from_domain: 'microsoft-auth-verify.com',
-    origin_ip: '89.144.20.12',
-    origin_country: 'Germany',
-    origin_asn: 'AS24940',
-    origin_asn_org: 'Hetzner Online',
-    infra_type: 'BULLETPROOF_HOST',
-    tags: ['Credential Theft', 'M365', 'JavaScript Payload'],
-    assigned_user: 'Incident Responder',
-    is_demo: true,
-    source: 'sample_corpus',
-    ml_confidence: 0.94,
-    phishing_probability: 0.88,
-    auth: {
-      spf: { status: 'NONE', record: undefined, ip: '89.144.20.12', domain: 'microsoft-auth-verify.com', details: 'No SPF record found' },
-      dkim: { status: 'NONE', selector: 'NONE', domain: 'microsoft-auth-verify.com', details: 'No DKIM signature present' },
-      dmarc: { status: 'NONE', policy: 'none', domain: 'microsoft-auth-verify.com', details: 'No DMARC policy defined' },
-      arc: { status: 'NONE', details: 'No ARC chain' }
-    },
-    heuristics: [
-      { id: 'h-cred', severity: 'HIGH', title: 'Credential Harvesting Pattern', description: 'Obfuscated JavaScript payload targeting session tokens.' }
-    ]
-  },
-  {
-    id: 'sample-bec-wire',
-    title: 'BEC Payroll Spoof: Urgent Direct Deposit Change',
-    description: 'Executive impersonation campaign requesting immediate wire transfer redirect with display name spoofing.',
-    status: 'OPEN',
-    severity: 'CRITICAL',
-    threat_score: 94,
-    created_at: '2024-07-16T16:20:00.000Z',
-    from_domain: 'company-exec.net',
-    origin_ip: '185.220.101.5',
-    origin_country: 'Bulgaria',
-    origin_asn: 'AS200548',
-    origin_asn_org: 'Zettahost Cyber Ltd',
-    infra_type: 'TOR_EXIT_NODE',
-    tags: ['BEC', 'Wire Transfer', 'Executive Impersonation'],
-    assigned_user: 'Lead SOC Analyst',
-    is_demo: true,
-    source: 'sample_corpus',
-    ml_confidence: 0.96,
-    phishing_probability: 0.95,
-    auth: {
-      spf: { status: 'SOFTFAIL', record: 'v=spf1 -all', ip: '185.220.101.5', domain: 'company-exec.net', details: 'Sending IP unauthorized' },
-      dkim: { status: 'NONE', selector: 'NONE', domain: 'company-exec.net', details: 'No DKIM signature present' },
-      dmarc: { status: 'FAIL', policy: 'quarantine', domain: 'company-exec.net', details: 'DMARC alignment failed' },
-      arc: { status: 'NONE', details: 'No ARC chain' }
-    },
-    heuristics: [
-      { id: 'h-bec', severity: 'HIGH', title: 'Business Email Compromise Pattern', description: 'Financial routing alteration requested.' },
-      { id: 'h-tor', severity: 'HIGH', title: 'Tor Relay Transmission', description: 'Origin routed via Tor exit.' }
-    ]
-  },
-  {
-    id: 'sample-docusign-lure',
-    title: 'DocuSign Impersonation: Confidential Document Waiting',
-    description: 'Fake DocuSign signature request routing to compromised WordPress host running phishing form.',
-    status: 'CLOSED',
-    severity: 'MEDIUM',
-    threat_score: 62,
-    created_at: '2024-07-15T11:05:30.000Z',
-    from_domain: 'docusign-envelope-review.com',
-    origin_ip: '198.51.100.24',
-    origin_country: 'United States',
-    origin_asn: 'AS15169',
-    origin_asn_org: 'Google LLC',
-    infra_type: 'COMPROMISED_HOST',
-    tags: ['DocuSign', 'Malicious Link', 'WordPress Relay'],
-    assigned_user: 'Tier 1 Analyst',
-    is_demo: true,
-    source: 'sample_corpus',
-    ml_confidence: 0.91,
-    phishing_probability: 0.65,
-    auth: {
-      spf: { status: 'PASS', record: 'v=spf1 mx ~all', ip: '198.51.100.24', domain: 'docusign-envelope-review.com', details: 'SPF passed' },
-      dkim: { status: 'NONE', selector: 'NONE', domain: 'docusign-envelope-review.com', details: 'No DKIM signature' },
-      dmarc: { status: 'NONE', policy: 'none', domain: 'docusign-envelope-review.com', details: 'No DMARC policy' },
-      arc: { status: 'NONE', details: 'No ARC chain' }
-    },
-    heuristics: [
-      { id: 'h-link', severity: 'MEDIUM', title: 'Deceptive Redirect Link', description: 'Link points away from genuine DocuSign infrastructure.' }
-    ]
-  }
-];
-
-const INITIAL_CAMPAIGNS = [
-  {
-    id: 'camp-001',
-    name: 'Op BEC WireHijack',
-    threat_actor: 'Unattributed (BEC Spoof Net)',
-    target_industry: 'Financial & HR',
-    status: 'ACTIVE',
-    total_emails: 8,
-    first_seen: '2024-06-10T08:00:00.000Z',
-    last_seen: '2024-07-18T13:12:15.000Z',
-    notes: 'Executive spoofing targeting CFO & Payroll with lookalike domains.',
-    member_email_ids: ['sample-paypal-phish', 'sample-bec-wire']
-  },
-  {
-    id: 'camp-002',
-    name: 'M365 Credential Harvest Wave',
-    threat_actor: 'Unattributed (Credential Phishing Kit)',
-    target_industry: 'Enterprise Technology',
-    status: 'ACTIVE',
-    total_emails: 14,
-    first_seen: '2024-07-01T10:30:00.000Z',
-    last_seen: '2024-07-17T09:44:10.000Z',
-    notes: 'Mass credential harvest using bulletproof transit ASNs.',
-    member_email_ids: ['sample-m365-phish']
-  },
-  {
-    id: 'camp-003',
-    name: 'DocuSign Signature Lure Net',
-    threat_actor: 'Unattributed (Deceptive Signature Relay)',
-    target_industry: 'Legal & Consulting',
-    status: 'MONITORED',
-    total_emails: 5,
-    first_seen: '2024-07-05T14:15:00.000Z',
-    last_seen: '2024-07-15T11:05:30.000Z',
-    notes: 'Compromised web servers hosting credential phishing kits.',
-    member_email_ids: ['sample-docusign-lure']
-  }
-];
-
-const INITIAL_ALERTS = [
-  {
-    id: 'alt_001',
-    case_id: 'sample-bec-wire',
-    timestamp: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
-    severity: 'CRITICAL',
-    title: 'BEC Payroll Spoofing Attack Detected',
-    description: 'CEO impersonation attempting wire redirection. SPF neutral, display name mismatch, urgency trigger.',
-    source: 'mail-gateway-01',
-    read: false,
-    threat_score: 94,
-    category: 'BEC_IMPERSONATION',
-    sender: 'ceo-office@company-exec.net',
-    subject: 'URGENT: Updated Direct Deposit Routing'
-  },
-  {
-    id: 'alt_002',
-    case_id: 'sample-m365-phish',
-    timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    severity: 'HIGH',
-    title: 'Credential Harvester Landing Page Identified',
-    description: 'Obfuscated JavaScript redirecting to cloned Microsoft 365 sign-in page on bulletproof ASN.',
-    source: 'pipeline-heuristics',
-    read: false,
-    threat_score: 86,
-    category: 'CREDENTIAL_HARVESTING',
-    sender: 'security@microsoft-auth-verify.com',
-    subject: 'Action Required: Verify Office 365 Password Expiry'
-  },
-  {
-    id: 'alt_003',
-    case_id: 'sample-paypal-phish',
-    timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-    severity: 'CRITICAL',
-    title: 'Tor Exit Node Relay Detected in Email Hops',
-    description: 'First hop relay 185.220.101.5 resolved to active Tor exit node with AbuseIPDB confidence 88%.',
-    source: 'traceroute-engine',
-    read: true,
-    threat_score: 98,
-    category: 'TOR_RELAY_ANOMALY',
-    sender: 'service@paypal.com',
-    subject: '[URGENT] Your PayPal Account Has Been Temporarily Restricted'
-  }
-];
-
-let casesStore = [...INITIAL_CASES];
-let campaignsStore = [...INITIAL_CAMPAIGNS];
-let alertsStore = [...INITIAL_ALERTS];
+// Note: In-memory stores (casesStore, campaignsStore, alertsStore) have been permanently removed.
+// All data is stored and retrieved exclusively from Supabase Postgres tables with Row Level Security.
 
 // Global WebSocket broadcaster
 let broadcastWebSocketEvent: (eventData: any) => void = () => {};
 
 // Central Alert Broadcaster (WebSocket + Real-Time Slack Security Alerts)
-function broadcastAlert(alert: any, extraData?: any) {
+async function broadcastAlert(alert: any, extraData?: any) {
   if (!alert) return;
 
-  // 1. Ensure alert is stored in-memory
-  if (!alertsStore.some(a => a.id === alert.id)) {
-    alertsStore.unshift(alert);
+  // Persist alert to Supabase Postgres
+  const supabase = getSupabaseClient();
+  if (supabase) {
+    try {
+      await supabase.from('alerts').insert([{
+        id: alert.id,
+        organization_id: alert.organization_id || '00000000-0000-0000-0000-000000000000',
+        case_id: alert.case_id || null,
+        timestamp: alert.timestamp || new Date().toISOString(),
+        severity: alert.severity || 'HIGH',
+        title: alert.title,
+        description: alert.description || null,
+        source: alert.source || 'pipeline',
+        read: alert.read ?? false,
+        threat_score: alert.threat_score ?? null,
+        category: alert.category || null,
+        sender: alert.sender || null,
+        subject: alert.subject || null,
+        is_demo: alert.is_demo ?? false
+      }]);
+    } catch (dbErr) {
+      console.warn('[Supabase] Failed to persist alert to DB:', dbErr);
+    }
   }
 
-  // 2. Broadcast via WebSocket feed
+  // Broadcast via WebSocket feed
   try {
     if (typeof broadcastWebSocketEvent === 'function') {
       broadcastWebSocketEvent(alert);
@@ -400,7 +208,7 @@ function broadcastAlert(alert: any, extraData?: any) {
     console.warn('[WebSocket Broadcast Warning]', err?.message);
   }
 
-  // 3. Dispatch real-time Slack alert (completely non-blocking)
+  // Dispatch real-time Slack alert (completely non-blocking)
   sendSlackSecurityAlert(alert, extraData).catch(err => {
     console.warn('[Slack Auto-Dispatch Exception]', err?.message);
   });
@@ -901,15 +709,12 @@ async function parseRawEmailToAnalysis(
     why: whyNarrative
   };
 
-  casesStore.unshift(newCaseItem);
-
-  // Durable write-through to Supabase when database is connected
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
       await supabase.from('cases').insert([{
         id: newCaseItem.id,
-        organization_id: 'org_primary_soc',
+        organization_id: options?.organizationId || '00000000-0000-0000-0000-000000000000',
         title: newCaseItem.title,
         description: newCaseItem.description,
         status: newCaseItem.status,
@@ -921,9 +726,18 @@ async function parseRawEmailToAnalysis(
         heuristics: newCaseItem.heuristics,
         ml_confidence: newCaseItem.ml_confidence,
         phishing_probability: newCaseItem.phishing_probability,
+        from_domain: newCaseItem.from_domain,
+        origin_ip: newCaseItem.origin_ip,
+        origin_country: newCaseItem.origin_country,
+        origin_asn: newCaseItem.origin_asn,
+        origin_asn_org: newCaseItem.origin_asn_org,
+        infra_type: newCaseItem.infra_type,
         created_at: newCaseItem.created_at,
         assigned_user: newCaseItem.assigned_user,
-        tags: newCaseItem.tags
+        tags: newCaseItem.tags,
+        is_demo: false,
+        source: 'ingest',
+        raw_analysis: newCaseItem
       }]);
     } catch (dbErr) {
       console.warn('[Supabase] Failed to persist analyzed case to DB:', dbErr);
@@ -1135,6 +949,8 @@ async function parseRawEmailToAnalysis(
     llm_linguistic_forensics: classification.llm_linguistic_forensics,
     weighted_lexicon_score: classification.weighted_lexicon_score,
     extracted_financial_entities: classification.extracted_financial_entities,
+    bec_learned_model: classification.bec_learned_model,
+    meta_classifier: classification.meta_classifier,
     summary: isTyposquat 
       ? `High-risk typosquatting phishing targeting ${targetBrand || 'enterprise brand'} via deceptive sender domain (${fromDomain}).`
       : threatScore >= 75
@@ -1237,41 +1053,26 @@ async function startServer() {
   app.get('/api/network/ping', handlePingNetwork);
   app.get('/api/network/bandwidth-payload', handleGetBandwidthPayload);
 
-  // Authentication & Session Management
-  // Lightweight Session / Identity Provisioning for Frontend Demo & SOC Analysts
-  app.post('/api/auth/session', (req, res) => {
-    const requestedRole = (req.body?.role === 'admin' || req.body?.role === 'read_only') ? req.body.role : 'analyst';
-    const orgId = (req.body?.organization_id as string) || 'org_acme_soc_01';
-    const email = requestedRole === 'admin'
-      ? 'admin@acmedefense.sec'
-      : requestedRole === 'read_only'
-        ? 'auditor@acmedefense.sec'
-        : 'analyst@acmedefense.sec';
-
-    const userId = `usr_${requestedRole}_demo`;
-
-    const token = signUserToken({
-      userId,
-      email,
-      organizationId: orgId,
-      role: requestedRole
-    });
-
+  // Authentication & Profile Verification Endpoint
+  app.get('/api/auth/me', requireAuth, (req, res) => {
+    const user = (req as AuthenticatedRequest).user;
     res.json({
       status: 'authenticated',
-      token,
       user: {
-        userId,
-        email,
-        organizationId: orgId,
-        role: requestedRole,
-        label: requestedRole === 'admin'
-          ? 'Demo Admin Session'
-          : requestedRole === 'read_only'
-            ? 'Demo Auditor (Read-Only) Session'
-            : 'Demo Analyst Session'
-      },
-      expires_in: '24h'
+        userId: user!.userId,
+        email: user!.email,
+        organizationId: user!.organizationId,
+        role: user!.role,
+        authMethod: user!.authMethod
+      }
+    });
+  });
+
+  // Deprecated fake session endpoint: permanent 410 Gone with instructions
+  app.all('/api/auth/session', (_req, res) => {
+    res.status(410).json({
+      error: 'The insecure /api/auth/session endpoint has been permanently removed. Authenticate using real Supabase Auth (email/password or SSO) and provide the JWT token in Authorization: Bearer <token>.',
+      code: 'ERR_ENDPOINT_GONE'
     });
   });
 
@@ -1337,146 +1138,186 @@ async function startServer() {
         default_user_role: 'analyst'
       },
       records: {
-        cases_count: casesStore.length,
-        campaigns_count: campaignsStore.length,
-        audit_logs_cached_count: IN_MEMORY_AUDIT_LOGS.length
+        audit_logs_cached_count: IN_MEMORY_AUDIT_LOGS.length,
+        database_engine: supabase ? 'Postgres Supabase RLS' : 'Not Configured'
       },
       timestamp: new Date().toISOString()
     });
   });
 
-  // Dashboard Stats (Deterministic computation based on real cases & active ingestions)
-  const handleStatsResponse = (_req: express.Request, res: express.Response) => {
-    const realCases = casesStore.filter(c => !c.is_demo);
-    const demoCases = casesStore.filter(c => c.is_demo);
-    const totalCount = casesStore.length;
+  // Dashboard Stats (Deterministic computation from Supabase Postgres)
+  const handleStatsResponse = async (req: express.Request, res: express.Response) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const user = (req as AuthenticatedRequest).user;
+    const orgId = user?.organizationId || (req.query.organization_id as string);
 
-    res.json({
-      summary: {
-        total_cases: totalCount,
-        real_cases_count: realCases.length,
-        demo_cases_count: demoCases.length,
-        total_emails_ingested: realCases.length,
-        active_campaigns: campaignsStore.length,
-        active_alerts: alertsStore.length,
-        threat_distribution: {
-          CRITICAL: casesStore.filter(c => c.severity === 'CRITICAL').length,
-          HIGH: casesStore.filter(c => c.severity === 'HIGH').length,
-          MEDIUM: casesStore.filter(c => c.severity === 'MEDIUM').length,
-          LOW: casesStore.filter(c => c.severity === 'LOW').length,
-          CLEAN: casesStore.filter(c => c.severity === 'CLEAN').length
+    try {
+      let casesQuery = supabase.from('cases').select('severity, threat_score, is_demo, organization_id');
+      if (orgId) {
+        casesQuery = casesQuery.or(`organization_id.eq.${orgId},is_demo.eq.true`);
+      }
+      const { data: casesData, error: casesError } = await casesQuery;
+      if (casesError) {
+        return res.status(500).json({ error: casesError.message });
+      }
+
+      let campQuery = supabase.from('campaigns').select('id, organization_id, is_demo');
+      if (orgId) {
+        campQuery = campQuery.or(`organization_id.eq.${orgId},is_demo.eq.true`);
+      }
+      const { data: campData } = await campQuery;
+
+      let alertQuery = supabase.from('alerts').select('*').order('timestamp', { ascending: false });
+      if (orgId) {
+        alertQuery = alertQuery.or(`organization_id.eq.${orgId},is_demo.eq.true`);
+      }
+      const { data: alertData } = await alertQuery;
+
+      const allCases = casesData || [];
+      const realCases = allCases.filter(c => !c.is_demo);
+      const demoCases = allCases.filter(c => c.is_demo);
+      const totalCount = allCases.length;
+
+      const criticalCount = allCases.filter(c => c.severity === 'CRITICAL').length;
+      const highCount = allCases.filter(c => c.severity === 'HIGH').length;
+      const mediumCount = allCases.filter(c => c.severity === 'MEDIUM').length;
+      const lowCount = allCases.filter(c => c.severity === 'LOW').length;
+      const cleanCount = allCases.filter(c => c.severity === 'CLEAN').length;
+
+      const avgThreatScore = totalCount > 0
+        ? Math.round(allCases.reduce((acc, c) => acc + (c.threat_score || 0), 0) / totalCount)
+        : 0;
+
+      res.json({
+        summary: {
+          total_cases: totalCount,
+          real_cases_count: realCases.length,
+          demo_cases_count: demoCases.length,
+          total_emails_ingested: realCases.length,
+          active_campaigns: (campData || []).length,
+          active_alerts: (alertData || []).length,
+          high_threat_count: criticalCount + highCount,
+          threat_distribution: {
+            CRITICAL: criticalCount,
+            HIGH: highCount,
+            MEDIUM: mediumCount,
+            LOW: lowCount,
+            CLEAN: cleanCount
+          },
+          avg_threat_score: avgThreatScore,
+          average_threat_score: avgThreatScore
         },
-        average_threat_score: totalCount > 0
-          ? Math.round(casesStore.reduce((acc, c) => acc + (c.threat_score || 0), 0) / totalCount)
-          : 0
-      },
-      infrastructure_attribution: {
-        status: 'Unattributed',
-        infrastructure_breakdown: [
-          { type: 'Spoofed Domain Permutations', percentage: 82 },
-          { type: 'Anonymized / Tor Relays', percentage: 71 },
-          { type: 'Compromised Webmail / Hosts', percentage: 18 },
-          { type: 'Legitimate Corporate Routes', percentage: 5 }
-        ]
-      },
-      threat_actors: [
-        { name: 'Unattributed (BEC Spoof Net)', campaign_count: 2, target: 'Financial & Executive HR', status: 'ACTIVE' },
-        { name: 'Unattributed (Credential Phishing Kit)', campaign_count: 1, target: 'Enterprise Office 365', status: 'MONITORED' },
-        { name: 'Unattributed (Deceptive Signature Relay)', campaign_count: 1, target: 'Legal & Consulting', status: 'CONTAINED' }
-      ],
-      recent_alerts: alertsStore.slice(0, 5)
-    });
+        infrastructure_attribution: {
+          status: 'Unattributed',
+          infrastructure_breakdown: [
+            { type: 'Spoofed Domain Permutations', percentage: 82 },
+            { type: 'Anonymized / Tor Relays', percentage: 71 },
+            { type: 'Compromised Webmail / Hosts', percentage: 18 },
+            { type: 'Legitimate Corporate Routes', percentage: 5 }
+          ]
+        },
+        threat_actors: [
+          { name: 'Unattributed (BEC Spoof Net)', campaign_count: 2, target: 'Financial & Executive HR', status: 'ACTIVE' },
+          { name: 'Unattributed (Credential Phishing Kit)', campaign_count: 1, target: 'Enterprise Office 365', status: 'MONITORED' },
+          { name: 'Unattributed (Deceptive Signature Relay)', campaign_count: 1, target: 'Legal & Consulting', status: 'CONTAINED' }
+        ],
+        recent_alerts: (alertData || []).slice(0, 5)
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to compute dashboard stats' });
+    }
   };
 
   app.get('/api/stats', handleStatsResponse);
   app.get('/api/stats/dashboard', handleStatsResponse);
   app.get('/api/v1/stats', handleStatsResponse);
 
-  // Cases Management with RBAC:
-  // - Reads from Supabase when configured (filtered by organization_id & is_demo), falling back to in-memory casesStore
-  // - PII-unmasked case reads: admin/analyst only; read_only always gets mask_pii=true forced
-  // - Supports exclude_demo / real_only query filters
+  // Cases Management with RBAC & Supabase persistence
   app.get('/api/cases', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
     const user = (req as AuthenticatedRequest).user;
-    // Default-deny masking policy: unauthenticated/anonymous requests (!user) must receive masked PII by default for security.
-    // Authenticated callers with 'read_only' role also receive masked PII.
-    // The existing 'mask_pii=true' query parameter still explicitly forces this behavior even for privileged roles.
     const shouldMask = !user || user.role === 'read_only' || req.query.mask_pii === 'true';
     const excludeDemo = req.query.exclude_demo === 'true' || req.query.real_only === 'true';
-    const orgId = (req.query.organization_id as string) || user?.organizationId;
+    const orgId = user?.organizationId || (req.query.organization_id as string);
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        let query = supabase.from('cases').select('*').order('created_at', { ascending: false });
+    try {
+      let query = supabase.from('cases').select('*').order('created_at', { ascending: false });
+      if (excludeDemo) {
+        query = query.eq('is_demo', false);
         if (orgId) {
           query = query.eq('organization_id', orgId);
         }
-        if (excludeDemo) {
-          query = query.eq('is_demo', false);
+      } else {
+        if (orgId) {
+          query = query.or(`organization_id.eq.${orgId},is_demo.eq.true`);
         }
-
-        const { data, error } = await query;
-        if (!error && Array.isArray(data) && data.length > 0) {
-          const formatted = data.map((c: any) => ({
-            ...c,
-            tags: Array.isArray(c.tags) ? c.tags : (typeof c.tags === 'string' ? JSON.parse(c.tags || '[]') : ['Custom']),
-            is_demo: Boolean(c.is_demo)
-          }));
-          const results = shouldMask ? formatted.map((c: any) => maskCasePii(c)) : formatted;
-          return res.json(results);
-        }
-      } catch (dbErr) {
-        console.warn('[Supabase] Failed reading cases from DB, falling back to in-memory store:', dbErr);
       }
-    }
 
-    // In-memory fallback
-    let list = excludeDemo ? casesStore.filter(c => !c.is_demo) : casesStore;
-    if (orgId && orgId !== 'org_primary_soc') {
-      list = list.filter(c => !c.organization_id || c.organization_id === orgId);
+      const { data, error } = await query;
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+      const formatted = (data || []).map((c: any) => ({
+        ...c,
+        tags: Array.isArray(c.tags) ? c.tags : (typeof c.tags === 'string' ? JSON.parse(c.tags || '[]') : ['Custom']),
+        is_demo: Boolean(c.is_demo)
+      }));
+      const results = shouldMask ? formatted.map((c: any) => maskCasePii(c)) : formatted;
+      res.json(results);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch cases' });
     }
-    const results = shouldMask ? list.map(c => maskCasePii(c)) : list;
-    res.json(results);
   });
 
   app.get('/api/cases/:caseId', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
     const user = (req as AuthenticatedRequest).user;
-    // Default-deny masking policy: unauthenticated/anonymous requests (!user) must receive masked PII by default for security.
-    // Authenticated callers with 'read_only' role also receive masked PII.
-    // The existing 'mask_pii=true' query parameter still explicitly forces this behavior even for privileged roles.
     const shouldMask = !user || user.role === 'read_only' || req.query.mask_pii === 'true';
     const caseId = req.params.caseId;
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        const { data, error } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
-        if (!error && data) {
-          const formatted = {
-            ...data,
-            tags: Array.isArray(data.tags) ? data.tags : (typeof data.tags === 'string' ? JSON.parse(data.tags || '[]') : ['Custom']),
-            is_demo: Boolean(data.is_demo)
-          };
-          return res.json(shouldMask ? maskCasePii(formatted) : formatted);
-        }
-      } catch (dbErr) {
-        console.warn('[Supabase] Error fetching single case from DB, falling back:', dbErr);
+    try {
+      const { data, error } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
+      if (error) {
+        return res.status(500).json({ error: error.message });
       }
+      if (!data) {
+        return res.status(404).json({ error: 'Case not found' });
+      }
+      const formatted = {
+        ...data,
+        tags: Array.isArray(data.tags) ? data.tags : (typeof data.tags === 'string' ? JSON.parse(data.tags || '[]') : ['Custom']),
+        is_demo: Boolean(data.is_demo)
+      };
+      res.json(shouldMask ? maskCasePii(formatted) : formatted);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch case' });
     }
-
-    const found = casesStore.find(c => c.id === caseId);
-    if (!found) {
-      return res.status(404).json({ error: 'Case not found' });
-    }
-    res.json(shouldMask ? maskCasePii(found) : found);
   });
 
   app.post('/api/cases', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
     const user = (req as AuthenticatedRequest).user!;
+
+    if (req.body?.organization_id && req.body.organization_id !== user.organizationId) {
+      console.warn(`[Security Alert] Client sent organization_id '${req.body.organization_id}', overriding with user's org '${user.organizationId}'`);
+    }
+
     const { title, description, severity = 'HIGH', threat_score = 85, tags = ['Custom'] } = req.body;
     const newCase = {
       id: `case-${Date.now()}`,
+      organization_id: user.organizationId,
       title: title || 'New Forensic Case',
       description: description || 'Created manually via Case Manager',
       status: 'OPEN',
@@ -1488,24 +1329,11 @@ async function startServer() {
       is_demo: false,
       source: 'manual'
     };
-    casesStore.unshift(newCase);
 
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      try {
-        await supabase.from('cases').insert([{
-          id: newCase.id,
-          organization_id: user.organizationId,
-          title: newCase.title,
-          description: newCase.description,
-          status: newCase.status,
-          severity: newCase.severity,
-          threat_score: newCase.threat_score,
-          created_at: newCase.created_at
-        }]);
-      } catch (dbErr) {
-        console.warn('[Supabase] Failed to write case to DB:', dbErr);
-      }
+    const { data, error } = await supabase.from('cases').insert([newCase]).select().single();
+    if (error) {
+      console.error('[Supabase] Failed to insert case:', error);
+      return res.status(500).json({ error: `Database insert failed: ${error.message}` });
     }
 
     try {
@@ -1524,29 +1352,29 @@ async function startServer() {
       console.error('[Audit] Failed to log case creation:', auditErr);
     }
 
-    res.status(201).json(newCase);
+    res.status(201).json(data || newCase);
   });
 
   // Case Deletion with RBAC: admin / analyst only
   app.delete('/api/cases/:caseId', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
     const user = (req as AuthenticatedRequest).user!;
     const { caseId } = req.params;
-    const idx = casesStore.findIndex(c => c.id === caseId);
-    if (idx === -1) {
+
+    const { data: existing, error: findError } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
+    if (findError) {
+      return res.status(500).json({ error: findError.message });
+    }
+    if (!existing) {
       return res.status(404).json({ error: 'Case not found' });
     }
 
-    const deletedCase = casesStore.splice(idx, 1)[0];
-
-    const supabase = getSupabaseClient();
-    let dbDeleted = false;
-    if (supabase) {
-      try {
-        await supabase.from('cases').delete().eq('id', caseId);
-        dbDeleted = true;
-      } catch (dbErr) {
-        console.warn('[Supabase] Failed to delete case from DB:', dbErr);
-      }
+    const { error: delError } = await supabase.from('cases').delete().eq('id', caseId);
+    if (delError) {
+      return res.status(500).json({ error: `Failed to delete case: ${delError.message}` });
     }
 
     try {
@@ -1560,9 +1388,8 @@ async function startServer() {
         resource_type: 'case',
         resource_id: caseId,
         details: {
-          case_title: deletedCase.title,
-          severity: deletedCase.severity,
-          database_deleted: dbDeleted
+          case_title: existing.title,
+          severity: existing.severity
         }
       }, supabase);
     } catch (auditErr) {
@@ -1572,18 +1399,30 @@ async function startServer() {
     res.json({
       status: 'success',
       message: `Case ${caseId} successfully deleted`,
-      deletedCase
+      deletedCase: existing
     });
   });
 
-  app.patch('/api/cases/:caseId', (req, res) => {
+  app.patch('/api/cases/:caseId', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
     const { caseId } = req.params;
-    const idx = casesStore.findIndex(c => c.id === caseId);
-    if (idx === -1) {
+
+    const updates = { ...req.body };
+    delete updates.organization_id;
+    delete updates.id;
+    updates.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase.from('cases').update(updates).eq('id', caseId).select().maybeSingle();
+    if (error) {
+      return res.status(500).json({ error: `Failed to update case: ${error.message}` });
+    }
+    if (!data) {
       return res.status(404).json({ error: 'Case not found' });
     }
-    casesStore[idx] = { ...casesStore[idx], ...req.body };
-    res.json(casesStore[idx]);
+    res.json(data);
   });
 
   app.post('/api/cases/:caseId/emails', (req, res) => {
@@ -1694,10 +1533,7 @@ async function startServer() {
         caller_user_id: user.userId,
         caller_email: user.email,
         caller_role: user.role,
-        supabase: getSupabaseClient(),
-        runtimeCaches: {
-          casesStore
-        }
+        supabase: getSupabaseClient()
       });
       res.json(result);
     } catch (err: any) {
@@ -1705,66 +1541,135 @@ async function startServer() {
     }
   });
 
-  // Campaigns Management
-  app.get('/api/campaigns', (_req, res) => {
-    res.json(campaignsStore);
-  });
-
-  app.get('/api/campaigns/:campaignId', (req, res) => {
-    const found = campaignsStore.find(c => c.id === req.params.campaignId) || campaignsStore[0];
-    res.json(found);
-  });
-
-  app.get('/api/campaigns/:campaignId/timeline', (req, res) => {
-    const campaign = campaignsStore.find(c => c.id === req.params.campaignId);
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
+  // Campaigns Management via Supabase
+  app.get('/api/campaigns', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
     }
+    const user = (req as AuthenticatedRequest).user;
+    const orgId = user?.organizationId || (req.query.organization_id as string);
 
-    const memberCases = casesStore.filter(c => (campaign.member_email_ids || []).includes(c.id));
-    const timeline = memberCases
-      .map(c => ({
-        date: c.created_at,
-        domain: c.from_domain || 'unknown-domain.net',
-        ip: c.origin_ip || '127.0.0.1',
-        email_id: c.id,
-        subject: c.title,
-        sender: c.from_domain ? `sender@${c.from_domain}` : 'sender@unknown.net',
-        asn: c.origin_asn || 'AS-UNKNOWN',
-        asn_org: c.origin_asn_org || 'Hosting Provider',
-        infrastructure_type: c.infra_type || 'PUBLIC_ROUTABLE',
-        change_event: `Ingested case: ${c.title}`,
-        is_infrastructure_move: false
-      }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    const moves: any[] = [];
-    for (let i = 1; i < timeline.length; i++) {
-      if (timeline[i].ip !== timeline[i - 1].ip || timeline[i].domain !== timeline[i - 1].domain) {
-        timeline[i].is_infrastructure_move = true;
-        moves.push({
-          type: 'IP_RELAY_MIGRATION',
-          from_ip: timeline[i - 1].ip,
-          to_ip: timeline[i].ip,
-          domain: timeline[i].domain,
-          description: `Migrated relay infrastructure from ${timeline[i - 1].ip} to ${timeline[i].ip} (${timeline[i].domain})`
-        });
+    try {
+      let query = supabase.from('campaigns').select('*').order('created_at', { ascending: false });
+      if (orgId) {
+        query = query.or(`organization_id.eq.${orgId},is_demo.eq.true`);
       }
+      const { data, error } = await query;
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+      const formatted = (data || []).map((camp: any) => ({
+        ...camp,
+        member_email_ids: Array.isArray(camp.member_email_ids)
+          ? camp.member_email_ids
+          : (typeof camp.member_email_ids === 'string' ? JSON.parse(camp.member_email_ids || '[]') : []),
+        is_demo: Boolean(camp.is_demo)
+      }));
+      res.json(formatted);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch campaigns' });
     }
-
-    res.json({
-      campaign_id: campaign.id,
-      timeline,
-      total_events: timeline.length,
-      infrastructure_moves: moves,
-      moves_count: moves.length,
-      has_infrastructure_moves: moves.length > 0
-    });
   });
 
-  app.get('/api/temporal-analysis', (_req, res) => {
-    const timeline = casesStore
-      .map(c => ({
+  app.get('/api/campaigns/:campaignId', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    try {
+      const { data, error } = await supabase.from('campaigns').select('*').eq('id', req.params.campaignId).maybeSingle();
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+      if (!data) {
+        return res.status(404).json({ error: 'Campaign not found' });
+      }
+      const formatted = {
+        ...data,
+        member_email_ids: Array.isArray(data.member_email_ids)
+          ? data.member_email_ids
+          : (typeof data.member_email_ids === 'string' ? JSON.parse(data.member_email_ids || '[]') : []),
+        is_demo: Boolean(data.is_demo)
+      };
+      res.json(formatted);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch campaign' });
+    }
+  });
+
+  app.get('/api/campaigns/:campaignId/timeline', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+
+    try {
+      const { data: campaign, error: campErr } = await supabase.from('campaigns').select('*').eq('id', req.params.campaignId).maybeSingle();
+      if (campErr || !campaign) {
+        return res.status(404).json({ error: 'Campaign not found' });
+      }
+
+      const memberIds: string[] = Array.isArray(campaign.member_email_ids)
+        ? campaign.member_email_ids
+        : (typeof campaign.member_email_ids === 'string' ? JSON.parse(campaign.member_email_ids || '[]') : []);
+
+      const { data: casesData } = await supabase.from('cases').select('*');
+      const memberCases = (casesData || []).filter((c: any) => memberIds.includes(c.id));
+
+      const timeline = memberCases
+        .map((c: any) => ({
+          date: c.created_at,
+          domain: c.from_domain || 'unknown-domain.net',
+          ip: c.origin_ip || '127.0.0.1',
+          email_id: c.id,
+          subject: c.title,
+          sender: c.from_domain ? `sender@${c.from_domain}` : 'sender@unknown.net',
+          asn: c.origin_asn || 'AS-UNKNOWN',
+          asn_org: c.origin_asn_org || 'Hosting Provider',
+          infrastructure_type: c.infra_type || 'PUBLIC_ROUTABLE',
+          change_event: `Ingested case: ${c.title}`,
+          is_infrastructure_move: false
+        }))
+        .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+      const moves: any[] = [];
+      for (let i = 1; i < timeline.length; i++) {
+        if (timeline[i].ip !== timeline[i - 1].ip || timeline[i].domain !== timeline[i - 1].domain) {
+          timeline[i].is_infrastructure_move = true;
+          moves.push({
+            type: 'IP_RELAY_MIGRATION',
+            from_ip: timeline[i - 1].ip,
+            to_ip: timeline[i].ip,
+            domain: timeline[i].domain,
+            description: `Migrated relay infrastructure from ${timeline[i - 1].ip} to ${timeline[i].ip} (${timeline[i].domain})`
+          });
+        }
+      }
+
+      res.json({
+        campaign_id: campaign.id,
+        timeline,
+        total_events: timeline.length,
+        infrastructure_moves: moves,
+        moves_count: moves.length,
+        has_infrastructure_moves: moves.length > 0
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to compute campaign timeline' });
+    }
+  });
+
+  app.get('/api/temporal-analysis', async (_req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const { data: casesData } = await supabase.from('cases').select('*');
+    const cases = casesData || [];
+
+    const timeline = cases
+      .map((c: any) => ({
         date: c.created_at,
         domain: c.from_domain || 'unknown-domain.net',
         ip: c.origin_ip || '127.0.0.1',
@@ -1777,7 +1682,7 @@ async function startServer() {
         change_event: `Forensic observation: ${c.title}`,
         is_infrastructure_move: false
       }))
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
     const moves: any[] = [];
     for (let i = 1; i < timeline.length; i++) {
@@ -1803,8 +1708,14 @@ async function startServer() {
   });
 
   // Cross-Case Graph Correlation
-  app.get(['/api/cases/:caseId/graph', '/api/v1/cases/:caseId/graph'], (req, res) => {
-    const target = casesStore.find(c => c.id === req.params.caseId);
+  app.get(['/api/cases/:caseId/graph', '/api/v1/cases/:caseId/graph'], async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const { data: casesData } = await supabase.from('cases').select('*');
+    const allCases = casesData || [];
+    const target = allCases.find((c: any) => c.id === req.params.caseId);
     if (!target) {
       return res.status(404).json({ error: 'Case not found' });
     }
@@ -1825,7 +1736,7 @@ async function startServer() {
       edges.push({ source: target.id, target: target.origin_ip, relation: 'ORIGINATED_FROM' });
     }
 
-    const related = casesStore.filter(c =>
+    const related = allCases.filter((c: any) =>
       c.id !== target.id &&
       ((target.from_domain && c.from_domain === target.from_domain) ||
        (target.origin_ip && c.origin_ip === target.origin_ip))
@@ -1851,9 +1762,13 @@ async function startServer() {
   });
 
   // Forensic PDF Report Generation Endpoint
-  app.get(['/api/cases/:caseId/report.pdf', '/api/v1/reports/:caseId', '/api/v1/reports/:caseId.pdf', '/api/cases/:caseId/export/pdf'], (req, res) => {
-    const c = casesStore.find(x => x.id === req.params.caseId);
-    if (!c) {
+  app.get(['/api/cases/:caseId/report.pdf', '/api/v1/reports/:caseId', '/api/v1/reports/:caseId.pdf', '/api/cases/:caseId/export/pdf'], async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const { data: c, error } = await supabase.from('cases').select('*').eq('id', req.params.caseId).maybeSingle();
+    if (error || !c) {
       return res.status(404).json({ error: 'Case not found' });
     }
 
@@ -1906,18 +1821,32 @@ async function startServer() {
     doc.end();
   });
 
-  app.get('/api/emails/:emailId/campaign-candidates', (_req, res) => {
-    res.json({ candidates: campaignsStore });
+  app.get('/api/emails/:emailId/campaign-candidates', async (_req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const { data: camps } = await supabase.from('campaigns').select('*');
+    res.json({ candidates: camps || [] });
   });
 
   app.post('/api/campaigns/:campaignId/members', (_req, res) => {
     res.json({ status: 'success', message: 'Members added to campaign' });
   });
 
-  app.post('/api/campaigns', (req, res) => {
+  app.post('/api/campaigns', requireAuth, requireRole(['admin', 'analyst']), async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const user = (req as AuthenticatedRequest).user!;
+    if (req.body?.organization_id && req.body.organization_id !== user.organizationId) {
+      console.warn(`[Security Alert] Client sent organization_id in campaigns, overriding with user's org '${user.organizationId}'`);
+    }
     const { name, threat_actor = 'Unknown Actor', target_industry = 'General Enterprise', notes = '' } = req.body;
     const newCamp = {
       id: `camp-${Date.now()}`,
+      organization_id: user.organizationId,
       name: name || 'New Threat Campaign',
       threat_actor,
       target_industry,
@@ -1926,32 +1855,36 @@ async function startServer() {
       first_seen: new Date().toISOString(),
       last_seen: new Date().toISOString(),
       notes,
-      member_email_ids: []
+      member_email_ids: [],
+      is_demo: false
     };
-    campaignsStore.unshift(newCamp);
-    res.status(201).json(newCamp);
+
+    const { data, error } = await supabase.from('campaigns').insert([newCamp]).select().single();
+    if (error) {
+      return res.status(500).json({ error: `Failed to create campaign: ${error.message}` });
+    }
+    res.status(201).json(data || newCamp);
   });
 
   // Global Search
-  app.get('/api/search', (req, res) => {
+  app.get('/api/search', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
     const query = String(req.query.q || '').toLowerCase();
-    const matchedCases = casesStore.filter(
-      c => c.title.toLowerCase().includes(query) || c.description.toLowerCase().includes(query) || c.tags?.some(t => t.toLowerCase().includes(query))
+    const { data: casesData } = await supabase.from('cases').select('*');
+    const matchedCases = (casesData || []).filter(
+      (c: any) => c.title.toLowerCase().includes(query) || (c.description || '').toLowerCase().includes(query) || c.tags?.some((t: string) => t.toLowerCase().includes(query))
     );
     res.json({
       query,
       total_results: matchedCases.length,
       results: {
         cases: matchedCases,
-        emails: [
-          { id: 'sample-paypal-phish', subject: '[URGENT] Your PayPal Account Has Been Restricted', sender: 'service@paypal.com', recipient: 'victim@corp.net', date: '2024-07-18' }
-        ],
-        urls: [
-          { id: 'url-1', url: 'hxxps://paypal-account-security-update[.]com/signin' }
-        ],
-        iocs: [
-          { id: 'ioc-1', type: 'IP', value: '185.220.101.5', reputation: 'BLACK_LISTED' }
-        ]
+        emails: [],
+        urls: [],
+        iocs: []
       }
     });
   });
@@ -2045,17 +1978,22 @@ Link: https://verify-auth-portal.net/login`;
       is_operational: status.isOperational,
       error: status.error,
       model_name: status.modelName || 'TraceXMail 5-Class Forensic Classifier',
-      algorithm: status.metadata?.algorithm || 'Nearest Centroid Cosine Classifier with Temperature-Scaled Softmax Calibration',
-      schema_version: status.schemaVersion || '2.3.0',
-      feature_schema_version: status.featureSchemaVersion || '1.2.0',
+      algorithm: status.metadata?.algorithm || 'Nearest Centroid Cosine Classifier with Temperature-Scaled Softmax Calibration & Stacking Meta-Classifier',
+      schema_version: status.schemaVersion || '2.4.0',
+      feature_schema_version: status.featureSchemaVersion || '1.3.0',
       trained_at: status.metadata?.trainedAt || null,
-      dataset_version: 'RealCorpus-2026-v2.3',
+      dataset_version: 'RealCorpus-2026-v2.4-Deduplicated',
+      max_intra_class_duplication_rate: evaluationReport?.max_intra_class_duplication_rate ?? 0.0,
       total_samples: status.metadata?.totalSamples || 0,
       train_count: status.metadata?.trainCount || 0,
       test_count: status.metadata?.testCount || 0,
       classes: status.classes,
       vocabulary_size: status.vocabularySize,
       calibration_temperature: status.temperature,
+      calibration_metrics: evaluationReport?.calibration_metrics || null,
+      bec_learned_model: evaluationReport?.bec_learned_model || null,
+      meta_classifier: evaluationReport?.meta_classifier || null,
+      adversarial_holdout: evaluationReport?.adversarial_holdout || null,
       evaluation_metrics: {
         accuracy: status.metadata?.testAccuracy || 0,
         macro_f1: status.metadata?.macroF1 || 0,
@@ -2081,7 +2019,12 @@ Link: https://verify-auth-portal.net/login`;
   app.get(['/api/v1/cases/:caseId/domain-intelligence', '/api/domain-intelligence/:domain'], async (req, res) => {
     let domain = req.params.domain || (req.params.caseId?.includes('.') ? req.params.caseId : '');
     if (!domain) {
-      const targetCase = casesStore.find(c => c.id === req.params.caseId);
+      const supabase = getSupabaseClient();
+      let targetCase: any = null;
+      if (supabase) {
+        const { data } = await supabase.from('cases').select('*').eq('id', req.params.caseId).maybeSingle();
+        targetCase = data;
+      }
       if (targetCase?.title && targetCase.title.includes('@')) {
         const parts = targetCase.title.split('@');
         domain = parts[parts.length - 1].replace(/[^a-zA-Z0-9.-]/g, '');
@@ -2633,8 +2576,17 @@ Thanks!`;
   // AI Case Narrative Synthesis (Gemini / Groq / Evidence-Grounded Engine)
   const handleGroqNarrative = async (req: express.Request, res: express.Response) => {
     const caseId = req.params.caseId || req.body?.caseId || req.body?.case_id || 'sample-paypal-phish';
-    const targetCase = casesStore.find(c => c.id === caseId) || (req.body?.case ? req.body.case : null);
-    const matchingAlert = alertsStore.find(a => a.case_id === caseId);
+    let targetCase = req.body?.case ? req.body.case : null;
+    let matchingAlert: any = null;
+    const supabase = getSupabaseClient();
+    if (supabase && caseId) {
+      if (!targetCase) {
+        const { data } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
+        targetCase = data;
+      }
+      const { data: aData } = await supabase.from('alerts').select('*').eq('case_id', caseId).maybeSingle();
+      matchingAlert = aData;
+    }
 
     const subject = targetCase?.title || req.body?.subject || 'Suspicious Ingested Message';
     const severity = targetCase?.severity || req.body?.severity || 'HIGH';
@@ -2764,25 +2716,57 @@ If authentication (SPF/DKIM/DMARC) passed but the threat score is elevated, expl
   app.post('/api/v1/cases/:caseId/ai-narrative', handleGroqNarrative);
   app.post('/api/ai-summary', handleGroqNarrative);
 
-  // Alerts
-  app.get('/api/alerts', (_req, res) => {
-    res.json(alertsStore);
-  });
+  // Alerts via Supabase
+  app.get('/api/alerts', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const user = (req as AuthenticatedRequest).user;
+    const orgId = user?.organizationId || (req.query.organization_id as string);
 
-  app.patch('/api/alerts/:alertId/read', (req, res) => {
-    const alertId = req.params.alertId;
-    const alert = alertsStore.find(a => a.id === alertId);
-    if (alert) {
-      alert.read = true;
-      res.json({ status: 'success', alert });
-    } else {
-      res.status(404).json({ error: 'Alert not found' });
+    try {
+      let query = supabase.from('alerts').select('*').order('timestamp', { ascending: false });
+      if (orgId) {
+        query = query.or(`organization_id.eq.${orgId},is_demo.eq.true`);
+      }
+      const { data, error } = await query;
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+      res.json(data || []);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Failed to fetch alerts' });
     }
   });
 
-  app.post('/api/alerts/mark-all-read', (_req, res) => {
-    alertsStore.forEach(a => { a.read = true; });
-    res.json({ status: 'success', count: alertsStore.length });
+  app.patch('/api/alerts/:alertId/read', async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const alertId = req.params.alertId;
+    const { data, error } = await supabase.from('alerts').update({ read: true }).eq('id', alertId).select().maybeSingle();
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    if (!data) {
+      return res.status(404).json({ error: 'Alert not found' });
+    }
+    res.json({ status: 'success', alert: data });
+  });
+
+  app.post('/api/alerts/mark-all-read', requireAuth, async (req, res) => {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const user = (req as AuthenticatedRequest).user!;
+    const { error } = await supabase.from('alerts').update({ read: true }).eq('organization_id', user.organizationId);
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    res.json({ status: 'success' });
   });
 
   // Slack Integration API
@@ -2843,11 +2827,15 @@ If authentication (SPF/DKIM/DMARC) passed but the threat score is elevated, expl
 
   app.post('/api/slack/send-case/:caseId', async (req, res) => {
     const caseId = req.params.caseId;
-    const targetCase = casesStore.find(c => c.id === caseId);
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return res.status(503).json({ error: 'Database not configured' });
+    }
+    const { data: targetCase } = await supabase.from('cases').select('*').eq('id', caseId).maybeSingle();
     if (!targetCase) {
       return res.status(404).json({ error: 'Case not found' });
     }
-    const matchingAlert = alertsStore.find(a => a.case_id === caseId);
+    const { data: matchingAlert } = await supabase.from('alerts').select('*').eq('case_id', caseId).maybeSingle();
     const resultLog = await dispatchSlackCaseAlert({
       caseItem: targetCase,
       alertItem: matchingAlert,

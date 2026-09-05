@@ -1,77 +1,91 @@
-# TraceXMail ML Classifier Verification & Scientific Evaluation Report
+# TraceXMail Scientific ML Model Evaluation Report (v2.4)
 
-**Smart India Hackathon 2026 — Problem Statement 26106**  
-**Dataset Evaluated:** `data/datasets/real_corpus.json` (762 records)  
-**Evaluation Protocol:** Stratified 80/20 train/test partition (Seed: `424242`)  
-**Feature Isolation:** Strict train-only vocabulary fitting ($V \le 3,500$ terms) & IDF estimation  
-
----
-
-## 1. Executive Metric Summary
-
-| Evaluation Metric | Baseline Model (Text Only) | Enhanced Model (Structural Features) | Majority Baseline |
-| :--- | :--- | :--- | :--- |
-| **Overall Accuracy** | **100.00%** | **100.00%** | 57.14% |
-| **Macro-averaged Precision** | 100.00% | 100.00% | N/A |
-| **Macro-averaged Recall** | 100.00% | 100.00% | N/A |
-| **Macro-averaged F1 Score** | **100.00%** | **100.00%** | N/A |
-| **Weighted F1 Score** | 100.00% | 100.00% | N/A |
-| **5-Fold Cross-Validation Accuracy** | N/A | **100.00% (± 0.00%)** | N/A |
+**Generated:** 2026-09-05T14:25:38.090Z  
+**Corpus Size:** 433 clean deduplicated records  
+**Adversarial Holdout:** 60 zero-leakage records  
+**Max Intra-Class Duplication Rate:** 0.00% (Target: < 15.0%)  
 
 ---
 
-## 2. Investigation of the Impersonated Class
+## 1. Cross-Validation Stability (5-Fold Stratified)
+*Strict train-only vocabulary and IDF fit preventing data leakage.*
 
-### Root Cause Analysis
-1. **Vocabulary Overlap:** Impersonated emails (e.g. DocuSign agreement reviews, PayPal security alerts, Microsoft 365 password notices) employ the exact same urgent, credential-focused vocabulary as generic phishing emails (`verify`, `account`, `suspended`, `password`, `login`, `urgent`).
-2. **Feature Space Deficit:** In a pure-text TF-IDF representation, the classifier cannot observe whether the sending domain actually matches the brand cited in the display name.
-3. **Centroid Proximity:** Because the training set includes hundreds of historical phishing emails citing PayPal and banking credentials, the text centroid for `Phishing` pulled brand-impersonation emails toward phishing, causing low recall.
-
-### Structural Feature Remedy
-We incorporated four deterministic structural header features:
-- `feat_brand_display_domain_mismatch`: Detects when a recognized enterprise brand is claimed in the human display name but the sending domain is unauthorized.
-- `feat_lookalike_hyphenated_brand`: Detects typosquatting and hyphenated deceptive prefixes (e.g. `paypal-account-security.com`).
-- `feat_reply_to_mismatch`: Detects when the `Reply-To` address diverts away from the sender domain to an external mailbox.
-- `feat_return_path_mismatch`: Detects bounce address diversion.
-
-### Before vs After Metric Comparison (Impersonated Class)
-| Metric | Baseline (Text Only) | Enhanced (Structural Features) | Impact |
-| :--- | :--- | :--- | :--- |
-| **Impersonated Precision** | 100.00% | 100.00% | High confidence preserved |
-| **Impersonated Recall** | 100.00% | 100.00% | Dramatic reduction in misclassifications |
-| **Impersonated F1-Score** | 100.00% | 100.00% | Defensible forensic discrimination |
+| Fold | Validation Samples | Accuracy | Macro F1 |
+|------|--------------------|----------|----------|
+| Fold 1 | 86 | 97.67% | 96.92% |
+| Fold 2 | 87 | 88.51% | 85.56% |
+| Fold 3 | 86 | 93.02% | 93.98% |
+| Fold 4 | 87 | 96.55% | 97.68% |
+| Fold 5 | 87 | 90.80% | 90.59% |
+| **Mean ± Std** | **433 Total** | **93.31% ± 3.43%** | **92.95% ± 4.46%** |
 
 ---
 
-## 3. Confusion Matrix (Enhanced Model)
+## 2. Held-out Test Set Performance (80/20 Stratified Partition)
+- **Overall Accuracy:** 91.95% (80/87)
+- **Majority Class Baseline:** 37.93%
+- **Macro-averaged F1 Score:** 92.41%
+- **Weighted F1 Score:** 91.93%
 
-```
-             Legit  Suspi  Imper  Phish  Fraud
-Legitimate      88      0      0      0      0
-Suspicious       0     12      0      0      0
-Impersonated     0      0     18      0      0
-Phishing         0      0      0     27      0
-Fraud-related     0      0      0      0      9
-```
-
----
-
-## 4. Per-Class Performance Breakdown
-
-| Forensic Class | Precision | Recall | F1-Score | Held-Out Test Support |
-| :--- | :--- | :--- | :--- | :--- |
-| **Legitimate** | 100.00% | 100.00% | 100.00% | 88 |
-| **Suspicious** | 100.00% | 100.00% | 100.00% | 12 |
-| **Impersonated** | 100.00% | 100.00% | 100.00% | 18 |
-| **Phishing** | 100.00% | 100.00% | 100.00% | 27 |
-| **Fraud-related** | 100.00% | 100.00% | 100.00% | 9 |
+### Per-Class Performance
+| Class | Precision | Recall | F1 Score | Support |
+|-------|-----------|--------|----------|---------|
+| Legitimate | 90.9% | 95.2% | 93.0% | 21 |
+| Suspicious | 75.0% | 100.0% | 85.7% | 6 |
+| Impersonated | 87.5% | 100.0% | 93.3% | 21 |
+| Phishing | 100.0% | 81.8% | 90.0% | 33 |
+| Fraud-related | 100.0% | 100.0% | 100.0% | 6 |
 
 ---
 
-## 5. Stability & Run-to-Run Variance (5-Fold Stratified Cross-Validation)
+## 3. Probability Calibration (Phase 4)
+- **Multi-Class Brier Score:** `0.2435`
+- **Expected Calibration Error (ECE):** `26.09%`
+- **Calibration Temperature:** `12`
 
-- **Fold Accuracies:** 100.00%, 100.00%, 100.00%, 100.00%, 100.00%
-- **Mean Cross-Validation Accuracy:** **100.00%**
-- **Standard Deviation:** **± 0.00%**
-- **Mean Macro F1:** **100.00% (± 0.00%)**
-- **Interpretation:** Low variance across all 5 folds confirms model stability without reliance on a lucky split.
+### 10-Bin Reliability Curve
+| Bin Range | Samples | Mean Confidence | Empirical Accuracy | Calibration Gap |
+|-----------|---------|-----------------|--------------------|-----------------|
+| [0.0, 0.1) | 0 | 5.0% | 0.0% | 5.0% |
+| [0.1, 0.2) | 0 | 15.0% | 0.0% | 15.0% |
+| [0.2, 0.3) | 3 | 27.9% | 66.7% | 38.8% |
+| [0.3, 0.4) | 8 | 35.4% | 50.0% | 14.6% |
+| [0.4, 0.5) | 11 | 46.7% | 90.9% | 44.3% |
+| [0.5, 0.6) | 20 | 54.5% | 95.0% | 40.5% |
+| [0.6, 0.7) | 14 | 62.3% | 100.0% | 37.7% |
+| [0.7, 0.8) | 3 | 74.6% | 100.0% | 25.4% |
+| [0.8, 0.9) | 5 | 85.0% | 100.0% | 15.0% |
+| [0.9, 1.0) | 23 | 97.3% | 100.0% | 2.7% |
+
+---
+
+## 4. Phase 3 Learned BEC Model vs Heuristic Fallback
+- **Algorithm:** Supervised Logistic Regression with L2 Regularization
+- **Engineered Features:** 15 forensic signals (urgency density, executive titles, payment diversion, payroll rerouting, gift cards, IBAN/ABA checksums, benign devops counter-signals)
+- **Learned Model Accuracy:** 88.68%
+- **Learned Model F1:** 50.50%
+- **Legacy Static Heuristic F1:** `0.768`
+- *Note: `data/bec_weights.json` is documented as a heuristic fallback layer, not an ML model.*
+
+---
+
+## 5. Phase 5 Learned Meta-Classifier (Stacking Ensemble)
+- **Algorithm:** Stacked Supervised Logistic Regression
+- **Stacked Dimensions:** 20 forensic signals across Base ML probabilities, SPF/DKIM/DMARC auth flags, domain age, typosquatting, brand display mismatch, Tor/abuse relays, and BEC scores.
+- **Accuracy:** 93.53%
+- **Brier Score:** `0.0184`
+- **ROC-AUC:** `0.996`
+
+---
+
+## 6. Adversarial Holdout Evaluation (60 Challenging Samples)
+- **Zero-Leakage Verified:** Cosine similarity < 0.85 against all corpus samples.
+- **Overall Holdout Accuracy:** 70.00%
+- **Holdout Macro-F1:** 61.53%
+
+| Category | Total | Correct | Accuracy |
+|----------|-------|---------|----------|
+| paraphrased_phishing | 21 | 5 | 23.8% |
+| high_urgency_legitimate | 20 | 19 | 95.0% |
+| conversational_bec | 15 | 15 | 100.0% |
+| brand_impersonation_display | 4 | 3 | 75.0% |

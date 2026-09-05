@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LegalPage } from './components/LegalPage';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { Header } from './components/Header';
@@ -19,10 +19,13 @@ import { NewAnalysisModal } from './components/NewAnalysisModal';
 import { ReportModal } from './components/ReportModal';
 import { PrivacyComplianceModal } from './components/PrivacyComplianceModal';
 import { AlertToast } from './components/AlertToast';
+import { LandingView } from './components/LandingView';
+import { AuthModal } from './components/AuthModal';
 import { SAMPLE_ANALYSES } from './data/samples';
 import { EmailAnalysis } from './types';
 import { useWebSocketAlerts, WebSocketAlert } from './hooks/useWebSocketAlerts';
 import { PrivacyConfig, loadPrivacyConfig, savePrivacyConfig } from './utils/privacyCompliance';
+import { subscribeSession, SessionUser } from './lib/api';
 
 export default function App() {
   const publicPath = window.location.pathname;
@@ -37,10 +40,12 @@ export default function App() {
 
 
   const [currentAnalysis, setCurrentAnalysis] = useState<EmailAnalysis>(SAMPLE_ANALYSES[0]);
-  const [activeTab, setActiveTab] = useState<NavTab>('ingest');
+  const [activeTab, setActiveTab] = useState<NavTab>('landing');
   const [isNewModalOpen, setIsNewModalOpen] = useState<boolean>(false);
   const [isReportModalOpen, setIsReportModalOpen] = useState<boolean>(false);
   const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [privacyConfig, setPrivacyConfig] = useState<PrivacyConfig>(() => loadPrivacyConfig());
   const [casesRefreshSignal, setCasesRefreshSignal] = useState<number>(0);
   const [showDemoCases, setShowDemoCases] = useState<boolean>(() => {
@@ -50,6 +55,12 @@ export default function App() {
       return false;
     }
   });
+
+  useEffect(() => {
+    return subscribeSession((sess) => {
+      setSessionUser(sess.user);
+    });
+  }, []);
 
   const handleToggleDemoCases = () => {
     setShowDemoCases(prev => {
@@ -91,8 +102,27 @@ export default function App() {
     setActiveTab('overview');
   };
 
+  if (activeTab === 'landing') {
+    return (
+      <div className="relative min-h-screen w-screen bg-[#14120f] text-[#ede6d8] overflow-y-auto">
+        <LandingView
+          onOpenConsole={() => setActiveTab('overview')}
+          onOpenTrace={() => setActiveTab('ingest')}
+          onRequestAccess={() => setIsAuthModalOpen(true)}
+          onSelectCase={(analysis) => {
+            setCurrentAnalysis(analysis);
+            setActiveTab('overview');
+          }}
+        />
+        {isAuthModalOpen && (
+          <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} currentUser={sessionUser} />
+        )}
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen w-screen bg-[#0F172A] text-slate-200 overflow-hidden font-sans select-text">
+    <div className="flex h-screen w-screen bg-[#14120f] text-[#ede6d8] overflow-hidden font-sans select-text">
       {/* Sidebar with dynamic WebSocket connection status and real-time badge count */}
       <Sidebar
         activeTab={activeTab}
@@ -102,7 +132,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full bg-[#0F172A] min-w-0 overflow-hidden">
+      <main className="flex-1 flex flex-col h-full bg-[#14120f] min-w-0 overflow-hidden">
         {/* Top Header */}
         <Header
           currentAnalysis={currentAnalysis}

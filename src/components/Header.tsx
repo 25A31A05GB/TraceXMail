@@ -24,6 +24,7 @@ import { PrivacyConfig } from '../utils/privacyCompliance';
 import { subscribeSession, SessionUser } from '../lib/api';
 import { exportEvidenceAsPdf, exportEvidenceAsImage } from '../utils/exportEvidence';
 import { EvidenceTagCard } from './EvidenceTagCard';
+import { AuthModal } from './AuthModal';
 
 interface HeaderProps {
   currentAnalysis: EmailAnalysis;
@@ -50,6 +51,7 @@ export function Header({
   const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingPng, setExportingPng] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
   useEffect(() => {
     return subscribeSession((sess) => {
@@ -132,24 +134,24 @@ export function Header({
   const BadgeIcon = badge.icon;
 
   return (
-    <header className="h-16 border-b border-slate-800 bg-[#0F172A]/90 backdrop-blur px-6 flex items-center justify-between shrink-0 z-20">
+    <header className="h-16 border-b border-[#3a352c] bg-[#14120f]/90 backdrop-blur px-6 flex items-center justify-between shrink-0 z-20 select-none">
       {/* Left: Active Case Switcher & Title */}
       <div className="flex items-center gap-4 min-w-0">
         <div className="relative">
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700 hover:border-slate-600 text-sm font-medium text-slate-200 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#221e17] border border-[#3a352c] hover:border-[#b9af9c] text-sm font-medium text-[#ede6d8] transition-colors cursor-pointer"
           >
-            <Shield className="w-4 h-4 text-cyan-400" />
-            <span className="max-w-[200px] truncate font-mono text-xs text-slate-300">
+            <Shield className="w-4 h-4 text-[#7fa3ba]" />
+            <span className="max-w-[200px] truncate font-mono text-xs text-[#ede6d8]">
               {currentAnalysis.id || 'CASE-ACTIVE'}
             </span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#8a8070]" />
           </button>
 
           {dropdownOpen && (
-            <div className="absolute left-0 mt-2 w-72 rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-2 z-50">
-              <div className="text-[11px] font-semibold uppercase text-slate-500 px-2 py-1 tracking-wider">
+            <div className="absolute left-0 mt-2 w-72 rounded-lg bg-[#1a1712] border border-[#3a352c] shadow-2xl p-2 z-50">
+              <div className="text-[10px] font-mono font-semibold uppercase text-[#8a8070] px-2 py-1 tracking-wider">
                 Preset Forensic Samples
               </div>
               <div className="space-y-1 mt-1">
@@ -160,14 +162,14 @@ export function Header({
                       onSelectAnalysis(sample);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors flex flex-col gap-0.5 ${
+                    className={`w-full text-left px-2.5 py-2 rounded text-xs transition-colors flex flex-col gap-0.5 cursor-pointer ${
                       sample.id === currentAnalysis.id
-                        ? 'bg-cyan-950/60 border border-cyan-800/60 text-cyan-300'
-                        : 'hover:bg-slate-800 text-slate-300'
+                        ? 'bg-[#b23a2e]/20 border border-[#b23a2e]/40 text-[#ede6d8]'
+                        : 'hover:bg-[#221e17] text-[#b9af9c]'
                     }`}
                   >
-                    <span className="font-semibold truncate">{sample.subject}</span>
-                    <span className="text-[10px] text-slate-500 font-mono truncate">{sample.from}</span>
+                    <span className="font-display font-semibold truncate text-[#ede6d8]">{sample.subject}</span>
+                    <span className="text-[10px] text-[#8a8070] font-mono truncate">{sample.from}</span>
                   </button>
                 ))}
               </div>
@@ -176,11 +178,11 @@ export function Header({
         </div>
 
         <div className="hidden md:flex flex-col min-w-0">
-          <h1 className="text-sm font-semibold text-slate-100 truncate max-w-md">
+          <h1 className="font-display text-sm font-semibold text-[#ede6d8] truncate max-w-md">
             {currentAnalysis.subject || 'Forensic Case View'}
           </h1>
-          <span className="text-xs text-slate-400 truncate">
-            From: <span className="text-slate-300 font-mono">{currentAnalysis.from}</span>
+          <span className="text-xs text-[#8a8070] truncate">
+            From: <span className="text-[#b9af9c] font-mono">{currentAnalysis.from}</span>
           </span>
         </div>
 
@@ -188,25 +190,35 @@ export function Header({
         <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold ${badge.bg}`}>
           <BadgeIcon className="w-3.5 h-3.5" />
           <span>{badge.label}</span>
-          <span className="opacity-80">({currentAnalysis.threatScore || 0}/100)</span>
+          <span className="opacity-80 font-mono">({currentAnalysis.threatScore || 0}/100)</span>
         </div>
       </div>
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2.5">
-        {/* Active Authenticated Session Badge */}
-        {false && (
-          <div
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-emerald-950/40 border-emerald-700/60 text-emerald-300 text-xs shadow-sm"
-            title={`Active Verified Session: ${sessionUser?.email || 'analyst@acmedefense.sec'}\nRole: ${sessionUser?.role || 'analyst'} (JWT in-memory)\nPII Access: Full Forensic Clearance`}
+        {/* Active Authenticated Session Badge or Sign In Trigger */}
+        {sessionUser ? (
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-emerald-950/40 border-emerald-700/60 text-emerald-300 text-xs shadow-sm hover:bg-emerald-900/50 transition-colors cursor-pointer"
+            title={`Active Verified Session: ${sessionUser.email || 'analyst@acmedefense.sec'}\nRole: ${sessionUser.role || 'analyst'} (Supabase JWT)\nOrganization: ${sessionUser.organizationId}`}
           >
             <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-slate-400 font-sans text-[11px]">Identity:</span>
-            <span className="font-semibold text-emerald-300 font-sans">
-              {sessionUser?.label || 'Security Analyst'}
+            <span className="text-slate-400 font-sans text-[11px] hidden sm:inline">Identity:</span>
+            <span className="font-semibold text-emerald-300 font-sans truncate max-w-[130px]">
+              {sessionUser.email ? sessionUser.email.split('@')[0] : sessionUser.label || 'SOC Analyst'}
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
-          </div>
+          </button>
+        ) : (
+          <button
+            onClick={() => setIsAuthModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border bg-slate-800/90 hover:bg-slate-700 border-slate-700 hover:border-cyan-500/50 text-slate-300 text-xs font-medium shadow-sm transition-all cursor-pointer"
+            title="Sign in with Supabase Auth"
+          >
+            <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+            <span>Sign In</span>
+          </button>
         )}
 
         {false && onToggleDemoCases && (
@@ -297,6 +309,12 @@ export function Header({
       >
         <EvidenceTagCard analysis={currentAnalysis} />
       </div>
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        currentUser={sessionUser}
+      />
     </header>
   );
 }

@@ -1,12 +1,12 @@
 {
-  "schema_version": "2.3.0",
-  "feature_schema_version": "1.2.0",
+  "schema_version": "2.4.0",
+  "feature_schema_version": "1.3.0",
   "metadata": {
-    "generated_at": "2026-09-03T12:00:00Z",
+    "generated_at": "2026-09-05T14:25:38.090Z",
     "corpus_path": "/app/applet/data/datasets/real_corpus.json",
-    "total_samples": 762,
-    "train_samples": 608,
-    "test_samples": 154,
+    "total_samples": 433,
+    "train_samples": 346,
+    "test_samples": 87,
     "classes": [
       "Legitimate",
       "Suspicious",
@@ -15,188 +15,376 @@
       "Fraud-related"
     ],
     "seed": 424242,
-    "protocol": "Stratified 80/20 train/test split with strict train-only vocabulary and IDF fit"
+    "protocol": "Stratified 80/20 train/test split with strict train-only vocabulary and IDF fit; 5-fold stratified cross-validation"
   },
-  "baseline_model": {
-    "total_samples": 154,
-    "accuracy": 1.0,
-    "majority_baseline": 0.5714,
-    "macro_precision": 1.0,
-    "macro_recall": 1.0,
-    "macro_f1": 1.0,
-    "weighted_precision": 1.0,
-    "weighted_recall": 1.0,
-    "weighted_f1": 1.0,
-    "confusion_matrix": [
-      [
-        88,
-        0,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        12,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        0,
-        18,
-        0,
-        0
-      ],
-      [
-        0,
-        0,
-        0,
-        27,
-        0
-      ],
-      [
-        0,
-        0,
-        0,
-        0,
-        9
-      ]
-    ],
-    "per_class_metrics": {
-      "Legitimate": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 88
-      },
-      "Suspicious": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 12
-      },
-      "Impersonated": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 18
-      },
-      "Phishing": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 27
-      },
-      "Fraud-related": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 9
-      }
-    }
-  },
-  "enhanced_model": {
-    "total_samples": 154,
-    "accuracy": 1.0,
-    "majority_baseline": 0.5714,
-    "macro_precision": 1.0,
-    "macro_recall": 1.0,
-    "macro_f1": 1.0,
-    "weighted_precision": 1.0,
-    "weighted_recall": 1.0,
-    "weighted_f1": 1.0,
-    "confusion_matrix": [
-      [
-        88,
-        0,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        12,
-        0,
-        0,
-        0
-      ],
-      [
-        0,
-        0,
-        18,
-        0,
-        0
-      ],
-      [
-        0,
-        0,
-        0,
-        27,
-        0
-      ],
-      [
-        0,
-        0,
-        0,
-        0,
-        9
-      ]
-    ],
-    "per_class_metrics": {
-      "Legitimate": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 88
-      },
-      "Suspicious": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 12
-      },
-      "Impersonated": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 18
-      },
-      "Phishing": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 27
-      },
-      "Fraud-related": {
-        "precision": 1.0,
-        "recall": 1.0,
-        "f1": 1.0,
-        "support": 9
-      }
-    }
-  },
+  "max_intra_class_duplication_rate": 0,
   "cross_validation_stability": {
     "k_folds": 5,
     "fold_accuracies": [
-      1.0,
-      1.0,
-      1.0,
-      1.0,
-      1.0
+      0.9767,
+      0.8851,
+      0.9302,
+      0.9655,
+      0.908
     ],
-    "mean_accuracy": 1.0,
-    "std_accuracy": 0.0,
+    "mean_accuracy": 0.9331,
+    "std_accuracy": 0.0343,
     "fold_macro_f1s": [
-      1.0,
-      1.0,
-      1.0,
-      1.0,
-      1.0
+      0.9692,
+      0.8556,
+      0.9398,
+      0.9768,
+      0.9059
     ],
-    "mean_macro_f1": 1.0,
-    "std_macro_f1": 0.0
+    "mean_macro_f1": 0.9295,
+    "std_macro_f1": 0.0446
+  },
+  "baseline_model": {
+    "total_samples": 87,
+    "accuracy": 0.885,
+    "majority_baseline": 0.3793,
+    "macro_precision": 0.862,
+    "macro_recall": 0.854,
+    "macro_f1": 0.858,
+    "note": "Pure TF-IDF text baseline without structural identity consistency or cryptographic signals"
+  },
+  "enhanced_model": {
+    "total_samples": 87,
+    "accuracy": 0.9195,
+    "majority_baseline": 0.3793,
+    "macro_precision": 0.9068,
+    "macro_recall": 0.9541,
+    "macro_f1": 0.9241,
+    "weighted_f1": 0.9193,
+    "confusion_matrix": [
+      [
+        20,
+        1,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        6,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        21,
+        0,
+        0
+      ],
+      [
+        2,
+        1,
+        3,
+        27,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        6
+      ]
+    ],
+    "per_class_metrics": {
+      "Legitimate": {
+        "precision": 0.9091,
+        "recall": 0.9524,
+        "f1": 0.9302,
+        "support": 21
+      },
+      "Suspicious": {
+        "precision": 0.75,
+        "recall": 1,
+        "f1": 0.8571,
+        "support": 6
+      },
+      "Impersonated": {
+        "precision": 0.875,
+        "recall": 1,
+        "f1": 0.9333,
+        "support": 21
+      },
+      "Phishing": {
+        "precision": 1,
+        "recall": 0.8182,
+        "f1": 0.9,
+        "support": 33
+      },
+      "Fraud-related": {
+        "precision": 1,
+        "recall": 1,
+        "f1": 1,
+        "support": 6
+      }
+    }
+  },
+  "calibration_metrics": {
+    "brier_score": 0.2435,
+    "expected_calibration_error": 0.2609,
+    "temperature": 12,
+    "calibration_method": "Temperature-Scaled Softmax with L2-normalized Centroids",
+    "reliability_curve": [
+      {
+        "bin_lower": 0,
+        "bin_upper": 0.1,
+        "sample_count": 0,
+        "mean_predicted_confidence": 0.05,
+        "empirical_accuracy": 0,
+        "calibration_gap": 0.05
+      },
+      {
+        "bin_lower": 0.1,
+        "bin_upper": 0.2,
+        "sample_count": 0,
+        "mean_predicted_confidence": 0.15000000000000002,
+        "empirical_accuracy": 0,
+        "calibration_gap": 0.15
+      },
+      {
+        "bin_lower": 0.2,
+        "bin_upper": 0.3,
+        "sample_count": 3,
+        "mean_predicted_confidence": 0.2788,
+        "empirical_accuracy": 0.6667,
+        "calibration_gap": 0.3879
+      },
+      {
+        "bin_lower": 0.3,
+        "bin_upper": 0.4,
+        "sample_count": 8,
+        "mean_predicted_confidence": 0.3543,
+        "empirical_accuracy": 0.5,
+        "calibration_gap": 0.1457
+      },
+      {
+        "bin_lower": 0.4,
+        "bin_upper": 0.5,
+        "sample_count": 11,
+        "mean_predicted_confidence": 0.4666,
+        "empirical_accuracy": 0.9091,
+        "calibration_gap": 0.4425
+      },
+      {
+        "bin_lower": 0.5,
+        "bin_upper": 0.6,
+        "sample_count": 20,
+        "mean_predicted_confidence": 0.545,
+        "empirical_accuracy": 0.95,
+        "calibration_gap": 0.405
+      },
+      {
+        "bin_lower": 0.6,
+        "bin_upper": 0.7,
+        "sample_count": 14,
+        "mean_predicted_confidence": 0.6231,
+        "empirical_accuracy": 1,
+        "calibration_gap": 0.3769
+      },
+      {
+        "bin_lower": 0.7,
+        "bin_upper": 0.8,
+        "sample_count": 3,
+        "mean_predicted_confidence": 0.7461,
+        "empirical_accuracy": 1,
+        "calibration_gap": 0.2539
+      },
+      {
+        "bin_lower": 0.8,
+        "bin_upper": 0.9,
+        "sample_count": 5,
+        "mean_predicted_confidence": 0.8499,
+        "empirical_accuracy": 1,
+        "calibration_gap": 0.1501
+      },
+      {
+        "bin_lower": 0.9,
+        "bin_upper": 1,
+        "sample_count": 23,
+        "mean_predicted_confidence": 0.9734,
+        "empirical_accuracy": 1,
+        "calibration_gap": 0.0266
+      }
+    ]
+  },
+  "bec_learned_model": {
+    "model_type": "Supervised Logistic Regression with L2 Regularization",
+    "source_module": "src/server/becLearnedModel.ts",
+    "features_engineered": 15,
+    "weights": {
+      "urgencyIntensity": 2.8157,
+      "authorityPersona": 0.9434,
+      "paymentDiversion": 2.6032,
+      "payrollRedirection": 2.7209,
+      "giftCardPatterns": 1.7213,
+      "invoiceAlteration": 0.434,
+      "conversationalPretext": 0.7979,
+      "financialEntityCount": 0,
+      "dollarAmountMagnitude": 0,
+      "routingNumberPresent": 0,
+      "ibanPresent": 0,
+      "replyToMismatch": 0,
+      "freeMailProvider": 0,
+      "brandDisplayMismatch": 0,
+      "benignCounterSignal": -0.6879
+    },
+    "bias": -0.9219,
+    "decision_threshold": 0.5,
+    "metrics": {
+      "trainedAt": "2026-09-05T14:25:37.706Z",
+      "sampleCount": 433,
+      "accuracy": 0.8868,
+      "precision": 0.3623,
+      "recall": 0.8333,
+      "f1": 0.505,
+      "rocAuc": 0.992
+    },
+    "heuristic_comparison": {
+      "staticHeuristicF1": 0.768,
+      "learnedModelF1": 0.505,
+      "note": "Static data/bec_weights.json was a hand-tuned keyword-multiplier heuristic. The learned model is trained on diverse deduplicated forensic records with L2 regularized logistic regression."
+    }
+  },
+  "meta_classifier": {
+    "model_type": "Stacked Supervised Logistic Regression Ensemble",
+    "source_module": "src/server/metaClassifier.ts",
+    "features_stacked": 20,
+    "coefficients": {
+      "mlProbLegitimate": -0.5324,
+      "mlProbSuspicious": -0.087,
+      "mlProbImpersonated": 0.4849,
+      "mlProbPhishing": 0.2743,
+      "mlProbFraud": 0.1646,
+      "mlConfidence": 0.2558,
+      "authSpfFail": 0.6633,
+      "authDkimFail": 0.8568,
+      "authDmarcFail": 0.6633,
+      "domainAgeRisk": 0.6854,
+      "domainTyposquatRisk": 0.5805,
+      "identityLookalikeDomain": 0.5805,
+      "identityDisplayMismatch": 0.5805,
+      "identityReplyToMismatch": 0,
+      "infraTorOrAbuse": 0,
+      "finDollarAmountPresent": 0,
+      "finRoutingOrIbanPresent": 0,
+      "becLearnedRiskScore": 0.1838,
+      "semanticSimilarityScore": 0.9501,
+      "heuristicRuleScore": 0.8093
+    },
+    "intercept": -1.1354,
+    "metrics": {
+      "trainedAt": "2026-09-05T14:25:38.065Z",
+      "sampleCount": 433,
+      "testAccuracy": 0.9353,
+      "brierScore": 0.0184,
+      "aucRoc": 0.996,
+      "rSquared": 0.948
+    }
+  },
+  "adversarial_holdout": {
+    "holdout_size": 60,
+    "leakage_check_passed": true,
+    "max_similarity_to_corpus": 0.74,
+    "overall_accuracy": 0.7,
+    "macro_f1": 0.6153,
+    "category_performance": {
+      "paraphrased_phishing": {
+        "total": 21,
+        "correct": 5,
+        "accuracy": 0.2381
+      },
+      "high_urgency_legitimate": {
+        "total": 20,
+        "correct": 19,
+        "accuracy": 0.95
+      },
+      "conversational_bec": {
+        "total": 15,
+        "correct": 15,
+        "accuracy": 1
+      },
+      "brand_impersonation_display": {
+        "total": 4,
+        "correct": 3,
+        "accuracy": 0.75
+      }
+    },
+    "confusion_matrix": [
+      [
+        19,
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        3,
+        0,
+        0
+      ],
+      [
+        9,
+        5,
+        2,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        15
+      ]
+    ],
+    "per_class_metrics": {
+      "Legitimate": {
+        "precision": 0.6552,
+        "recall": 0.95,
+        "f1": 0.7755,
+        "support": 20
+      },
+      "Suspicious": {
+        "precision": 0.5,
+        "recall": 1,
+        "f1": 0.6667,
+        "support": 5
+      },
+      "Impersonated": {
+        "precision": 0.6,
+        "recall": 0.75,
+        "f1": 0.6667,
+        "support": 4
+      },
+      "Phishing": {
+        "precision": 0,
+        "recall": 0,
+        "f1": 0,
+        "support": 16
+      },
+      "Fraud-related": {
+        "precision": 0.9375,
+        "recall": 1,
+        "f1": 0.9677,
+        "support": 15
+      }
+    }
   },
   "impersonation_investigation": {
     "root_cause": "Pure text TF-IDF relies on linguistic tokens (verify, account, security, urgent) which heavily overlap with generic phishing attacks. Without structural identity features (display-name vs sending domain mismatch, lookalike domain patterns, Reply-To redirection), brand impersonation lures are dominated by phishing training centroids.",
@@ -209,10 +397,10 @@
       "feat_return_path_mismatch"
     ],
     "performance_delta": {
-      "impersonated_recall_before": 1.0,
-      "impersonated_recall_after": 1.0,
-      "macro_f1_before": 1.0,
-      "macro_f1_after": 1.0
+      "impersonated_recall_before": 0.724,
+      "impersonated_recall_after": 1,
+      "macro_f1_before": 0.858,
+      "macro_f1_after": 0.9241
     }
   }
 }

@@ -1,0 +1,89 @@
+{
+  "modelName": "TraceXMail Stacked Meta-Classifier v2.4",
+  "version": "2.4.0",
+  "featureKeys": [
+    "mlProbLegitimate",
+    "mlProbSuspicious",
+    "mlProbImpersonated",
+    "mlProbPhishing",
+    "mlProbFraud",
+    "mlConfidence",
+    "authSpfFail",
+    "authDkimFail",
+    "authDmarcFail",
+    "domainAgeRisk",
+    "domainTyposquatRisk",
+    "identityLookalikeDomain",
+    "identityDisplayMismatch",
+    "identityReplyToMismatch",
+    "infraTorOrAbuse",
+    "finDollarAmountPresent",
+    "finRoutingOrIbanPresent",
+    "becLearnedRiskScore",
+    "semanticSimilarityScore",
+    "heuristicRuleScore"
+  ],
+  "coefficients": {
+    "mlProbLegitimate": -0.5324,
+    "mlProbSuspicious": -0.087,
+    "mlProbImpersonated": 0.4849,
+    "mlProbPhishing": 0.2743,
+    "mlProbFraud": 0.1646,
+    "mlConfidence": 0.2558,
+    "authSpfFail": 0.6633,
+    "authDkimFail": 0.8568,
+    "authDmarcFail": 0.6633,
+    "domainAgeRisk": 0.6854,
+    "domainTyposquatRisk": 0.5805,
+    "identityLookalikeDomain": 0.5805,
+    "identityDisplayMismatch": 0.5805,
+    "identityReplyToMismatch": 0,
+    "infraTorOrAbuse": 0,
+    "finDollarAmountPresent": 0,
+    "finRoutingOrIbanPresent": 0,
+    "becLearnedRiskScore": 0.1838,
+    "semanticSimilarityScore": 0.9501,
+    "heuristicRuleScore": 0.8093
+  },
+  "intercept": -1.1354,
+  "metrics": {
+    "trainedAt": "2026-09-05T14:25:38.065Z",
+    "sampleCount": 433,
+    "testAccuracy": 0.9353,
+    "brierScore": 0.0184,
+    "aucRoc": 0.996,
+    "rSquared": 0.948
+  },
+  "componentMappings": {
+    "authentication": [
+      "authSpfFail",
+      "authDkimFail",
+      "authDmarcFail"
+    ],
+    "domainRisk": [
+      "domainAgeRisk",
+      "domainTyposquatRisk",
+      "identityLookalikeDomain",
+      "identityDisplayMismatch"
+    ],
+    "infrastructureRisk": [
+      "infraTorOrAbuse"
+    ],
+    "mlClassification": [
+      "mlProbLegitimate",
+      "mlProbSuspicious",
+      "mlProbImpersonated",
+      "mlProbPhishing",
+      "mlProbFraud",
+      "mlConfidence"
+    ],
+    "heuristics": [
+      "identityReplyToMismatch",
+      "finDollarAmountPresent",
+      "finRoutingOrIbanPresent",
+      "becLearnedRiskScore",
+      "semanticSimilarityScore",
+      "heuristicRuleScore"
+    ]
+  }
+}

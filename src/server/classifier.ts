@@ -33,15 +33,31 @@ import {
   analyzeLinguisticForensics,
   type LinguisticForensicsResult
 } from './linguisticForensics.js';
+import {
+  predictBecRisk,
+  type BecPredictionResult,
+  loadBecLearnedModel
+} from './becLearnedModel.js';
+import {
+  predictMetaThreatScore,
+  type MetaThreatPrediction,
+  loadMetaModel
+} from './metaClassifier.js';
 
 export {
   scoreSemanticSimilarity,
   analyzeLinguisticForensics,
   getWeightedSocialEngineeringScore,
   extractFinancialEntities,
+  predictBecRisk,
+  predictMetaThreatScore,
+  loadBecLearnedModel,
+  loadMetaModel,
   type SemanticSimilarityResult,
   type LinguisticForensicsResult,
-  type FinancialEntitiesResult
+  type FinancialEntitiesResult,
+  type BecPredictionResult,
+  type MetaThreatPrediction
 };
 
 export type EmailClassification =
@@ -599,20 +615,38 @@ export function classifyEmailForensics(input: ClassifierInput): ClassificationRe
     description: heuristicReasons.length > 0 ? heuristicReasons.join('; ') : 'No identity spoofing or reply redirection detected.'
   });
 
-  // Calculate Total Threat Score (0 - 100)
-  const totalThreatScore = Math.min(100, authScore + domainScore + infraScore + mlScore + heuristicScore);
+  // Phase 5: Stack signals using Learned Supervised Meta-Classifier
+  const metaPrediction = predictMetaThreatScore({
+    mlProbLegitimate: mlOutput.probabilities.Legitimate || 0,
+    mlProbSuspicious: mlOutput.probabilities.Suspicious || 0,
+    mlProbImpersonated: mlOutput.probabilities.Impersonated || 0,
+    mlProbPhishing: mlOutput.probabilities.Phishing || 0,
+    mlProbFraud: mlOutput.probabilities['Fraud-related'] || 0,
+    mlConfidence: mlOutput.confidence,
+    authSpfFail: (spfStatus === 'FAIL' || spfStatus === 'SOFTFAIL') ? 1 : 0,
+    authDkimFail: (dkimStatus === 'FAIL' || dkimStatus === 'INVALID') ? 1 : 0,
+    authDmarcFail: (dmarcStatus === 'REJECT' || dmarcStatus === 'FAIL') ? 1 : 0,
+    domainAgeRisk: domainAge !== undefined && domainAge < 30 ? 1 : domainAge !== undefined && domainAge < 90 ? 0.5 : (isNewDomain ? 1 : 0),
+    domainTyposquatRisk: isTyposquat ? 1 : 0,
+    identityLookalikeDomain: structuralIdentity.isLookalikeDomain ? 1 : 0,
+    identityDisplayMismatch: structuralIdentity.isBrandDisplayMismatch ? 1 : 0,
+    identityReplyToMismatch: structuralIdentity.isReplyToMismatch ? 1 : 0,
+    infraTorOrAbuse: Boolean(torOrAbuseHop) ? 1 : 0,
+    finDollarAmountPresent: 0,
+    finRoutingOrIbanPresent: 0,
+    becLearnedRiskScore: 0,
+    semanticSimilarityScore: 0,
+    heuristicRuleScore: Math.min(1, heuristicScore / 10)
+  }, {
+    authReasons,
+    domainReasons,
+    infraReasons,
+    mlReasons,
+    heuristicReasons
+  });
 
-  const threatScoreBreakdown: ThreatScoreBreakdown = {
-    total: totalThreatScore,
-    maxScore: 100,
-    components: {
-      authentication: { score: authScore, max: 25, reasons: authReasons },
-      domainRisk: { score: domainScore, max: 25, reasons: domainReasons },
-      infrastructureRisk: { score: infraScore, max: 20, reasons: infraReasons },
-      mlClassification: { score: mlScore, max: 20, reasons: mlReasons },
-      heuristics: { score: heuristicScore, max: 10, reasons: heuristicReasons }
-    }
-  };
+  const totalThreatScore = metaPrediction.totalThreatScore;
+  const threatScoreBreakdown: ThreatScoreBreakdown = metaPrediction.breakdown;
 
   // Compile active heuristics list
   for (const feat of features) {
@@ -704,6 +738,8 @@ export interface LayeredClassificationResult extends ClassificationResult {
   llm_linguistic_forensics: LinguisticForensicsResult;
   weighted_lexicon_score: Record<string, number>;
   extracted_financial_entities: FinancialEntitiesResult;
+  bec_learned_model?: BecPredictionResult;
+  meta_classifier?: MetaThreatPrediction;
   nlp_layers: {
     layer0_tfidf_centroid: {
       predictedClass: EmailClassification;
@@ -716,7 +752,10 @@ export interface LayeredClassificationResult extends ClassificationResult {
     layer3_weighted_lexicon: {
       scores: Record<string, number>;
       financial_entities: FinancialEntitiesResult;
+      note?: string;
     };
+    layer4_learned_bec_model?: BecPredictionResult;
+    layer5_stacked_meta_classifier?: MetaThreatPrediction;
   };
 }
 
@@ -748,10 +787,49 @@ export async function classifyEmailContent(input: ClassifierInput): Promise<Laye
     subject: input.subject
   });
 
-  // 5. Enhanced BEC / Payment Diversion Heuristic Synthesis
+  // 5. Phase 3: Learned Supervised BEC Classifier (Replaces static data/bec_weights.json)
   const updatedHeuristics = [...baseResult.heuristics];
   const updatedFeatures = [...baseResult.features];
   const updatedTopVectors = [...baseResult.topVectors];
+
+  const maxDollarVal = finEntities.dollarAmounts.length > 0
+    ? parseFloat(finEntities.dollarAmounts[0].replace(/[^0-9.]/g, '')) || 0
+    : 0;
+
+  const becPrediction = predictBecRisk(combinedText, {
+    from: input.from,
+    fromDomain: input.fromDomain,
+    replyTo: input.replyTo,
+    hasRouting: finEntities.routingNumbers.length > 0,
+    hasIban: finEntities.ibanNumbers.length > 0,
+    dollarAmountCount: finEntities.dollarAmounts.length,
+    maxDollarAmount: maxDollarVal,
+    isReplyToMismatch: baseResult.features.some(f => f.feature === 'heuristic_identity_rules' && f.triggered),
+    isBrandDisplayMismatch: baseResult.features.some(f => f.feature === 'domain_risk_intelligence' && f.triggered)
+  });
+
+  if (becPrediction.isBecDetected) {
+    if (!updatedHeuristics.some(h => h.id === 'h-bec-learned')) {
+      updatedHeuristics.push({
+        id: 'h-bec-learned',
+        title: 'Learned Business Email Compromise (BEC) Model Flag',
+        severity: becPrediction.becRiskScore >= 0.8 ? 'CRITICAL' : 'HIGH',
+        description: becPrediction.explanation,
+        triggered: true
+      });
+      updatedTopVectors.push('Learned BEC Payment Diversion');
+    }
+
+    updatedFeatures.push({
+      feature: 'bec_learned_model',
+      category: 'LINGUISTIC',
+      weight: Math.round(becPrediction.becRiskScore * 10),
+      triggered: true,
+      severity: becPrediction.becRiskScore >= 0.8 ? 'CRITICAL' : 'HIGH',
+      title: 'Learned BEC Classification',
+      description: becPrediction.explanation
+    });
+  }
 
   const hasFinancialData = finEntities.hasFinancialEntities ||
     llmForensics.extracted_entities.dollar_amounts.length > 0 ||
@@ -813,6 +891,30 @@ export async function classifyEmailContent(input: ClassifierInput): Promise<Laye
     }
   }
 
+  // Phase 5: Re-evaluate Meta-Classifier Threat Score with Layer 1, 2, 3 and BEC findings
+  const fullMetaPrediction = predictMetaThreatScore({
+    mlProbLegitimate: baseResult.probabilities.Legitimate || 0,
+    mlProbSuspicious: baseResult.probabilities.Suspicious || 0,
+    mlProbImpersonated: baseResult.probabilities.Impersonated || 0,
+    mlProbPhishing: baseResult.probabilities.Phishing || 0,
+    mlProbFraud: baseResult.probabilities['Fraud-related'] || 0,
+    mlConfidence: baseResult.confidence,
+    authSpfFail: input.auth?.spf?.status === 'FAIL' || input.auth?.spf?.status === 'SOFTFAIL' ? 1 : 0,
+    authDkimFail: input.auth?.dkim?.status === 'FAIL' || input.auth?.dkim?.status === 'NONE' ? 1 : 0,
+    authDmarcFail: input.auth?.dmarc?.status === 'FAIL' || input.auth?.dmarc?.status === 'REJECT' ? 1 : 0,
+    domainAgeRisk: input.domainIntelligence?.domain_age_days !== undefined && input.domainIntelligence.domain_age_days < 30 ? 1 : 0,
+    domainTyposquatRisk: Boolean(input.domainIntelligence?.typosquatting?.is_typosquat) ? 1 : 0,
+    identityLookalikeDomain: baseResult.features.some(f => f.feature === 'domain_risk_intelligence' && f.triggered) ? 1 : 0,
+    identityDisplayMismatch: baseResult.features.some(f => f.feature === 'domain_risk_intelligence' && f.triggered) ? 1 : 0,
+    identityReplyToMismatch: Boolean(input.replyTo && !input.replyTo.includes(input.fromDomain || '')) ? 1 : 0,
+    infraTorOrAbuse: input.hops?.some(h => h.isTor || (h.abuseScore && h.abuseScore > 60)) ? 1 : 0,
+    finDollarAmountPresent: finEntities.dollarAmounts.length > 0 ? 1 : 0,
+    finRoutingOrIbanPresent: (finEntities.routingNumbers.length > 0 || finEntities.ibanNumbers.length > 0) ? 1 : 0,
+    becLearnedRiskScore: becPrediction.becRiskScore,
+    semanticSimilarityScore: semanticSim.status === 'AVAILABLE' ? semanticSim.topSimilarity : 0,
+    heuristicRuleScore: Math.min(1, updatedHeuristics.filter(h => h.triggered).length / 5)
+  });
+
   const tfidfSummary = {
     predictedClass: baseResult.predictedClass,
     probabilities: baseResult.probabilities,
@@ -820,8 +922,38 @@ export async function classifyEmailContent(input: ClassifierInput): Promise<Laye
     topFeatures: baseResult.topFeatures
   };
 
+  let finalClass = baseResult.predictedClass;
+  if (becPrediction.isBecDetected && finalClass !== 'Phishing') {
+    finalClass = 'Fraud-related';
+  }
+
+  const finalThreatScore = Math.max(baseResult.threatScore, fullMetaPrediction.totalThreatScore);
+  const finalSeverity: ClassificationResult['severity'] =
+    finalThreatScore >= 80 ? 'CRITICAL'
+    : finalThreatScore >= 60 ? 'HIGH'
+    : finalThreatScore >= 35 ? 'MEDIUM'
+    : finalThreatScore >= 15 ? 'LOW'
+    : 'CLEAN';
+
+  let finalVerdict = baseResult.verdict;
+  if (finalSeverity === 'CRITICAL' || finalSeverity === 'HIGH') {
+    finalVerdict = finalClass === 'Fraud-related' ? 'FRAUD-RELATED'
+      : finalClass === 'Impersonated' ? 'IMPERSONATED'
+      : 'MALICIOUS PHISH';
+  } else if (finalSeverity === 'MEDIUM') {
+    finalVerdict = 'SUSPICIOUS';
+  } else {
+    finalVerdict = 'LEGITIMATE';
+  }
+
   return {
     ...baseResult,
+    classification: finalClass,
+    predictedClass: finalClass,
+    verdict: finalVerdict,
+    severity: finalSeverity,
+    threatScore: finalThreatScore,
+    threatScoreBreakdown: fullMetaPrediction.breakdown,
     heuristics: updatedHeuristics,
     features: updatedFeatures,
     topVectors: updatedTopVectors,
@@ -830,14 +962,19 @@ export async function classifyEmailContent(input: ClassifierInput): Promise<Laye
     llm_linguistic_forensics: llmForensics,
     weighted_lexicon_score: seScores,
     extracted_financial_entities: finEntities,
+    bec_learned_model: becPrediction,
+    meta_classifier: fullMetaPrediction,
     nlp_layers: {
       layer0_tfidf_centroid: tfidfSummary,
       layer1_semantic_similarity: semanticSim,
       layer2_llm_linguistic_forensics: llmForensics,
       layer3_weighted_lexicon: {
         scores: seScores,
-        financial_entities: finEntities
-      }
+        financial_entities: finEntities,
+        note: 'Static hand-tuned keyword heuristic fallback. Primary payment diversion inference handled by layer4_learned_bec_model.'
+      },
+      layer4_learned_bec_model: becPrediction,
+      layer5_stacked_meta_classifier: fullMetaPrediction
     }
   };
 }

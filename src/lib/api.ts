@@ -4,6 +4,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
+import { supabase } from './supabaseClient';
 
 const DEFAULT_ORG_ID = 'org_acme_soc_01';
 
@@ -20,10 +21,9 @@ export interface SessionUser {
   authMethod?: string;
 }
 
-// In-Memory Session Storage (Complies with security audit: NEVER store in localStorage)
+// In-Memory Session Storage (Complies with security audit: NEVER store secrets in insecure storage)
 let memorySessionToken: string | null = null;
 let memorySessionUser: SessionUser | null = null;
-let sessionInitPromise: Promise<{ token: string; user: SessionUser | null }> | null = null;
 
 type SessionListener = (session: { token: string | null; user: SessionUser | null }) => void;
 const sessionListeners = new Set<SessionListener>();
@@ -51,48 +51,84 @@ export function subscribeSession(listener: SessionListener): () => void {
 }
 
 /**
- * Lightweight session acquisition:
- * Obtains a default demo analyst JWT session on first load if no token exists in memory.
+ * Real Supabase session initialization:
+ * Reads verified session from Supabase Auth client, fetches profile, and syncs session state.
  */
-export async function initializeSession(role: 'admin' | 'analyst' | 'read_only' = 'analyst'): Promise<{ token: string; user: SessionUser | null }> {
-  if (memorySessionToken && memorySessionUser && memorySessionUser.role === role) {
-    return { token: memorySessionToken, user: memorySessionUser };
+export async function initializeSession(): Promise<{ token: string | null; user: SessionUser | null }> {
+  if (!supabase) {
+    return { token: null, user: null };
   }
 
-  if (sessionInitPromise) {
-    return sessionInitPromise;
-  }
-
-  sessionInitPromise = (async () => {
-    try {
-      const res = await fetch(`${API_URL}/api/auth/session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-organization-id': DEFAULT_ORG_ID
-        },
-        body: JSON.stringify({ role, organization_id: DEFAULT_ORG_ID })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        memorySessionToken = data.token;
-        memorySessionUser = data.user;
-        sessionListeners.forEach(fn => fn({ token: memorySessionToken, user: memorySessionUser }));
-        return { token: data.token, user: data.user };
-      }
-    } catch (err) {
-      console.warn('[Session] Failed initializing default demo session:', err);
-    } finally {
-      sessionInitPromise = null;
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    if (error || !session) {
+      setSession(null, null);
+      return { token: null, user: null };
     }
-    return { token: '', user: null };
-  })();
 
-  return sessionInitPromise;
+    const token = session.access_token;
+    const userId = session.user.id;
+    const email = session.user.email || '';
+
+    // Fetch user profile from Supabase profiles table
+    let role = 'analyst';
+    let organizationId = DEFAULT_ORG_ID;
+
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('organization_id, role')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (profile) {
+        if (profile.role) role = profile.role;
+        if (profile.organization_id) organizationId = profile.organization_id;
+      }
+    } catch (profileErr) {
+      console.warn('[Session] Could not fetch profile data:', profileErr);
+    }
+
+    const user: SessionUser = {
+      userId,
+      email,
+      organizationId,
+      role,
+      label: role === 'admin' ? 'Security Admin' : role === 'read_only' ? 'Auditor' : 'Security Analyst',
+      authMethod: 'supabase_jwt'
+    };
+
+    setSession(token, user);
+    return { token, user };
+  } catch (err) {
+    console.warn('[Session] Failed to initialize Supabase session:', err);
+    setSession(null, null);
+    return { token: null, user: null };
+  }
 }
 
-// Auto-trigger session initialization in background on client startup
-if (typeof window !== 'undefined') {
+export async function signOutUser() {
+  if (supabase) {
+    try {
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('[Auth] Sign out error:', err);
+    }
+  }
+  setSession(null, null);
+}
+
+// Listen to Supabase Auth State Changes
+if (typeof window !== 'undefined' && supabase) {
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      initializeSession().catch(console.warn);
+    } else {
+      setSession(null, null);
+    }
+  });
+
+  // Check initial session
   initializeSession().catch(console.warn);
 }
 

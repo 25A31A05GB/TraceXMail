@@ -641,20 +641,65 @@ function getKnownApiKeys(): Record<string, { userId: string; email: string; orga
 }
 
 /**
- * Express middleware for role and authentication extraction
+ * Express middleware for role and authentication extraction.
+ * Verifies Supabase Auth tokens using the service-role client and queries the profiles table.
  */
-export function authenticateUser(req: Request, _res: Response, next: NextFunction) {
+export async function authenticateUser(req: Request, _res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
-  const roleOverrideHeader = req.headers['x-user-role'] as UserRole | undefined;
 
   let userContext: UserContext | null = null;
-
   const knownKeys = getKnownApiKeys();
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.slice(7).trim();
-    userContext = verifyUserToken(token);
+    const supabaseAdmin = getSupabaseClient();
+
+    if (supabaseAdmin) {
+      try {
+        const { data, error } = await supabaseAdmin.auth.getUser(token);
+        if (!error && data?.user) {
+          const authUser = data.user;
+          // Look up that user's profiles row (organization_id, role) via service-role client
+          const { data: profile, error: profileErr } = await supabaseAdmin
+            .from('profiles')
+            .select('organization_id, role')
+            .eq('id', authUser.id)
+            .maybeSingle();
+
+          if (profile && profile.organization_id && profile.role) {
+            userContext = {
+              userId: authUser.id,
+              email: authUser.email || '',
+              organizationId: profile.organization_id,
+              role: profile.role as UserRole,
+              authMethod: 'jwt'
+            };
+          } else {
+            // Profile row missing or not yet populated: use metadata or fallback org
+            const orgId = authUser.user_metadata?.organization_id || authUser.app_metadata?.organization_id || '00000000-0000-0000-0000-000000000000';
+            const role = (authUser.user_metadata?.role || authUser.app_metadata?.role || 'analyst') as UserRole;
+            userContext = {
+              userId: authUser.id,
+              email: authUser.email || '',
+              organizationId: orgId,
+              role: role,
+              authMethod: 'jwt'
+            };
+          }
+        }
+      } catch (authErr) {
+        console.warn('[Auth] Supabase service-role token validation error:', authErr);
+      }
+    }
+
+    // Fallback to local signed JWT (e.g., development or testing)
+    if (!userContext) {
+      const localVerified = verifyUserToken(token);
+      if (localVerified) {
+        userContext = localVerified;
+      }
+    }
   } else if (apiKeyHeader && knownKeys[apiKeyHeader]) {
     const record = knownKeys[apiKeyHeader];
     userContext = {
@@ -663,20 +708,6 @@ export function authenticateUser(req: Request, _res: Response, next: NextFunctio
       organizationId: record.organizationId,
       role: record.role,
       authMethod: 'api_key'
-    };
-  } else if (
-    process.env.NODE_ENV !== 'production' &&
-    process.env.ALLOW_DEV_ROLE_HEADER === 'true' &&
-    roleOverrideHeader &&
-    ['admin', 'analyst', 'read_only'].includes(roleOverrideHeader)
-  ) {
-    // Only allowed in non-production AND when explicitly permitted via ALLOW_DEV_ROLE_HEADER=true
-    userContext = {
-      userId: `usr_${roleOverrideHeader}_session`,
-      email: `${roleOverrideHeader}@acmedefense.sec`,
-      organizationId: (req.headers['x-organization-id'] as string) || 'org_acme_soc_01',
-      role: roleOverrideHeader,
-      authMethod: 'session'
     };
   }
 
